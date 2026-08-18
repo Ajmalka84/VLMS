@@ -12,6 +12,7 @@ import { NotFoundPage } from './pages/NotFoundPage';
 import { CustomersPage } from './pages/admin/CustomersPage';
 import { MasterDataPage } from './pages/MasterDataPage';
 import { LoadsPage } from './pages/LoadsPage';
+import { ReportsPage } from './pages/ReportsPage';
 
 export function App() {
   return (
@@ -45,16 +46,7 @@ export function App() {
 
           {/* Operational Customer Routes */}
           <Route path="loads" element={<LoadsPage />} />
-          <Route
-            path="reports"
-            element={
-              <PlaceholderPage
-                title="Settlement Reports"
-                hurdleNumber={9}
-                description="C/O contractor settlement aggregation, filterable date ranges, and PDF exports."
-              />
-            }
-          />
+          <Route path="reports" element={<ReportsPage />} />
           <Route path="settings" element={<MasterDataPage />} />
           <Route path="*" element={<NotFoundPage />} />
         </Route>

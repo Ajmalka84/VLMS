@@ -9,6 +9,7 @@ import { LoadsModule } from './loads/loads.module';
 import { MaterialTypesModule } from './material-types/material-types.module';
 import { PrismaModule } from './prisma/prisma.module';
 import { RatesModule } from './rates/rates.module';
+import { ReportsModule } from './reports/reports.module';
 import { SitesModule } from './sites/sites.module';
 import { VehicleTypesModule } from './vehicle-types/vehicle-types.module';
 import { VehiclesModule } from './vehicles/vehicles.module';
@@ -27,6 +28,7 @@ import { VehiclesModule } from './vehicles/vehicles.module';
     ContractorsModule,
     RatesModule,
     LoadsModule,
+    ReportsModule,
   ],
   controllers: [AppController],
 })

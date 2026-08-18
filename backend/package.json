@@ -6,9 +6,9 @@
     "node": ">=24 <25"
   },
   "scripts": {
-    "build": "nest build",
-    "start": "node dist/main",
-    "start:dev": "nest start --watch",
+    "build": "tsc -p tsconfig.json",
+    "start": "node dist/main.js",
+    "start:dev": "tsc -p tsconfig.json --watch",
     "postinstall": "prisma generate",
     "prisma:generate": "prisma generate",
     "prisma:migrate": "prisma migrate dev"

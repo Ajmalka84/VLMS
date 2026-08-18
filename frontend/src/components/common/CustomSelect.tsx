@@ -74,7 +74,7 @@ export const CustomSelect: React.FC<CustomSelectProps> = ({
   );
 
   return (
-    <div className={`relative ${className}`} ref={containerRef}>
+    <div className={`relative ${isOpen ? 'z-50' : 'z-10'} ${className}`} ref={containerRef}>
       {label && (
         <label className="block text-xs font-bold text-slate-300 uppercase tracking-wider mb-1.5">
           {label} {required && <span className="text-amber-400">*</span>}

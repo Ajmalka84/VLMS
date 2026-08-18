@@ -394,7 +394,7 @@ An operator can record and correct loads quickly and reliably.
 
 # HURDLE 9 — SETTLEMENT REPORTS
 
-Status: ⬜ Not Started
+Status: ✅ Done
 
 ## Objective
 

@@ -1026,10 +1026,94 @@ All Hurdle 8 definition-of-done criteria passed:
 
 ## Next Hurdle
 
-Hurdle 9 — Settlement Reports:
-1. Contractor (C/O) settlement aggregation engine (`GET /api/v1/reports/settlements`).
-2. Filterable date range breakdowns (daily loads, trip counts, material subtotals, cash vs credit).
-3. Exportable settlement statements and PDF previews.
+# Hurdle 9 — Settlement Reports
+
+Status: ✅ Done
+
+Completed: 18-Aug-2026
+
+## Objective
+
+Generate comprehensive contractor (C/O) billing and settlement reports over customizable date ranges with material breakdowns, vehicle fleet summaries, cash vs credit separation, and exportable/printable formats (PDF & CSV).
+
+## Starting State
+
+Following Hurdle 8, vehicle load transactions were recorded and queryable in the load register, but no contractor-aggregated billing sheets or exportable statements existed.
+
+## Architecture Created
+
+```text
+Quarry Management / Site Supervisor
+  ↓
+GET /api/v1/reports/contractors-summary
+  ├── Aggregate non-deleted loads for all tenant contractors
+  ├── Filters: startDate, endDate, siteId, search
+  └── Returns: Grand Totals + Contractor Ledger Cards (Trips, Cash Paid, Net Credit Due)
+
+GET /api/v1/reports/settlement?contractorId=...
+  ├── Validate Contractor ownership (HTTP 403 on cross-tenant access)
+  ├── Filters: startDate, endDate, siteId, paymentType (CASH/CREDIT)
+  └── Returns:
+      ├── Financial Summary (Total Dispatches, Gross Turnover, Cash Received, Net Credit Balance)
+      ├── Material Breakdown (Volume subtotals & percentage distribution)
+      ├── Vehicle Breakdown (Fleet subtotals per truck number)
+      ├── Site Breakdown (Subtotals per operational quarry)
+      └── Chronological Itemized Trip Log
+```
+
+## Files Created or Changed
+
+### Backend Reports Module
+* `backend/src/reports/dto/query-settlement.dto.ts` — DTO validating contractorId, date range, siteId, and paymentType.
+* `backend/src/reports/dto/query-contractor-summary.dto.ts` — DTO validating date range, siteId, and search queries.
+* `backend/src/reports/reports.service.ts` — Implements contractor ledger summaries and multi-dimensional settlement statement calculations.
+* `backend/src/reports/reports.controller.ts` — Exposes `/api/v1/reports/contractors-summary` and `/api/v1/reports/settlement` guarded by `JwtAuthGuard`.
+* `backend/src/reports/reports.module.ts` — Bundles Reports module.
+* `backend/src/app.module.ts` — Registered `ReportsModule`.
+* `backend/package.json` — Configured TypeScript compilation script for clean dist output.
+
+### Frontend Reports Client & UI
+* `frontend/src/api/reports.ts` — Typed client methods for querying contractor summaries and detailed settlement statements.
+* `frontend/src/context/LanguageContext.tsx` — Added bilingual translations for all settlement, accounting, and printable statement terminology.
+* `frontend/src/pages/ReportsPage.tsx` — Complete Reports and Settlement Console featuring:
+  - **Contractors Overview Hub**: Summary metric cards, date range presets (All Time, Today, Yesterday, Last 7 Days, This Month, Custom Range), searchable ledger cards with 1-click **"Generate Statement (കണക്ക് എടുക്കുക)"** action.
+  - **Settlement Statement Voucher**: Official billing sheet layout, enterprise header, contractor details, financial summary KPIs, material volume chips, itemized trip log, and authorized signature blocks.
+  - **Print & Export Engine**: Integrated `@media print` CSS for clean black & white PDF printing and 1-click CSV spreadsheet download.
+* `frontend/src/App.tsx` — Mounted `ReportsPage` on `/reports`.
+
+### Per-Hurdle Archiving
+* `docs/hurdles/hurdle-9/plan.md` — Implementation plan archived in repository.
+* `docs/hurdles/hurdle-9/walkthrough.md` — Comprehensive walkthrough document archived in repository.
+
+## Commands and Verification Flow
+
+```bash
+# Build workspace
+npm run build
+
+# Run automated test suite
+node scratch/test-reports.js
+```
+
+## Final Verification Result
+
+All Hurdle 9 definition-of-done criteria passed:
+- Select Contractor + Date Range computes accurate total loads, gross amounts, and net credit balances.
+- Detailed material and vehicle volume breakdowns dynamically rendered with percentage distributions.
+- Itemized chronological dispatch register renders exact trip rates and cash/credit statuses.
+- Printable official settlement voucher layout (`@media print`) and CSV spreadsheet export verified.
+- Multi-tenant data isolation verified with 403 Forbidden on cross-tenant access.
+
+## Handover Notes
+
+* All transactional data (Loads) and financial aggregation (Settlement Reports) are now complete and functional end-to-end.
+
+## Next Hurdle
+
+Hurdle 10 — UI/UX Polish, Accessibility & Responsive Refinements:
+1. Final responsive layout audits across desktop, tablet, and mobile devices.
+2. Accessibility verification (ARIA labels, focus states, high-contrast readability under outdoor sunlight).
+3. Production bundle optimizations and smooth transitions.
 
 ---
 
