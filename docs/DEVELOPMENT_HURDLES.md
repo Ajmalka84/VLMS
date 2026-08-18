@@ -314,7 +314,7 @@ the database.
 
 # HURDLE 7 — MASTER DATA
 
-Status: ⬜ Not Started
+Status: ✅ Done
 
 ## Objective
 
@@ -552,7 +552,7 @@ real customer feedback.
 
 Current hurdle:
 
-HURDLE 7 — MASTER DATA
+HURDLE 8 — LOAD MANAGEMENT
 
 Current blocker:
 
@@ -560,7 +560,7 @@ None.
 
 Immediate goal:
 
-Implement Master Data APIs (Sites, Vehicles, Vehicle Types, Material Types, Contractors, and dynamic Rates matrix) and management UI for customers.
+Implement load recording transaction API (POST /loads, auto-rate resolution, paymentType CASH/CREDIT), load history queries (GET /loads, filters by site/contractor/vehicle/material/date), edit/soft-delete, and responsive Load Entry UI.
 
 
 # DEVELOPMENT RULES

@@ -11,6 +11,7 @@ import {
   User,
   Users,
   Shield,
+  Layers,
 } from 'lucide-react';
 import { fetchHealth, HealthData } from '../../api/health';
 import { StatusBadge } from '../common/StatusBadge';
@@ -53,6 +54,7 @@ export const AppLayout: React.FC = () => {
     ? [
         { to: '/', label: 'Dashboard', icon: LayoutDashboard },
         { to: '/admin/users', label: 'Customers', icon: Users },
+        { to: '/settings', label: 'Global Master', icon: Layers },
       ]
     : [
         { to: '/', label: 'Dashboard', icon: LayoutDashboard },
@@ -65,8 +67,9 @@ export const AppLayout: React.FC = () => {
     <div className="min-h-screen flex flex-col bg-slate-950 text-slate-100 selection:bg-amber-500 selection:text-slate-950">
       {/* Top Header */}
       <header className="sticky top-0 z-40 glass-panel border-b border-slate-800/80 px-4 py-3 sm:px-6">
-        <div className="max-w-7xl mx-auto flex items-center justify-between">
-          <div className="flex items-center gap-3">
+        <div className="max-w-7xl mx-auto flex items-center justify-between gap-4">
+          {/* Logo & Brand */}
+          <div className="flex items-center gap-3 shrink-0">
             <div className="w-10 h-10 rounded-xl bg-gradient-to-tr from-amber-600 to-amber-400 flex items-center justify-center shadow-lg shadow-amber-500/20">
               <HardHat className="w-6 h-6 text-slate-950" />
             </div>
@@ -91,8 +94,35 @@ export const AppLayout: React.FC = () => {
             </div>
           </div>
 
+          {/* Desktop Navigation Menu (Visible on md and larger screens) */}
+          <nav className="hidden md:flex items-center gap-1.5 p-1 rounded-2xl bg-slate-900/60 border border-slate-800/80">
+            {navItems.map((item) => {
+              const Icon = item.icon;
+              return (
+                <NavLink
+                  key={item.to}
+                  to={item.to}
+                  end={item.to === '/'}
+                  id={`desktop-nav-${item.label.toLowerCase().replace(/\s+/g, '-')}`}
+                  className={({ isActive }) =>
+                    `flex items-center gap-2 px-3.5 py-2 rounded-xl text-xs font-bold transition-all cursor-pointer ${
+                      isActive
+                        ? isSuperAdmin
+                          ? 'bg-purple-500 text-white shadow-md shadow-purple-500/20'
+                          : 'bg-amber-500 text-slate-950 shadow-md shadow-amber-500/20'
+                        : 'text-slate-400 hover:text-slate-100 hover:bg-slate-800/60'
+                    }`
+                  }
+                >
+                  <Icon className="w-4 h-4" />
+                  <span>{item.label}</span>
+                </NavLink>
+              );
+            })}
+          </nav>
+
           {/* Header Actions: User Info & Health Indicator & Logout */}
-          <div className="flex items-center gap-3">
+          <div className="flex items-center gap-3 shrink-0">
             <div className="hidden xs:flex items-center gap-2">
               <StatusBadge
                 status={loading && !health ? 'loading' : isDbUp ? 'up' : 'down'}
@@ -132,30 +162,36 @@ export const AppLayout: React.FC = () => {
       </header>
 
       {/* Main Content Area */}
-      <main className="flex-1 max-w-7xl w-full mx-auto p-4 sm:p-6 lg:p-8 pb-24 sm:pb-8">
+      <main className="flex-1 max-w-7xl w-full mx-auto p-4 sm:p-6 lg:p-8 pb-24 md:pb-8">
         <Outlet context={{ health, loading, refreshHealth: checkStatus }} />
       </main>
 
-      {/* Mobile Bottom Navigation Bar (Fixed for Mobile-First Experience) */}
-      <nav className="sm:hidden fixed bottom-0 left-0 right-0 z-40 glass-panel border-t border-slate-800/90 px-3 py-2">
-        <div className="grid grid-cols-4 gap-1">
+      {/* Mobile Bottom Navigation Bar (Fixed for Mobile-First Experience, Hidden on MD+) */}
+      <nav className="md:hidden fixed bottom-0 left-0 right-0 z-40 glass-panel border-t border-slate-800/90 px-3 py-2">
+        <div
+          className="grid gap-1"
+          style={{ gridTemplateColumns: `repeat(${navItems.length}, minmax(0, 1fr))` }}
+        >
           {navItems.map((item) => {
             const Icon = item.icon;
             return (
               <NavLink
                 key={item.to}
                 to={item.to}
-                id={`nav-${item.label.toLowerCase().replace(/\s+/g, '-')}`}
+                end={item.to === '/'}
+                id={`mobile-nav-${item.label.toLowerCase().replace(/\s+/g, '-')}`}
                 className={({ isActive }) =>
                   `flex flex-col items-center justify-center py-1.5 px-1 rounded-xl text-[11px] font-medium transition-all ${
                     isActive
-                      ? 'text-amber-400 bg-amber-500/10'
+                      ? isSuperAdmin
+                        ? 'text-purple-400 bg-purple-500/10'
+                        : 'text-amber-400 bg-amber-500/10'
                       : 'text-slate-400 hover:text-slate-200'
                   }`
                 }
               >
                 <Icon className="w-5 h-5 mb-1" />
-                <span>{item.label}</span>
+                <span className="truncate max-w-full">{item.label}</span>
               </NavLink>
             );
           })}

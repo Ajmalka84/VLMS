@@ -8,6 +8,7 @@ import { LoginPage } from './pages/LoginPage';
 import { PlaceholderPage } from './pages/PlaceholderPage';
 import { NotFoundPage } from './pages/NotFoundPage';
 import { CustomersPage } from './pages/admin/CustomersPage';
+import { MasterDataPage } from './pages/MasterDataPage';
 
 export function App() {
   return (
@@ -58,16 +59,7 @@ export function App() {
               />
             }
           />
-          <Route
-            path="settings"
-            element={
-              <PlaceholderPage
-                title="Master Data Configuration"
-                hurdleNumber={7}
-                description="Manage Sites, Vehicles, Contractors, Material Types, and Rate matrices."
-              />
-            }
-          />
+          <Route path="settings" element={<MasterDataPage />} />
           <Route path="*" element={<NotFoundPage />} />
         </Route>
       </Routes>

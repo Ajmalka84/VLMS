@@ -60,28 +60,51 @@ export const DashboardPage: React.FC = () => {
         </div>
       </div>
 
-      {/* Super Admin Quick Access Callout */}
+      {/* Super Admin Quick Access Callouts */}
       {isSuperAdmin && (
-        <Card variant="highlight" className="p-6 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-          <div className="flex items-center gap-4">
-            <div className="w-12 h-12 rounded-2xl bg-purple-500/10 text-purple-400 flex items-center justify-center border border-purple-500/20">
-              <Users className="w-6 h-6" />
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <Card variant="highlight" className="p-5 flex flex-col justify-between gap-4">
+            <div className="flex items-start gap-4">
+              <div className="w-11 h-11 rounded-2xl bg-purple-500/10 text-purple-400 flex items-center justify-center border border-purple-500/20 shrink-0">
+                <Users className="w-5 h-5" />
+              </div>
+              <div>
+                <h2 className="text-base font-bold text-white">Customer Accounts</h2>
+                <p className="text-xs text-slate-400 mt-0.5">
+                  Onboard customer businesses, toggle active status, and reset passwords.
+                </p>
+              </div>
             </div>
-            <div>
-              <h2 className="text-lg font-bold text-white">Customer Account Management</h2>
-              <p className="text-xs text-slate-400">
-                Onboard new customer businesses, activate/deactivate accounts, and reset passwords.
-              </p>
+            <Link
+              to="/admin/users"
+              id="go-to-customers-btn"
+              className="inline-flex items-center justify-center gap-2 px-4 py-2 rounded-xl bg-purple-500 hover:bg-purple-400 text-white font-bold text-xs shadow-lg shadow-purple-500/20 transition-all cursor-pointer"
+            >
+              Manage Customers <ArrowRight className="w-3.5 h-3.5" />
+            </Link>
+          </Card>
+
+          <Card variant="highlight" className="p-5 flex flex-col justify-between gap-4">
+            <div className="flex items-start gap-4">
+              <div className="w-11 h-11 rounded-2xl bg-amber-500/10 text-amber-400 flex items-center justify-center border border-amber-500/20 shrink-0">
+                <Layers className="w-5 h-5" />
+              </div>
+              <div>
+                <h2 className="text-base font-bold text-white">Global Master Config</h2>
+                <p className="text-xs text-slate-400 mt-0.5">
+                  Manage global vehicle categories (Dumper, Tipper) and material specifications.
+                </p>
+              </div>
             </div>
-          </div>
-          <Link
-            to="/admin/users"
-            id="go-to-customers-btn"
-            className="inline-flex items-center justify-center gap-2 px-5 py-2.5 rounded-xl bg-amber-500 hover:bg-amber-400 text-slate-950 font-bold text-sm shadow-lg shadow-amber-500/20 transition-all cursor-pointer whitespace-nowrap"
-          >
-            Manage Customers <ArrowRight className="w-4 h-4" />
-          </Link>
-        </Card>
+            <Link
+              to="/settings"
+              id="go-to-global-master-btn"
+              className="inline-flex items-center justify-center gap-2 px-4 py-2 rounded-xl bg-amber-500 hover:bg-amber-400 text-slate-950 font-bold text-xs shadow-lg shadow-amber-500/20 transition-all cursor-pointer"
+            >
+              Configure Master Data <ArrowRight className="w-3.5 h-3.5" />
+            </Link>
+          </Card>
+        </div>
       )}
 
       {/* System Health Card */}

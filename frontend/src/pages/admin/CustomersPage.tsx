@@ -29,6 +29,7 @@ import {
 } from '../../api/admin';
 import { Card } from '../../components/common/Card';
 import { StatusBadge } from '../../components/common/StatusBadge';
+import { ConfirmModal } from '../../components/common/ConfirmModal';
 
 export const CustomersPage: React.FC = () => {
   const [customers, setCustomers] = useState<CustomerUser[]>([]);
@@ -153,18 +154,42 @@ export const CustomersPage: React.FC = () => {
     }
   };
 
-  const handleToggleStatus = async (customer: CustomerUser) => {
-    try {
-      const updatedStatus = !customer.isActive;
-      await updateCustomerStatusApi(customer.id, updatedStatus);
-      setActionSuccess(
-        `Customer ${customer.businessName} has been ${
-          updatedStatus ? 'activated' : 'deactivated'
-        }!`,
-      );
-      void fetchCustomers();
-    } catch (err: any) {
-      alert(err?.message || 'Failed to toggle status');
+  const [actionError, setActionError] = useState<string | null>(null);
+  const [confirmState, setConfirmState] = useState<{
+    isOpen: boolean;
+    title: string;
+    message: string;
+    onConfirm: () => void;
+  } | null>(null);
+
+  const handleToggleStatus = (customer: CustomerUser) => {
+    const nextStatus = !customer.isActive;
+    if (!nextStatus) {
+      setConfirmState({
+        isOpen: true,
+        title: `Deactivate ${customer.businessName}?`,
+        message: `This will immediately block all users from ${customer.businessName} from logging into the system. Are you sure?`,
+        onConfirm: async () => {
+          try {
+            setConfirmState(null);
+            await updateCustomerStatusApi(customer.id, false);
+            setActionSuccess(`Customer ${customer.businessName} has been deactivated.`);
+            void fetchCustomers();
+          } catch (err: any) {
+            setActionError(err?.message || 'Failed to deactivate status');
+          }
+        },
+      });
+    } else {
+      void (async () => {
+        try {
+          await updateCustomerStatusApi(customer.id, true);
+          setActionSuccess(`Customer ${customer.businessName} has been activated!`);
+          void fetchCustomers();
+        } catch (err: any) {
+          setActionError(err?.message || 'Failed to activate customer');
+        }
+      })();
     }
   };
 
@@ -255,7 +280,7 @@ export const CustomersPage: React.FC = () => {
 
       {/* Success Alert Banner */}
       {actionSuccess && (
-        <div className="p-4 rounded-2xl bg-emerald-950/80 border border-emerald-800/70 text-emerald-300 text-sm flex items-center justify-between shadow-lg">
+        <div className="p-4 rounded-2xl bg-emerald-950/80 border border-emerald-800/70 text-emerald-300 text-sm flex items-center justify-between shadow-lg animate-fade-in">
           <div className="flex items-center gap-2">
             <CheckCircle2 className="w-5 h-5 text-emerald-400" />
             <span>{actionSuccess}</span>
@@ -263,6 +288,22 @@ export const CustomersPage: React.FC = () => {
           <button
             onClick={() => setActionSuccess(null)}
             className="text-emerald-400 hover:text-emerald-200 cursor-pointer"
+          >
+            <X className="w-4 h-4" />
+          </button>
+        </div>
+      )}
+
+      {/* Error Alert Banner */}
+      {actionError && (
+        <div className="p-4 rounded-2xl bg-rose-950/80 border border-rose-800/70 text-rose-300 text-sm flex items-center justify-between shadow-lg animate-fade-in">
+          <div className="flex items-center gap-2">
+            <AlertCircle className="w-5 h-5 text-rose-400" />
+            <span>{actionError}</span>
+          </div>
+          <button
+            onClick={() => setActionError(null)}
+            className="text-rose-400 hover:text-rose-200 cursor-pointer"
           >
             <X className="w-4 h-4" />
           </button>
@@ -761,6 +802,19 @@ export const CustomersPage: React.FC = () => {
             </form>
           </Card>
         </div>
+      )}
+
+      {/* Custom Confirmation Modal */}
+      {confirmState && (
+        <ConfirmModal
+          isOpen={confirmState.isOpen}
+          title={confirmState.title}
+          message={confirmState.message}
+          confirmText="Deactivate"
+          variant="danger"
+          onConfirm={confirmState.onConfirm}
+          onCancel={() => setConfirmState(null)}
+        />
       )}
     </div>
   );

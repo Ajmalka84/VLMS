@@ -820,6 +820,114 @@ Hurdle 7 — Master Data:
 
 ---
 
+# Hurdle 7 — Master Data
+
+Status: ✅ Done
+
+Completed: 18-Aug-2026
+
+## Objective
+
+Allow customers (`USER`) to completely configure their operational environment (Sites, Fleet Vehicles, Contractors/COs, and the dynamic Rate Matrix) with strict multi-tenant isolation, and allow `SUPER_ADMIN` to manage global Vehicle Types and Material Types.
+
+## Starting State
+
+Following Hurdle 6, customer businesses could be onboarded and authenticated, but no APIs or UIs existed to configure operational master data or define the rate pricing matrix.
+
+## Architecture Created
+
+```text
+Global Configuration (SUPER_ADMIN)
+  ├── /api/v1/admin/vehicle-types  -> VehicleTypesService (CRUD)
+  └── /api/v1/admin/material-types -> MaterialTypesService (CRUD)
+
+Customer Operating Environment (USER - Isolated by JWT user_id)
+  ├── /api/v1/sites               -> SitesService (CRUD)
+  ├── /api/v1/vehicles            -> VehiclesService (CRUD, linked to VehicleType)
+  ├── /api/v1/contractors         -> ContractorsService (CRUD)
+  └── /api/v1/rates               -> RatesService (CRUD + Upsert)
+        └── /api/v1/rates/lookup  -> Automated Rate Resolution Engine
+                                     (Site + Vehicle Type + Material Type)
+```
+
+## Files Created or Changed
+
+### Backend Modules
+* `backend/src/vehicle-types/` — DTOs, Service, `VehicleTypesController` (authenticated read), and `AdminVehicleTypesController` (SUPER_ADMIN CRUD).
+* `backend/src/material-types/` — DTOs, Service, `MaterialTypesController` (authenticated read), and `AdminMaterialTypesController` (SUPER_ADMIN CRUD).
+* `backend/src/sites/` — DTOs, Service, and Controller for tenant-isolated site management (`siteName`, `location`, `pincode`).
+* `backend/src/vehicles/` — DTOs, Service, and Controller for customer fleet management with unique `(userId, vehicleNumber)` constraint and `vehicleTypeId` relation.
+* `backend/src/contractors/` — DTOs, Service, and Controller for C/O contractor management (`name`, 10-digit `mobile`).
+* `backend/src/rates/` — DTOs, Service, and Controller for dynamic rate matrix configuration with unique `(siteId, vehicleTypeId, materialTypeId)` constraint and `GET /rates/lookup` resolution endpoint.
+* `backend/src/app.module.ts` — Registered all 6 Master Data modules.
+
+### Frontend Master Data Hub
+* `frontend/src/api/masterData.ts` — Typed client methods for Sites, Vehicles, Contractors, Vehicle Types, Material Types, and Rates.
+* `frontend/src/pages/MasterDataPage.tsx` — Full-featured tabbed management interface:
+  - For Customers: Sites tab, Fleet Vehicles tab (with category badge), Contractors tab, Rate Matrix tab (with live price configuration and auto-rate resolution banner).
+  - For Super Admin: Global Vehicle Types and Material Types configuration tabs.
+  - Modals for Add/Edit for all 6 entities with live input validation.
+* `frontend/src/App.tsx` — Mounted `MasterDataPage` on `/settings`.
+* `frontend/src/components/layout/AppLayout.tsx` — Added "Global Master" navigation link for Super Admin.
+
+### Per-Hurdle Archiving
+* `docs/hurdles/hurdle-7/plan.md` — Implementation plan archived in repository.
+* `docs/hurdles/hurdle-7/walkthrough.md` — Walkthrough document archived in repository.
+
+## Commands and Verification Flow
+
+```bash
+# Build workspace
+npm run build
+
+# Customer creates Site (HTTP 201 Created)
+curl -X POST http://localhost:3000/api/v1/sites \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer <CUSTOMER_TOKEN>" \
+  -d '{"siteName":"Quarry Alpha","location":"Bangalore North","pincode":"560064"}'
+
+# Customer registers Vehicle with Vehicle Type (HTTP 201 Created)
+curl -X POST http://localhost:3000/api/v1/vehicles \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer <CUSTOMER_TOKEN>" \
+  -d '{"vehicleNumber":"KA-01-EQ-1234","vehicleTypeId":"<VEHICLE_TYPE_ID>"}'
+
+# Customer configures Rate Matrix entry (HTTP 201 Created)
+curl -X POST http://localhost:3000/api/v1/rates \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer <CUSTOMER_TOKEN>" \
+  -d '{"siteId":"<SITE_ID>","vehicleTypeId":"<VEHICLE_TYPE_ID>","materialTypeId":"<MATERIAL_TYPE_ID>","amount":3500.00}'
+
+# Test automated rate lookup engine (HTTP 200 OK)
+curl -H "Authorization: Bearer <CUSTOMER_TOKEN>" \
+  "http://localhost:3000/api/v1/rates/lookup?siteId=<SITE_ID>&vehicleTypeId=<VEHICLE_TYPE_ID>&materialTypeId=<MATERIAL_TYPE_ID>"
+
+# Multi-tenant isolation verification: Tenant 2 accessing Tenant 1 Site -> HTTP 403 Forbidden
+# Duplicate vehicle number constraint -> HTTP 409 Conflict
+```
+
+## Final Verification Result
+
+All Hurdle 7 definition-of-done criteria passed:
+- Customers can completely configure Sites, Vehicles, Contractors, and Rates without developer assistance.
+- Dynamic rate determination engine `GET /api/v1/rates/lookup` reliably calculates rate amount for any Site + Vehicle Type + Material Type combination.
+- Tenant isolation is strictly enforced across all entities (Sites, Vehicles, Contractors, Rates).
+- Super Admin can configure global Vehicle Types and Material Types.
+
+## Handover Notes
+
+* For Hurdle 8 (Load Management), load creation will use the Rate Lookup engine (`GET /rates/lookup` or `RatesService.lookup`) to auto-populate the default load amount when `amount` is omitted in `POST /loads`.
+
+## Next Hurdle
+
+Hurdle 8 — Load Management:
+1. Core load transaction (`POST /loads` with auto-rate resolution and optional override).
+2. Load listing with multi-field search and filters (by Site, Contractor, Vehicle, Material, Date range).
+3. Soft delete and edit load operations.
+4. Mobile-first Load Entry UI.
+
+---
+
 # Template for Future Hurdles
 
 Copy this section to the end of this file after each completed hurdle.
