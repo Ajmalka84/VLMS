@@ -5,14 +5,18 @@ import {
   LayoutDashboard,
   FileSpreadsheet,
   Settings,
-  Database,
   RefreshCw,
   HardHat,
+  LogOut,
+  User,
+  Shield,
 } from 'lucide-react';
 import { fetchHealth, HealthData } from '../../api/health';
 import { StatusBadge } from '../common/StatusBadge';
+import { useAuth } from '../../context/AuthContext';
 
 export const AppLayout: React.FC = () => {
+  const { user, logout } = useAuth();
   const [health, setHealth] = useState<HealthData | null>(null);
   const [loading, setLoading] = useState(true);
 
@@ -49,6 +53,7 @@ export const AppLayout: React.FC = () => {
   ];
 
   const isDbUp = health?.database?.status === 'up';
+  const isSuperAdmin = user?.role === 'SUPER_ADMIN';
 
   return (
     <div className="min-h-screen flex flex-col bg-slate-950 text-slate-100 selection:bg-amber-500 selection:text-slate-950">
@@ -64,17 +69,23 @@ export const AppLayout: React.FC = () => {
                 <span className="font-extrabold text-lg tracking-tight bg-gradient-to-r from-amber-400 via-amber-200 to-slate-100 bg-clip-text text-transparent">
                   VLMS
                 </span>
-                <span className="text-[10px] uppercase font-bold tracking-wider px-1.5 py-0.5 rounded bg-amber-500/10 text-amber-400 border border-amber-500/20">
-                  V1.0
+                <span
+                  className={`text-[10px] uppercase font-bold tracking-wider px-1.5 py-0.5 rounded border ${
+                    isSuperAdmin
+                      ? 'bg-purple-500/10 text-purple-400 border-purple-500/20'
+                      : 'bg-amber-500/10 text-amber-400 border-amber-500/20'
+                  }`}
+                >
+                  {isSuperAdmin ? 'Super Admin' : 'Customer'}
                 </span>
               </div>
-              <p className="text-xs text-slate-400 hidden sm:block">
-                Vehicle Load Management System
+              <p className="text-xs text-slate-400 hidden sm:block truncate max-w-[200px]">
+                {user?.businessName || user?.mobile || 'Vehicle Load Management System'}
               </p>
             </div>
           </div>
 
-          {/* Header Actions & Health Status Indicator */}
+          {/* Header Actions: User Info & Health Indicator & Logout */}
           <div className="flex items-center gap-3">
             <div className="hidden xs:flex items-center gap-2">
               <StatusBadge
@@ -89,6 +100,7 @@ export const AppLayout: React.FC = () => {
                 size="sm"
               />
             </div>
+
             <button
               id="refresh-health-btn"
               onClick={() => void checkStatus()}
@@ -97,6 +109,17 @@ export const AppLayout: React.FC = () => {
               className="p-2 rounded-xl bg-slate-900 border border-slate-800 hover:border-slate-700 active:scale-95 text-slate-300 hover:text-amber-400 transition-all cursor-pointer"
             >
               <RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin text-amber-400' : ''}`} />
+            </button>
+
+            {/* Logout Button */}
+            <button
+              id="logout-btn"
+              onClick={logout}
+              title="Sign Out"
+              className="flex items-center gap-1.5 px-3 py-2 rounded-xl bg-slate-900 border border-slate-800 hover:border-rose-900 hover:bg-rose-950/40 text-slate-300 hover:text-rose-400 text-xs font-semibold transition-all cursor-pointer"
+            >
+              <LogOut className="w-4 h-4" />
+              <span className="hidden sm:inline">Sign Out</span>
             </button>
           </div>
         </div>

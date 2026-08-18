@@ -243,7 +243,7 @@ works successfully.
 
 # HURDLE 5 — AUTHENTICATION
 
-Status: ⬜ Not Started
+Status: ✅ Done
 
 ## Objective
 
@@ -552,7 +552,7 @@ real customer feedback.
 
 Current hurdle:
 
-HURDLE 5 — AUTHENTICATION
+HURDLE 6 — SUPER ADMIN
 
 Current blocker:
 
@@ -560,7 +560,7 @@ None.
 
 Immediate goal:
 
-Implement JWT authentication, password hashing, role guards (SUPER_ADMIN / USER), and auth state management.
+Implement super admin customer management APIs (POST /admin/users, GET /admin/users, PATCH status, password reset) and admin management UI.
 
 
 # DEVELOPMENT RULES

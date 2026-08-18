@@ -20,8 +20,9 @@ export class ApiError extends Error {
   }
 }
 
+export const AUTH_TOKEN_KEY = 'vlms_auth_token';
+
 // Base backend URL resolution:
-// In browser runtime, window.location.hostname is used if host is localhost, otherwise uses VITE_BACKEND_URL or VITE_API_URL
 const getBaseUrl = (): string => {
   if (import.meta.env.VITE_BACKEND_URL) {
     return import.meta.env.VITE_BACKEND_URL.replace(/\/+$/, '');
@@ -29,7 +30,6 @@ const getBaseUrl = (): string => {
   if (import.meta.env.VITE_API_URL) {
     return import.meta.env.VITE_API_URL.replace(/\/+$/, '');
   }
-  // Default to localhost:3000
   return 'http://localhost:3000';
 };
 
@@ -42,10 +42,16 @@ export async function apiClient<T>(
   const cleanEndpoint = endpoint.startsWith('/') ? endpoint : `/${endpoint}`;
   const url = `${API_BASE_URL}${cleanEndpoint}`;
 
-  const defaultHeaders: HeadersInit = {
+  const token = localStorage.getItem(AUTH_TOKEN_KEY);
+
+  const defaultHeaders: Record<string, string> = {
     'Content-Type': 'application/json',
     Accept: 'application/json',
   };
+
+  if (token) {
+    defaultHeaders['Authorization'] = `Bearer ${token}`;
+  }
 
   const response = await fetch(url, {
     ...options,

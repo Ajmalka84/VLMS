@@ -572,6 +572,129 @@ Hurdle 5 — Authentication:
 
 ---
 
+# Hurdle 5 — Authentication
+
+Status: ✅ Done
+
+Completed: 18-Aug-2026
+
+## Objective
+
+Secure the application and establish the USER / SUPER_ADMIN role model. Implement password hashing using bcrypt, JWT generation and validation, NestJS guards (`JwtAuthGuard`, `RolesGuard`), decorators (`@Roles()`, `@CurrentUser()`, `@Public()`), authentication endpoints (`POST /api/v1/auth/login`, `GET /api/v1/auth/me`), account status verification (`isActive`), and a mobile-first frontend authentication flow with login UI and session persistence.
+
+## Starting State
+
+Following Hurdle 4, the frontend foundation was running and communicating with the backend's health check. Endpoints were public without authentication, and user access control was not yet enforced.
+
+## Architecture Created
+
+```text
+Browser / Client
+  ↓
+POST /api/v1/auth/login (Public)
+  ↓
+AuthService.validateUser()
+  ├── Super Admin check (SUPER_ADMIN_MOBILE / SUPER_ADMIN_PASSWORD)
+  └── Customer User check (PostgreSQL users table + bcrypt.compare)
+  ↓
+Active Check (rejects isActive: false with 403 Forbidden)
+  ↓
+JwtService.sign({ sub, mobile, role, businessName })
+  ↓
+Protected Endpoints (GET /api/v1/auth/me, etc.)
+  ├── JwtAuthGuard (Passport JWT validation)
+  ├── CurrentUser decorator
+  └── RolesGuard (@Roles('SUPER_ADMIN' | 'USER'))
+```
+
+## Files Created or Changed
+
+### Backend Authentication Module
+* `backend/package.json` — Added `@nestjs/jwt@^11.0.2`, `@nestjs/passport@^11.0.5`, `passport@^0.7.0`, `passport-jwt@^4.0.1`, `@types/passport-jwt@^4.0.1`, `bcryptjs@^3.0.3`.
+* `backend/src/auth/decorators/public.decorator.ts` — `@Public()` decorator for unauthenticated routes.
+* `backend/src/auth/decorators/roles.decorator.ts` — `@Roles('SUPER_ADMIN' | 'USER')` decorator for role access control.
+* `backend/src/auth/decorators/current-user.decorator.ts` — `@CurrentUser()` parameter decorator extracting authenticated user from request.
+* `backend/src/auth/dto/login.dto.ts` — DTO with class-validator annotations for `mobile` and `password`.
+* `backend/src/auth/strategies/jwt.strategy.ts` — Passport JWT strategy resolving bearer tokens from `Authorization` header.
+* `backend/src/auth/guards/jwt-auth.guard.ts` — Global/route guard respecting `@Public()`.
+* `backend/src/auth/guards/roles.guard.ts` — Guard validating required roles against user token payload.
+* `backend/src/auth/auth.service.ts` — Credential validation (Super Admin + Customer with bcrypt), active status enforcement, JWT signing, and user profile retrieval.
+* `backend/src/auth/auth.controller.ts` — Exposes `POST /api/v1/auth/login` and `GET /api/v1/auth/me`.
+* `backend/src/auth/auth.module.ts` — Bundles passport, jwt, service, strategy, guards, and prisma.
+* `backend/src/app.module.ts` — Imported `AuthModule`.
+* `docker-compose.yml`, `.env.example`, `.env` — Configured `JWT_SECRET`, `JWT_EXPIRES_IN`, `SUPER_ADMIN_MOBILE`, `SUPER_ADMIN_PASSWORD`.
+
+### Frontend Authentication & UI
+* `frontend/src/api/client.ts` — Updated to automatically attach `Authorization: Bearer <token>` from `localStorage`.
+* `frontend/src/api/auth.ts` — API client bindings for `loginApi` and `getMeApi`.
+* `frontend/src/context/AuthContext.tsx` — Manages authentication state, token persistence, and automatic session restoration on app load.
+* `frontend/src/components/auth/ProtectedRoute.tsx` — Enforces authentication and role access before rendering protected routes.
+* `frontend/src/pages/LoginPage.tsx` — Mobile-first login screen with brand header, input validation, show/hide password toggle, error messaging, and quick-test demo credential buttons.
+* `frontend/src/components/layout/AppLayout.tsx` — Updated to display logged-in user profile, role badge, and Sign Out button.
+* `frontend/src/App.tsx` — Integrated `AuthProvider`, `/login` route, and `<ProtectedRoute>`.
+
+### Per-Hurdle Archiving
+* `docs/hurdles/hurdle-5/plan.md` — Implementation plan archived in repository.
+* `docs/hurdles/hurdle-5/walkthrough.md` — Walkthrough document archived in repository.
+
+## Commands and Verification Flow
+
+```bash
+# Full workspace build check
+npm run build
+
+# Verify Super Admin login (returns role: SUPER_ADMIN and JWT token)
+curl -X POST http://localhost:3000/api/v1/auth/login \
+  -H "Content-Type: application/json" \
+  -d '{"mobile":"9999999999","password":"Admin@12345"}'
+
+# Verify protected /auth/me with Bearer token
+curl -H "Authorization: Bearer <TOKEN>" http://localhost:3000/api/v1/auth/me
+
+# Verify invalid password rejection (HTTP 401 Unauthorized)
+curl -X POST http://localhost:3000/api/v1/auth/login \
+  -H "Content-Type: application/json" \
+  -d '{"mobile":"9999999999","password":"wrongpassword"}'
+
+# Verify unauthenticated call to /auth/me (HTTP 401 Unauthorized)
+curl http://localhost:3000/api/v1/auth/me
+
+# Verify customer user authentication with bcrypt hash in PostgreSQL
+# Verify inactive user rejection (isActive = false returns HTTP 403 Forbidden)
+```
+
+## Errors Encountered and Root-Cause Fixes
+
+| Error | Root cause | Fix |
+|---|---|---|
+| Deprecation warning on `@types/bcryptjs` | `bcryptjs` package includes its own TypeScript type definitions | Removed unnecessary dev dependency `@types/bcryptjs` |
+
+## Final Verification Result
+
+All Hurdle 5 definition-of-done criteria passed:
+- Passwords securely verified using bcrypt hashing.
+- Super Admin and Customer users authenticate and receive valid JWT tokens.
+- Protected endpoints (`/auth/me`) reject unauthenticated and malformed requests with 401.
+- Inactive accounts (`isActive: false`) are rejected with 403 Forbidden.
+- Frontend AuthContext stores and restores sessions seamlessly from `localStorage`.
+- Mobile login UI and ProtectedRoute routing work smoothly.
+
+## Handover Notes
+
+* For all future endpoints requiring authentication, annotate controllers/routes with `@UseGuards(JwtAuthGuard)` and `@UseGuards(RolesGuard)` with `@Roles('SUPER_ADMIN' | 'USER')` as required.
+* Retrieve the authenticated user in controller handlers using `@CurrentUser() user: AuthUser`.
+
+## Next Hurdle
+
+Hurdle 6 — Super Admin:
+1. Super Admin customer onboarding (`POST /api/v1/admin/users`).
+2. Customer listing and search (`GET /api/v1/admin/users`).
+3. Customer status toggle / deactivation (`PATCH /api/v1/admin/users/:id/status`).
+4. Customer password reset (`POST /api/v1/admin/users/:id/reset-password`).
+5. Super Admin web dashboard and customer management interface.
+
+---
+
 # Template for Future Hurdles
 
 Copy this section to the end of this file after each completed hurdle.
