@@ -28,8 +28,8 @@ export class CreateLoadDto {
   materialTypeId!: string;
 
   @IsUUID('4', { message: 'contractorId must be a valid UUID' })
-  @IsNotEmpty({ message: 'Contractor is required' })
-  contractorId!: string;
+  @IsOptional()
+  contractorId?: string | null;
 
   @IsOptional()
   @Type(() => Number)
@@ -42,4 +42,8 @@ export class CreateLoadDto {
   })
   @IsNotEmpty({ message: 'Payment type is required' })
   paymentType!: PaymentType;
+
+  @IsString()
+  @IsOptional()
+  remarks?: string;
 }

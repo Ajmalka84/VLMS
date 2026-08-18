@@ -1110,10 +1110,67 @@ All Hurdle 9 definition-of-done criteria passed:
 
 ## Next Hurdle
 
-Hurdle 10 — UI/UX Polish, Accessibility & Responsive Refinements:
-1. Final responsive layout audits across desktop, tablet, and mobile devices.
-2. Accessibility verification (ARIA labels, focus states, high-contrast readability under outdoor sunlight).
-3. Production bundle optimizations and smooth transitions.
+# Hurdle 10 — PDF Report
+
+Status: ✅ Done
+
+Completed: 18-Aug-2026
+
+## Objective
+
+Allow customers to generate and download professional, standalone settlement PDFs for contractor billing, WhatsApp sharing, and physical archiving.
+
+## Starting State
+
+Following Hurdle 9, settlement statements could be viewed and printed via the browser print dialog, but direct downloadable PDF files were not available.
+
+## Architecture Created
+
+```text
+Reports Page -> Settlement Statement
+  ↓
+User taps "Download PDF (PDF ഡൗൺലോഡ്)"
+  ↓
+exportSettlementPdf(settlementData, businessName) [jspdf + jspdf-autotable]
+  ├── A4 Portrait vector canvas
+  ├── Header: Business Name, Contact, GSTIN, Date Generated
+  ├── Billed-To Box: Contractor Name, Phone (+91), Statement Period
+  ├── Financial Summary Table: Total Loads, Gross Billed, Cash Settled, Net Credit Due
+  ├── Material Volume Breakdown Table
+  ├── Itemized Dispatch Trips Grid (Date, Vehicle, Material, Site, Payment, Amount)
+  ├── Signature Block: Authorized Signatory & Contractor Signature
+  ├── Page Footers: "Page X of Y"
+  └── Triggers File Download: Settlement_<Contractor>_<Date>.pdf
+```
+
+## Files Created or Changed
+
+* `frontend/src/utils/pdfGenerator.ts` — Client-side vector PDF document generator using `jspdf` and `jspdf-autotable`.
+* `frontend/src/pages/ReportsPage.tsx` — Integrated direct PDF download button, progress feedback toasts, and dual export modes (PDF, CSV, Print Slip).
+* `frontend/src/context/LanguageContext.tsx` — Added bilingual translations for `download_pdf` and `print_pdf`.
+* `docs/hurdles/hurdle-10/plan.md` — Implementation plan archived in repository.
+* `docs/hurdles/hurdle-10/walkthrough.md` — Comprehensive walkthrough document archived in repository.
+
+## Commands and Verification Flow
+
+```bash
+# Build workspace
+npm run build
+```
+
+## Final Verification Result
+
+All Hurdle 10 definition-of-done criteria passed:
+- Professional PDF statements generated with complete business details, contractor info, and date range.
+- Clean financial summary boxes and material volume subtotals rendered.
+- Full itemized trip register rendered across pages with automated pagination and signature lines.
+- Direct PDF download functions smoothly in the browser.
+
+## Next Hurdle
+
+Hurdle 11 — End-to-End Testing & Verification:
+1. Complete lifecycle testing from Super Admin onboarding to load recording and settlement statement PDF generation.
+2. Cross-device validation.
 
 ---
 

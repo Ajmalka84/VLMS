@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import {
   FileSpreadsheet,
+  FileText,
   Printer,
   Download,
   Calendar,
@@ -31,6 +32,8 @@ import {
   getSettlementReportApi,
 } from '../api/reports';
 import { PaymentType } from '../api/loads';
+import { exportSettlementPdf } from '../utils/pdfGenerator';
+import { exportToCsv } from '../utils/csvExporter';
 
 export const ReportsPage: React.FC = () => {
   const { user } = useAuth();
@@ -184,45 +187,100 @@ export const ReportsPage: React.FC = () => {
       'Amount (INR)',
     ];
 
-    const rows = settlementData.trips.map((t, idx) => [
+    const rows: (string | number)[][] = settlementData.trips.map((t, idx) => [
       idx + 1,
-      new Date(t.date).toLocaleDateString(),
-      `"${t.vehicleNumber}"`,
-      `"${t.vehicleType}"`,
-      `"${t.materialName}"`,
-      `"${t.siteName}"`,
+      new Date(t.date).toLocaleDateString('en-IN'),
+      t.vehicleNumber,
+      t.vehicleType,
+      t.materialName,
+      t.siteName,
       t.paymentType,
-      t.amount.toFixed(2),
+      t.amount,
     ]);
 
     rows.push([]);
     rows.push([
       'TOTAL TRIPS',
-      String(settlementData.summary.totalTrips),
+      settlementData.summary.totalTrips,
       'TOTAL BILLED',
-      '',
-      '',
-      '',
-      'NET CREDIT PAYABLE',
-      settlementData.summary.creditAmount.toFixed(2),
+      settlementData.summary.totalAmount,
+      'CASH SETTLED',
+      settlementData.summary.cashAmount,
+      'NET CREDIT DUE',
+      settlementData.summary.creditAmount,
     ]);
 
-    const csvContent =
-      'data:text/csv;charset=utf-8,' +
-      [headers.join(','), ...rows.map((e) => e.join(','))].join('\n');
-
-    const encodedUri = encodeURI(csvContent);
-    const link = document.createElement('a');
-    link.setAttribute('href', encodedUri);
-    const sanitizedName = settlementData.contractor.name.replace(/\s+/g, '_');
-    link.setAttribute(
-      'download',
-      `Settlement_${sanitizedName}_${new Date().toISOString().split('T')[0]}.csv`
+    const sanitizedName = settlementData.contractor.name.replace(/[^a-zA-Z0-9_-]/g, '_');
+    exportToCsv(
+      `Settlement_${sanitizedName}_${new Date().toISOString().split('T')[0]}`,
+      headers,
+      rows
     );
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
     toast.success('Settlement CSV exported successfully!');
+  };
+
+  // Export Overview All Contractors Ledger
+  const handleExportAllLedgerCSV = () => {
+    if (!summaryData || summaryData.contractors.length === 0) {
+      toast.warning('No contractor summary data to export');
+      return;
+    }
+
+    const headers = [
+      '#',
+      'Contractor Name',
+      'Mobile Number',
+      'Total Trips',
+      'Gross Billed (INR)',
+      'Cash Paid (INR)',
+      'Net Credit Due (INR)',
+    ];
+
+    const rows: (string | number)[][] = summaryData.contractors.map(({ contractor, stats }, idx) => [
+      idx + 1,
+      contractor.name,
+      contractor.mobile,
+      stats.totalTrips,
+      stats.totalAmount,
+      stats.cashAmount,
+      stats.creditAmount,
+    ]);
+
+    rows.push([]);
+    rows.push([
+      'GRAND TOTAL',
+      `${summaryData.grandTotal.contractorCount} Contractors`,
+      '',
+      summaryData.grandTotal.totalTrips,
+      summaryData.grandTotal.totalAmount,
+      summaryData.grandTotal.cashAmount,
+      summaryData.grandTotal.creditAmount,
+    ]);
+
+    exportToCsv(
+      `Contractors_Ledger_Summary_${new Date().toISOString().split('T')[0]}`,
+      headers,
+      rows
+    );
+    toast.success('Contractor ledger summary exported successfully!');
+  };
+
+  // PDF Export Handler (Direct Download)
+  const handleDownloadPDF = () => {
+    if (!settlementData || settlementData.trips.length === 0) {
+      toast.warning('No trip data to export');
+      return;
+    }
+    try {
+      exportSettlementPdf(settlementData, user?.businessName);
+      toast.success(
+        language === 'ml'
+          ? 'PDF വിജയകരമായി ഡൗൺലോഡ് ചെയ്തു!'
+          : 'Settlement PDF downloaded successfully!'
+      );
+    } catch (err: any) {
+      toast.error(err.message || 'Failed to generate PDF');
+    }
   };
 
   // Customer options for Super Admin
@@ -406,7 +464,7 @@ export const ReportsPage: React.FC = () => {
             </div>
 
             {/* Filters */}
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2.5 pt-1">
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-2.5 pt-1">
               <div className="relative">
                 <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-500" />
                 <input
@@ -426,6 +484,14 @@ export const ReportsPage: React.FC = () => {
                   placeholder={t('all_sites')}
                 />
               </div>
+
+              <button
+                onClick={handleExportAllLedgerCSV}
+                className="flex items-center justify-center gap-1.5 px-3.5 py-2.5 rounded-xl bg-slate-950 border border-slate-800 hover:border-slate-700 text-xs font-bold text-slate-200 hover:text-white transition-all cursor-pointer"
+              >
+                <Download className="w-4 h-4 text-emerald-400" />
+                Export Ledger (CSV)
+              </button>
 
               {presetRange === 'custom' && (
                 <div className="flex items-center gap-2">
@@ -549,7 +615,7 @@ export const ReportsPage: React.FC = () => {
               </div>
 
               {/* Export Buttons */}
-              <div className="flex items-center gap-2">
+              <div className="flex flex-wrap items-center gap-2">
                 <button
                   onClick={handleExportCSV}
                   className="flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-slate-950 border border-slate-800 hover:border-slate-700 text-xs font-bold text-slate-200 hover:text-white transition-all cursor-pointer"
@@ -558,11 +624,11 @@ export const ReportsPage: React.FC = () => {
                   {t('export_csv')}
                 </button>
                 <button
-                  onClick={handlePrint}
+                  onClick={handleDownloadPDF}
                   className="flex items-center gap-1.5 px-4 py-2 rounded-xl bg-amber-500 hover:bg-amber-400 text-slate-950 text-xs font-extrabold transition-all shadow-md shadow-amber-500/20 cursor-pointer"
                 >
-                  <Printer className="w-4 h-4" />
-                  {t('print_pdf')}
+                  <FileText className="w-4 h-4" />
+                  {t('download_pdf')}
                 </button>
               </div>
             </div>

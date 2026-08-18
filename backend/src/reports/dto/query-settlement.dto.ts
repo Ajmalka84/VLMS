@@ -2,7 +2,7 @@ import { IsEnum, IsNotEmpty, IsOptional, IsString, IsUUID } from 'class-validato
 import { PaymentType } from '@prisma/client';
 
 export class QuerySettlementDto {
-  @IsUUID('4', { message: 'contractorId must be a valid UUID' })
+  @IsString({ message: 'contractorId must be a valid ID' })
   @IsNotEmpty({ message: 'Contractor is required' })
   contractorId!: string;
 

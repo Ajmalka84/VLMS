@@ -37,15 +37,17 @@ export class LoadsService {
       throw new ForbiddenException('You do not have permission to access this vehicle');
     }
 
-    // 3. Verify Contractor belongs to user
-    const contractor = await this.prisma.contractor.findUnique({
-      where: { id: dto.contractorId },
-    });
-    if (!contractor) {
-      throw new NotFoundException(`Contractor with ID "${dto.contractorId}" not found`);
-    }
-    if (contractor.userId !== userId) {
-      throw new ForbiddenException('You do not have permission to access this contractor');
+    // 3. Verify Contractor belongs to user (if contractor is provided)
+    if (dto.contractorId) {
+      const contractor = await this.prisma.contractor.findUnique({
+        where: { id: dto.contractorId },
+      });
+      if (!contractor) {
+        throw new NotFoundException(`Contractor with ID "${dto.contractorId}" not found`);
+      }
+      if (contractor.userId !== userId) {
+        throw new ForbiddenException('You do not have permission to access this contractor');
+      }
     }
 
     // 4. Verify Material Type exists
@@ -117,10 +119,11 @@ export class LoadsService {
         date: loadDate,
         vehicleId: dto.vehicleId,
         materialTypeId: dto.materialTypeId,
-        contractorId: dto.contractorId,
+        contractorId: dto.contractorId || null,
         rateId: rateId,
         amount: finalAmount,
         paymentType: dto.paymentType,
+        remarks: dto.remarks || null,
       },
       include: {
         site: true,

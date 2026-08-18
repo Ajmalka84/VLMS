@@ -425,7 +425,7 @@ Report totals exactly match the underlying Load data.
 
 # HURDLE 10 — PDF REPORT
 
-Status: ⬜ Not Started
+Status: ✅ Done
 
 ## Objective
 

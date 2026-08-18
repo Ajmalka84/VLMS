@@ -20,7 +20,6 @@ export class ReportsService {
       if (query.customerId) {
         targetUserId = query.customerId;
       } else {
-        // Find first active customer to provide a populated default
         const firstCust = await this.prisma.user.findFirst({
           where: { isActive: true },
           orderBy: { createdAt: 'asc' },
@@ -105,14 +104,32 @@ export class ReportsService {
       });
     }
 
+    // Add Direct Sales bucket
+    const directSalesKey = 'direct-sales';
+    contractorMap.set(directSalesKey, {
+      totalTrips: 0,
+      totalAmount: 0,
+      cashTrips: 0,
+      cashAmount: 0,
+      creditTrips: 0,
+      creditAmount: 0,
+      lastTripDate: null,
+    });
+
     let grandTotalTrips = 0;
     let grandTotalAmount = 0;
     let grandCashAmount = 0;
     let grandCreditAmount = 0;
+    let hasDirectSales = false;
 
     for (const load of loads) {
-      const stats = contractorMap.get(load.contractorId);
+      const key = load.contractorId || directSalesKey;
+      const stats = contractorMap.get(key);
       if (!stats) continue;
+
+      if (!load.contractorId) {
+        hasDirectSales = true;
+      }
 
       const amt = Number(load.amount);
       stats.totalTrips += 1;
@@ -149,6 +166,20 @@ export class ReportsService {
       };
     });
 
+    // Include Direct Sales in summary list if any direct sales exist
+    if (hasDirectSales) {
+      const directStats = contractorMap.get(directSalesKey)!;
+      summaries.unshift({
+        contractor: {
+          id: directSalesKey,
+          name: 'Direct / Spot Cash Sales (Walk-in)',
+          mobile: 'N/A',
+          createdAt: new Date(),
+        },
+        stats: directStats,
+      });
+    }
+
     // Fetch tenant customer profile if Super Admin
     let customerInfo = null;
     if (user.role === 'SUPER_ADMIN') {
@@ -165,7 +196,7 @@ export class ReportsService {
       },
       customer: customerInfo,
       grandTotal: {
-        contractorCount: contractors.length,
+        contractorCount: summaries.length,
         totalTrips: grandTotalTrips,
         totalAmount: grandTotalAmount,
         cashAmount: grandCashAmount,
@@ -176,24 +207,43 @@ export class ReportsService {
   }
 
   async getSettlementStatement(user: AuthUser, query: QuerySettlementDto) {
-    // 1. Verify contractor exists
-    const contractor = await this.prisma.contractor.findUnique({
-      where: { id: query.contractorId },
-    });
-    if (!contractor) {
-      throw new NotFoundException(`Contractor with ID "${query.contractorId}" not found`);
-    }
+    let targetUserId = user.id;
+    let contractorObj: { id: string; name: string; mobile: string } | null = null;
 
-    // Tenant permission check (Super Admin can access any tenant's contractor)
-    if (user.role !== 'SUPER_ADMIN' && contractor.userId !== user.id) {
-      throw new ForbiddenException('You do not have permission to access this contractor');
-    }
+    if (query.contractorId === 'direct-sales') {
+      if (user.role === 'SUPER_ADMIN' && query.customerId) {
+        targetUserId = query.customerId;
+      }
+      contractorObj = {
+        id: 'direct-sales',
+        name: 'Direct / Spot Cash Sales (Walk-in)',
+        mobile: 'N/A',
+      };
+    } else {
+      // 1. Verify contractor exists
+      const contractor = await this.prisma.contractor.findUnique({
+        where: { id: query.contractorId },
+      });
+      if (!contractor) {
+        throw new NotFoundException(`Contractor with ID "${query.contractorId}" not found`);
+      }
 
-    const targetUserId = contractor.userId;
+      // Tenant permission check (Super Admin can access any tenant's contractor)
+      if (user.role !== 'SUPER_ADMIN' && contractor.userId !== user.id) {
+        throw new ForbiddenException('You do not have permission to access this contractor');
+      }
+
+      targetUserId = contractor.userId;
+      contractorObj = {
+        id: contractor.id,
+        name: contractor.name,
+        mobile: contractor.mobile,
+      };
+    }
 
     // 2. Build load query condition
     const where: any = {
-      contractorId: query.contractorId,
+      contractorId: query.contractorId === 'direct-sales' ? null : query.contractorId,
       site: { userId: targetUserId },
       deletedAt: null,
     };
@@ -336,11 +386,7 @@ export class ReportsService {
 
     return {
       business: quarryOwner,
-      contractor: {
-        id: contractor.id,
-        name: contractor.name,
-        mobile: contractor.mobile,
-      },
+      contractor: contractorObj,
       period: {
         startDate: query.startDate || null,
         endDate: query.endDate || null,
@@ -351,7 +397,7 @@ export class ReportsService {
         cashTrips,
         cashAmount,
         creditTrips,
-        creditAmount, // Net settlement / payable amount
+        creditAmount,
       },
       materialBreakdown,
       vehicleBreakdown,
@@ -366,6 +412,7 @@ export class ReportsService {
         siteName: l.site.siteName,
         paymentType: l.paymentType,
         amount: Number(l.amount),
+        remarks: l.remarks,
       })),
     };
   }

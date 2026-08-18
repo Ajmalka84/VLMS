@@ -9,17 +9,18 @@ export interface Load {
   date: string;
   vehicleId: string;
   materialTypeId: string;
-  contractorId: string;
+  contractorId?: string | null;
   rateId: string;
   amount: string | number;
   paymentType: PaymentType;
+  remarks?: string | null;
   createdAt: string;
   updatedAt: string;
   deletedAt?: string | null;
   site: Site;
   vehicle: Vehicle;
   materialType: MaterialType;
-  contractor: Contractor;
+  contractor?: Contractor | null;
   rate: Rate;
 }
 
@@ -28,9 +29,10 @@ export interface CreateLoadDto {
   date?: string;
   vehicleId: string;
   materialTypeId: string;
-  contractorId: string;
+  contractorId?: string | null;
   amount?: number;
   paymentType: PaymentType;
+  remarks?: string;
 }
 
 export interface UpdateLoadDto {
@@ -38,9 +40,10 @@ export interface UpdateLoadDto {
   date?: string;
   vehicleId?: string;
   materialTypeId?: string;
-  contractorId?: string;
+  contractorId?: string | null;
   amount?: number;
   paymentType?: PaymentType;
+  remarks?: string;
 }
 
 export interface QueryLoadsDto {

@@ -22,6 +22,7 @@ import {
   Sparkles,
   ChevronRight,
   UserCheck,
+  Download,
 } from 'lucide-react';
 import { Card } from '../components/common/Card';
 import { ConfirmModal } from '../components/common/ConfirmModal';
@@ -50,6 +51,7 @@ import {
   deleteLoadApi,
   LoadsResponse,
 } from '../api/loads';
+import { exportToCsv } from '../utils/csvExporter';
 
 const STORAGE_KEY_SITE = 'vlms_last_siteId';
 const STORAGE_KEY_MATERIAL = 'vlms_last_materialId';
@@ -219,13 +221,21 @@ export const LoadsPage: React.FC = () => {
 
   // Contractor options for CustomSelect
   const contractorOptions: CustomSelectOption[] = useMemo(() => {
-    return contractors.map((c) => ({
-      value: c.id,
-      label: c.name,
-      subLabel: `+91 ${c.mobile}`,
-      icon: <UserCheck className="w-4 h-4" />,
-    }));
-  }, [contractors]);
+    return [
+      {
+        value: '',
+        label: language === 'ml' ? 'നേരിട്ടുള്ള വില്പന (Direct / Walk-in Sale)' : 'Direct / Walk-in Sale (No Contractor)',
+        subLabel: language === 'ml' ? 'സ്പോട്ട് ക്യാഷ് / റീട്ടെയിൽ ലോഡ്' : 'Spot Cash / Retail Sale',
+        icon: <UserCheck className="w-4 h-4 text-emerald-400" />,
+      },
+      ...contractors.map((c) => ({
+        value: c.id,
+        label: c.name,
+        subLabel: `+91 ${c.mobile}`,
+        icon: <UserCheck className="w-4 h-4 text-slate-400" />,
+      })),
+    ];
+  }, [contractors, language]);
 
   // Filter Site options
   const filterSiteOptions: CustomSelectOption[] = useMemo(() => {
@@ -239,9 +249,10 @@ export const LoadsPage: React.FC = () => {
   const filterContractorOptions: CustomSelectOption[] = useMemo(() => {
     return [
       { value: '', label: t('all_contractors') },
+      { value: 'direct', label: language === 'ml' ? 'നേരിട്ടുള്ള വില്പന (Direct Sale)' : 'Direct / Walk-in Sale' },
       ...contractors.map((c) => ({ value: c.id, label: c.name, subLabel: `+91 ${c.mobile}` })),
     ];
-  }, [contractors, t]);
+  }, [contractors, language, t]);
 
   // Filter Payment options
   const filterPaymentOptions: CustomSelectOption[] = useMemo(() => {
@@ -328,6 +339,81 @@ export const LoadsPage: React.FC = () => {
     }
   }, [activeView, fetchLoadsHistory]);
 
+  // Export Loads History to Excel / CSV
+  const handleExportLoadsCSV = async () => {
+    try {
+      toast.info('Fetching load register for export...');
+      const res = await getLoadsApi({
+        siteId: filterSite || undefined,
+        contractorId: filterContractor || undefined,
+        materialTypeId: filterMaterial || undefined,
+        paymentType: filterPayment || undefined,
+        search: filterSearch.trim() || undefined,
+        startDate: filterStartDate || undefined,
+        endDate: filterEndDate || undefined,
+        page: 1,
+        limit: 5000,
+      });
+
+      if (res.loads.length === 0) {
+        toast.warning('No load records to export');
+        return;
+      }
+
+      const headers = [
+        '#',
+        'Date',
+        'Time',
+        'Vehicle Number',
+        'Vehicle Type',
+        'Material',
+        'Contractor (C/O)',
+        'Quarry Site',
+        'Payment Mode',
+        'Amount (INR)',
+        'Remarks',
+      ];
+
+      const rows: (string | number)[][] = res.loads.map((l, idx) => [
+        idx + 1,
+        new Date(l.date).toLocaleDateString('en-IN'),
+        new Date(l.createdAt).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' }),
+        l.vehicle.vehicleNumber,
+        l.vehicle.vehicleType.name,
+        l.materialType.name,
+        l.contractor ? l.contractor.name : 'Direct / Walk-in Sale',
+        l.site.siteName,
+        l.paymentType,
+        l.amount,
+        l.remarks || '',
+      ]);
+
+      rows.push([]);
+      rows.push([
+        'TOTAL LOADS',
+        res.summary.totalLoads,
+        '',
+        '',
+        '',
+        '',
+        '',
+        'TOTAL TURNOVER',
+        res.summary.totalAmount,
+        `CASH: ${res.summary.totalCashAmount}`,
+        `CREDIT: ${res.summary.totalCreditAmount}`,
+      ]);
+
+      exportToCsv(
+        `Load_Register_${new Date().toISOString().split('T')[0]}`,
+        headers,
+        rows
+      );
+      toast.success('Load Register exported to CSV successfully!');
+    } catch (err: any) {
+      toast.error(err.message || 'Failed to export load register');
+    }
+  };
+
   // Record Load Submission
   const handleRecordLoad = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -341,10 +427,6 @@ export const LoadsPage: React.FC = () => {
     }
     if (!materialTypeId) {
       toast.warning(language === 'ml' ? 'ദയവായി മെറ്റീരിയൽ തിരഞ്ഞെടുക്കുക' : 'Please select material type');
-      return;
-    }
-    if (!contractorId) {
-      toast.warning(language === 'ml' ? 'ദയവായി കോൺട്രാക്ടറെ തിരഞ്ഞെടുക്കുക' : 'Please select contractor / C/O');
       return;
     }
 
@@ -372,7 +454,7 @@ export const LoadsPage: React.FC = () => {
         siteId,
         vehicleId,
         materialTypeId,
-        contractorId,
+        contractorId: contractorId ? contractorId : undefined,
         date,
         paymentType,
         amount: finalAmountToSend,
@@ -427,7 +509,7 @@ export const LoadsPage: React.FC = () => {
       date: load.date.split('T')[0],
       amount: String(load.amount),
       paymentType: load.paymentType,
-      contractorId: load.contractorId,
+      contractorId: load.contractorId || '',
     });
   };
 
@@ -440,7 +522,7 @@ export const LoadsPage: React.FC = () => {
         date: editForm.date,
         amount: parseFloat(editForm.amount),
         paymentType: editForm.paymentType,
-        contractorId: editForm.contractorId,
+        contractorId: editForm.contractorId || null,
       });
       setEditLoad(null);
       toast.success(language === 'ml' ? 'ലോഡ് വിവരങ്ങൾ അപ്‌ഡേറ്റ് ചെയ്തു' : 'Load entry updated successfully!');
@@ -952,6 +1034,21 @@ export const LoadsPage: React.FC = () => {
 
           {/* Filter Toolbar with CustomSelect Components */}
           <Card variant="glass" className="p-4 space-y-3">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-2 border-b border-slate-800/80">
+              <span className="text-xs font-bold text-slate-300 uppercase tracking-wider flex items-center gap-1.5">
+                <Layers className="w-4 h-4 text-amber-400" />
+                {language === 'ml' ? 'ലോഡ് രജിസ്റ്റർ ഫിൽട്ടറുകൾ' : 'Load Register Filters'}
+              </span>
+
+              <button
+                onClick={handleExportLoadsCSV}
+                className="flex items-center justify-center gap-1.5 px-4 py-2 rounded-xl bg-slate-900 border border-slate-800 hover:border-slate-700 text-xs font-bold text-slate-200 hover:text-white transition-all cursor-pointer shadow-sm"
+              >
+                <Download className="w-4 h-4 text-emerald-400" />
+                {language === 'ml' ? 'രജിസ്റ്റർ എക്സ്പോർട്ട് (CSV / Excel)' : 'Export Register (CSV / Excel)'}
+              </button>
+            </div>
+
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-2.5">
               {/* Search */}
               <div className="relative lg:col-span-2">
@@ -1034,7 +1131,14 @@ export const LoadsPage: React.FC = () => {
                       </div>
 
                       <div className="text-xs text-slate-300 font-semibold mt-1">
-                        {load.contractor?.name} • <span className="text-slate-400">{load.materialType?.name}</span>
+                        {load.contractor ? (
+                          <span>{load.contractor.name}</span>
+                        ) : (
+                          <span className="text-emerald-400 font-bold">
+                            {language === 'ml' ? 'നേരിട്ടുള്ള വില്പന (Direct Sale)' : 'Direct / Walk-in Sale'}
+                          </span>
+                        )}{' '}
+                        • <span className="text-slate-400">{load.materialType?.name}</span>
                       </div>
                       <div className="text-[11px] text-slate-500 mt-0.5">
                         {t('select_site')}: {load.site?.siteName} • {t('dispatch_date')}: {new Date(load.date).toLocaleDateString()}
