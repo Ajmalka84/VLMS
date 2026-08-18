@@ -9,6 +9,7 @@ import {
   HardHat,
   LogOut,
   User,
+  Users,
   Shield,
 } from 'lucide-react';
 import { fetchHealth, HealthData } from '../../api/health';
@@ -45,15 +46,20 @@ export const AppLayout: React.FC = () => {
     return () => clearInterval(interval);
   }, []);
 
-  const navItems = [
-    { to: '/', label: 'Dashboard', icon: LayoutDashboard },
-    { to: '/loads', label: 'Loads', icon: Truck },
-    { to: '/reports', label: 'Reports', icon: FileSpreadsheet },
-    { to: '/settings', label: 'Master Data', icon: Settings },
-  ];
-
   const isDbUp = health?.database?.status === 'up';
   const isSuperAdmin = user?.role === 'SUPER_ADMIN';
+
+  const navItems = isSuperAdmin
+    ? [
+        { to: '/', label: 'Dashboard', icon: LayoutDashboard },
+        { to: '/admin/users', label: 'Customers', icon: Users },
+      ]
+    : [
+        { to: '/', label: 'Dashboard', icon: LayoutDashboard },
+        { to: '/loads', label: 'Loads', icon: Truck },
+        { to: '/reports', label: 'Reports', icon: FileSpreadsheet },
+        { to: '/settings', label: 'Master Data', icon: Settings },
+      ];
 
   return (
     <div className="min-h-screen flex flex-col bg-slate-950 text-slate-100 selection:bg-amber-500 selection:text-slate-950">

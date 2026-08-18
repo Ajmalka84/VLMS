@@ -695,6 +695,131 @@ Hurdle 6 — Super Admin:
 
 ---
 
+# Hurdle 6 — Super Admin
+
+Status: ✅ Done
+
+Completed: 18-Aug-2026
+
+## Objective
+
+Allow the SaaS owner (`SUPER_ADMIN`) to onboard, search, update, activate/deactivate, and reset passwords for customer business accounts without manual database modification.
+
+## Starting State
+
+Following Hurdle 5, authentication and role verification (`SUPER_ADMIN` and `USER`) were established. Customer accounts still had to be seeded directly via database scripts since no administrative user management endpoints existed.
+
+## Architecture Created
+
+```text
+Super Admin (Browser / Client with JWT role: SUPER_ADMIN)
+  ↓
+/api/v1/admin/users (Guarded by JwtAuthGuard + RolesGuard)
+  ├── POST   /admin/users               -> AdminUsersService.createUser()
+  ├── GET    /admin/users               -> AdminUsersService.listUsers() (Search + Status + Pagination)
+  ├── GET    /admin/users/:id           -> AdminUsersService.getUserById()
+  ├── PATCH  /admin/users/:id           -> AdminUsersService.updateUser() (Business Name / GSTIN)
+  ├── PATCH  /admin/users/:id/status    -> AdminUsersService.updateStatus() (Activate / Deactivate)
+  └── POST   /admin/users/:id/reset-pwd -> AdminUsersService.resetPassword() (Bcrypt Hash Update)
+```
+
+## Files Created or Changed
+
+### Backend Admin Module
+* `backend/src/admin/dto/create-user.dto.ts` — Validates business name, 10-digit mobile number, password (min 6), and optional GSTIN.
+* `backend/src/admin/dto/update-user.dto.ts` — Validates optional business name and GSTIN updates.
+* `backend/src/admin/dto/update-user-status.dto.ts` — Validates `isActive` boolean.
+* `backend/src/admin/dto/reset-password.dto.ts` — Validates `newPassword` (min 6).
+* `backend/src/admin/dto/query-users.dto.ts` — Search query, status filter (`all`, `active`, `inactive`), and pagination.
+* `backend/src/admin/admin-users.service.ts` — Customer business account creation (with bcrypt hashing and uniqueness check), listing with search and count relations, detail queries, field updates, status toggling, and password resetting.
+* `backend/src/admin/admin-users.controller.ts` — Exposes `/api/v1/admin/users` restricted to `@Roles('SUPER_ADMIN')`.
+* `backend/src/admin/admin.module.ts` — Bundles admin service and controller.
+* `backend/src/app.module.ts` — Imported `AdminModule`.
+
+### Frontend Super Admin UI & Client
+* `frontend/src/api/admin.ts` — Typed client methods for all `/admin/users` operations.
+* `frontend/src/pages/admin/CustomersPage.tsx` — Full-featured customer management console with:
+  - Metric summary cards (Total, Active, Inactive).
+  - Modal onboarding form with auto-generated initial password.
+  - Search by business name or mobile + status filter tabs (All, Active, Inactive).
+  - Customer cards/table with activation status switch, edit modal, and password reset modal.
+* `frontend/src/components/layout/AppLayout.tsx` — Dynamic navigation rendering "Customers" for Super Admin and operational links for Customers.
+* `frontend/src/pages/DashboardPage.tsx` — Role-aware welcome banner and quick-access callout to Customer Management for Super Admin.
+* `frontend/src/App.tsx` — Registered `/admin/users` protected route with `allowedRoles={['SUPER_ADMIN']}`.
+
+### Per-Hurdle Archiving
+* `docs/hurdles/hurdle-6/plan.md` — Implementation plan archived in repository.
+* `docs/hurdles/hurdle-6/walkthrough.md` — Walkthrough document archived in repository.
+
+## Commands and Verification Flow
+
+```bash
+# Full workspace build check
+npm run build
+
+# Customer attempt on /admin/users (Rejected with HTTP 403 Forbidden)
+curl -H "Authorization: Bearer <CUSTOMER_TOKEN>" http://localhost:3000/api/v1/admin/users
+
+# Super Admin onboard customer (HTTP 201 Created)
+curl -X POST http://localhost:3000/api/v1/admin/users \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer <ADMIN_TOKEN>" \
+  -d '{"businessName":"Skyline Heavy Haulage", "mobile":"9777777777", "password":"Skyline@1234", "gstin":"29XYZAB1234K1Z2"}'
+
+# Super Admin list & search customers
+curl -H "Authorization: Bearer <ADMIN_TOKEN>" http://localhost:3000/api/v1/admin/users?search=Skyline
+
+# Login as newly onboarded customer via /auth/login
+curl -X POST http://localhost:3000/api/v1/auth/login \
+  -H "Content-Type: application/json" \
+  -d '{"mobile":"9777777777", "password":"Skyline@1234"}'
+
+# Super Admin deactivates customer account (isActive: false)
+curl -X PATCH http://localhost:3000/api/v1/admin/users/<ID>/status \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer <ADMIN_TOKEN>" \
+  -d '{"isActive": false}'
+
+# Verify deactivated customer cannot login (HTTP 403 Forbidden)
+
+# Super Admin resets password via /admin/users/<ID>/reset-password
+curl -X POST http://localhost:3000/api/v1/admin/users/<ID>/reset-password \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer <ADMIN_TOKEN>" \
+  -d '{"newPassword": "NewSkyline@5678"}'
+
+# Verify old password fails (HTTP 401) and new password succeeds (HTTP 201)
+```
+
+## Errors Encountered and Root-Cause Fixes
+
+| Error | Root cause | Fix |
+|---|---|---|
+| `Unknown field loads on model UserCountOutputType` | In `schema.prisma`, `loads` are linked to `Site` and `Vehicle`, not directly to `User` | Updated `_count` select in `admin-users.service.ts` to `{ sites: true, vehicles: true, contractors: true }` |
+
+## Final Verification Result
+
+All Hurdle 6 definition-of-done criteria passed:
+- Super Admin onboarded real customer business accounts via API and UI.
+- Onboarded customers can log in immediately with their credentials.
+- Inactive toggle prevents login immediately, and reactivation restores access.
+- Password resets update password hash and allow immediate customer login.
+- Customer users are strictly blocked from `/admin/users` with HTTP 403 Forbidden.
+
+## Handover Notes
+
+* All customer onboarding in production should be performed through `POST /api/v1/admin/users` or the Super Admin console `/admin/users`.
+* Each customer created is an isolated tenant whose ID will partition all master data (Sites, Vehicles, Contractors, Rates, Loads).
+
+## Next Hurdle
+
+Hurdle 7 — Master Data:
+1. Master data entities for customer tenant: Sites, Vehicle Types, Material Types, Vehicles, Contractors.
+2. Rate determination matrix: Rate = Site + Vehicle Type + Material Type.
+3. Master data CRUD APIs and management UI.
+
+---
+
 # Template for Future Hurdles
 
 Copy this section to the end of this file after each completed hurdle.

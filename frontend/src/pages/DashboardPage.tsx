@@ -1,5 +1,5 @@
 import React from 'react';
-import { useOutletContext } from 'react-router-dom';
+import { useOutletContext, Link } from 'react-router-dom';
 import {
   Server,
   Database,
@@ -9,13 +9,15 @@ import {
   ArrowRight,
   Truck,
   FileSpreadsheet,
-  CheckCircle2,
-  AlertTriangle,
   Zap,
+  Users,
+  ShieldCheck,
+  Building2,
 } from 'lucide-react';
 import { Card } from '../components/common/Card';
 import { StatusBadge } from '../components/common/StatusBadge';
 import { HealthData } from '../api/health';
+import { useAuth } from '../context/AuthContext';
 
 interface LayoutContext {
   health: HealthData | null;
@@ -25,7 +27,9 @@ interface LayoutContext {
 
 export const DashboardPage: React.FC = () => {
   const { health, loading, refreshHealth } = useOutletContext<LayoutContext>();
+  const { user } = useAuth();
 
+  const isSuperAdmin = user?.role === 'SUPER_ADMIN';
   const isDbUp = health?.database?.status === 'up';
   const uptimeSeconds = health?.uptime ?? 0;
   const hours = Math.floor(uptimeSeconds / 3600);
@@ -41,19 +45,47 @@ export const DashboardPage: React.FC = () => {
         <div className="relative z-10 max-w-2xl space-y-3">
           <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-amber-500/10 border border-amber-500/20 text-amber-300 text-xs font-semibold uppercase tracking-wider">
             <Zap className="w-3.5 h-3.5" />
-            Hurdle 4: Frontend Foundation
+            {isSuperAdmin ? 'Super Admin Console' : 'Customer Workspace'}
           </div>
           <h1 className="text-2xl sm:text-4xl font-extrabold text-white tracking-tight">
-            Vehicle Load Management System
+            {isSuperAdmin
+              ? 'SaaS Administration & Operations'
+              : user?.businessName || 'Vehicle Load Management System'}
           </h1>
           <p className="text-sm sm:text-base text-slate-300 leading-relaxed">
-            Record vehicle loads on-site and generate automated C/O settlement reports. Connected live to the NestJS backend and PostgreSQL database.
+            {isSuperAdmin
+              ? 'Manage customer business onboarding, account status, security resets, and platform configuration.'
+              : 'Record vehicle loads on-site and generate automated C/O settlement reports. Connected live to the NestJS backend and PostgreSQL database.'}
           </p>
         </div>
       </div>
 
-      {/* System Health Card (End-to-End Proof of Communication) */}
-      <Card variant="highlight" id="system-health-card">
+      {/* Super Admin Quick Access Callout */}
+      {isSuperAdmin && (
+        <Card variant="highlight" className="p-6 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+          <div className="flex items-center gap-4">
+            <div className="w-12 h-12 rounded-2xl bg-purple-500/10 text-purple-400 flex items-center justify-center border border-purple-500/20">
+              <Users className="w-6 h-6" />
+            </div>
+            <div>
+              <h2 className="text-lg font-bold text-white">Customer Account Management</h2>
+              <p className="text-xs text-slate-400">
+                Onboard new customer businesses, activate/deactivate accounts, and reset passwords.
+              </p>
+            </div>
+          </div>
+          <Link
+            to="/admin/users"
+            id="go-to-customers-btn"
+            className="inline-flex items-center justify-center gap-2 px-5 py-2.5 rounded-xl bg-amber-500 hover:bg-amber-400 text-slate-950 font-bold text-sm shadow-lg shadow-amber-500/20 transition-all cursor-pointer whitespace-nowrap"
+          >
+            Manage Customers <ArrowRight className="w-4 h-4" />
+          </Link>
+        </Card>
+      )}
+
+      {/* System Health Card */}
+      <Card variant="glass" id="system-health-card">
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-4 border-b border-slate-800">
           <div className="flex items-center gap-3">
             <div className="p-2.5 rounded-xl bg-amber-500/10 text-amber-400 border border-amber-500/20">

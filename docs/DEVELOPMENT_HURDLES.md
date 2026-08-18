@@ -283,7 +283,7 @@ for their role.
 
 # HURDLE 6 — SUPER ADMIN
 
-Status: ⬜ Not Started
+Status: ✅ Done
 
 ## Objective
 
@@ -552,7 +552,7 @@ real customer feedback.
 
 Current hurdle:
 
-HURDLE 6 — SUPER ADMIN
+HURDLE 7 — MASTER DATA
 
 Current blocker:
 
@@ -560,7 +560,7 @@ None.
 
 Immediate goal:
 
-Implement super admin customer management APIs (POST /admin/users, GET /admin/users, PATCH status, password reset) and admin management UI.
+Implement Master Data APIs (Sites, Vehicles, Vehicle Types, Material Types, Contractors, and dynamic Rates matrix) and management UI for customers.
 
 
 # DEVELOPMENT RULES

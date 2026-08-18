@@ -7,6 +7,7 @@ import { DashboardPage } from './pages/DashboardPage';
 import { LoginPage } from './pages/LoginPage';
 import { PlaceholderPage } from './pages/PlaceholderPage';
 import { NotFoundPage } from './pages/NotFoundPage';
+import { CustomersPage } from './pages/admin/CustomersPage';
 
 export function App() {
   return (
@@ -25,6 +26,18 @@ export function App() {
           }
         >
           <Route index element={<DashboardPage />} />
+
+          {/* Super Admin Route */}
+          <Route
+            path="admin/users"
+            element={
+              <ProtectedRoute allowedRoles={['SUPER_ADMIN']}>
+                <CustomersPage />
+              </ProtectedRoute>
+            }
+          />
+
+          {/* Operational Customer Routes */}
           <Route
             path="loads"
             element={
