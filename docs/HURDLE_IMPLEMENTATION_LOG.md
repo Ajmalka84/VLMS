@@ -364,6 +364,105 @@ Hurdle 3 — Backend Foundation:
 
 ---
 
+# Hurdle 3 — Backend Foundation
+
+Status: ✅ Done
+
+Completed: 18-Aug-2026
+
+## Objective
+
+Create a stable, standardized NestJS API foundation for VLMS (global validation, unified error formatting, response envelope transformation, and a database-aware health check endpoint).
+
+## Starting State
+
+Following Hurdle 2, PostgreSQL was running with Prisma 7, the V1 schema was migrated, and PrismaService was connected. However, error handling, validation pipes, response structures, and the health check endpoint were not yet standardized or integrated.
+
+## Architecture Created
+
+```text
+HTTP Request
+  ↓
+ValidationPipe (Transform + Whitelist)
+  ↓
+Controllers (e.g. HealthController /api/v1/health)
+  ↓
+ResponseInterceptor -> Standard JSON Envelope: { success: true, data: ... }
+  ↓ (or on Exception)
+AllExceptionsFilter -> Standard Error Format: { success: false, message: ..., code: ... }
+```
+
+## Files Created or Changed
+
+### Common Utilities & Filters
+* `backend/src/common/filters/all-exceptions.filter.ts` — Global exception filter capturing HTTP and uncaught errors, mapping them to standard `{ success: false, message, code }` envelopes with status codes (e.g. `400 BAD_REQUEST`, `404 NOT_FOUND`, `503 SERVICE_UNAVAILABLE`).
+* `backend/src/common/interceptors/response.interceptor.ts` — Global interceptor formatting controller return values into `{ success: true, data }`.
+* `backend/src/common/common.module.ts` — Module configuring `APP_FILTER`, `APP_INTERCEPTOR`, and `APP_PIPE` across the application.
+
+### Health Module
+* `backend/src/health/health.service.ts` — Service measuring process uptime and executing `SELECT 1` ping against PostgreSQL with latency tracking.
+* `backend/src/health/health.controller.ts` — Exposes `GET /health` (`/api/v1/health`).
+* `backend/src/health/health.module.ts` — Encapsulates health monitoring and database reachability checks.
+
+### App Setup & Dependencies
+* `backend/src/app.module.ts` — Imported `CommonModule` and `HealthModule`.
+* `backend/src/main.ts` — Configured `/api/v1` prefix, CORS, and shutdown hooks.
+* `backend/Dockerfile` — Updated build steps to copy `prisma/` and `prisma.config.ts` prior to `npm install` for reproducible image generation.
+* `backend/package.json` — Added `@types/express@^5.0.6`.
+
+## Commands and Verification Flow
+
+```bash
+# Compile and build NestJS
+npm run build --workspace=@vlms/backend
+
+# Verify health endpoint (returns HTTP 200 and database status "up")
+curl -i http://localhost:3000/api/v1/health
+
+# Verify root endpoint
+curl -i http://localhost:3000/api/v1
+
+# Verify standardized 404 error formatting (returns HTTP 404 with code NOT_FOUND)
+curl -i http://localhost:3000/api/v1/invalid-route
+
+# Test database degradation and auto-recovery
+docker compose stop postgres
+curl -i http://localhost:3000/api/v1/health # Returns HTTP 503 SERVICE_UNAVAILABLE
+docker compose start postgres
+curl -i http://localhost:3000/api/v1/health # Recovers to HTTP 200 OK
+```
+
+## Errors Encountered and Root-Cause Fixes
+
+| Error | Root cause | Fix |
+|---|---|---|
+| `Could not find a declaration file for module 'express'` in filter | Missing TypeScript type definitions for Express | Added `@types/express@^5.0.6` to backend devDependencies |
+| Docker build failed `Could not find Prisma Schema` during `npm install` | `package*.json` was copied without `prisma/` before running `npm install` (which triggered `postinstall: prisma generate`) | Updated `Dockerfile` to copy `prisma/` and `prisma.config.ts` before `npm install` |
+
+## Final Verification Result
+
+All Hurdle 3 definition-of-done criteria passed:
+- NestJS backend starts reliably with clean dependency injection.
+- Global prefix `/api/v1` actively routes requests.
+- `GET /api/v1/health` responds with `status: "ok"` and `database: { status: "up", latencyMs: 19 }`.
+- Exception filter formats errors uniformly according to `docs/API_DOCUMENTATION.md`.
+- Database outage handling gracefully returns 503 `SERVICE_UNAVAILABLE` and auto-recovers when PostgreSQL comes back online.
+
+## Handover Notes
+
+* Always use standard exceptions (e.g. `BadRequestException`, `NotFoundException`, `ForbiddenException`) in controllers and services; the global filter formats them uniformly.
+* All successful responses from controllers are automatically formatted into `{ success: true, data: ... }`.
+
+## Next Hurdle
+
+Hurdle 4 — Frontend Foundation:
+1. React / Vite application setup with Tailwind CSS.
+2. API client configuration calling `/api/v1/health`.
+3. Basic mobile-first application layout and routing.
+4. End-to-end communication verification: Browser → Frontend → Backend → PostgreSQL.
+
+---
+
 # Template for Future Hurdles
 
 Copy this section to the end of this file after each completed hurdle.

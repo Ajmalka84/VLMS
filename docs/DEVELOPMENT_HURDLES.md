@@ -166,7 +166,7 @@ Database can be created from scratch and accessed by Prisma.
 
 # HURDLE 3 — BACKEND FOUNDATION
 
-Status: ⬜ Not Started
+Status: ✅ Done
 
 ## Objective
 
@@ -552,7 +552,7 @@ real customer feedback.
 
 Current hurdle:
 
-HURDLE 3 — BACKEND FOUNDATION
+HURDLE 4 — FRONTEND FOUNDATION
 
 Current blocker:
 
@@ -560,7 +560,7 @@ None.
 
 Immediate goal:
 
-Create a stable NestJS API foundation (versioning, global validation, error handling, health endpoint, and Prisma integration).
+Create the basic React application layout and establish communication with the backend (/api/v1/health).
 
 
 # DEVELOPMENT RULES
