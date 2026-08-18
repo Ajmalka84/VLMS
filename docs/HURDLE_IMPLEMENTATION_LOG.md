@@ -463,6 +463,115 @@ Hurdle 4 — Frontend Foundation:
 
 ---
 
+# Hurdle 4 — Frontend Foundation
+
+Status: ✅ Done
+
+Completed: 18-Aug-2026
+
+## Objective
+
+Create the basic React application, configure Tailwind CSS v4 and React Router v7, implement a typed API client, establish a responsive mobile-first application layout, and demonstrate live communication with the backend and database via `GET /api/v1/health`.
+
+## Starting State
+
+Following Hurdle 3, the backend API foundation was running and healthy on port 3000 with global exception filtering, validation, and a live health check endpoint. The frontend was a bare starter template without Tailwind, routing, or backend connectivity.
+
+## Architecture Created
+
+```text
+User Browser
+  ↓
+React + Vite (Tailwind CSS v4 + React Router v7)
+  ↓
+AppLayout (Header + Connection Badge + Mobile Bottom Navigation)
+  ↓
+DashboardPage (Live System Health Monitor & Module Cards)
+  ↓
+apiClient & fetchHealth (/api/v1/health)
+  ↓
+NestJS Backend (Port 3000)
+  ↓
+PostgreSQL Database (Port 5432)
+```
+
+## Files Created or Changed
+
+### Frontend Styling & Configuration
+* `frontend/package.json` — Added `@tailwindcss/vite@^4.3.3`, `tailwindcss@^4.3.3`, `react-router-dom@^7.18.2`, and `lucide-react@^1.31.0`.
+* `frontend/vite.config.ts` — Configured `@tailwindcss/vite` plugin and host/port binding.
+* `frontend/src/styles.css` — Configured `@import "tailwindcss";`, custom typography (Inter, Outfit), and glassmorphism styling classes.
+* `frontend/index.html` — Configured responsive viewport meta, Google Fonts, and dark slate theme defaults.
+* `frontend/src/vite-env.d.ts` — Added type definitions for `VITE_BACKEND_URL` and `VITE_API_URL`.
+
+### API Client
+* `frontend/src/api/client.ts` — Reusable typed fetch client resolving base backend URL (`VITE_BACKEND_URL` / `http://localhost:3000`), deserializing `{ success: true, data }` responses, and raising typed `ApiError`.
+* `frontend/src/api/health.ts` — Typed health check function returning `HealthData`.
+
+### Components & Layout
+* `frontend/src/components/common/StatusBadge.tsx` — Visual badge displaying online, offline, or loading state with pulse animation.
+* `frontend/src/components/common/Card.tsx` — Reusable glassmorphism card component with variants.
+* `frontend/src/components/layout/AppLayout.tsx` — Mobile-first shell featuring top brand header with real-time status badge, main viewport, and fixed mobile bottom navigation bar (Dashboard, Loads, Reports, Master Data).
+
+### Pages & Routing
+* `frontend/src/pages/DashboardPage.tsx` — Landing screen with live system connectivity monitoring card (NestJS API status, PostgreSQL latency in ms, uptime, timestamp, and manual test ping button) and upcoming hurdle preview cards.
+* `frontend/src/pages/PlaceholderPage.tsx` — Roadmap placeholder for future modules.
+* `frontend/src/pages/NotFoundPage.tsx` — Accessible 404 screen.
+* `frontend/src/App.tsx` — React Router route definitions.
+* `frontend/src/main.tsx` — Entrypoint wrapping App in `BrowserRouter` and `StrictMode`.
+
+### Per-Hurdle Archiving
+* `docs/hurdles/hurdle-4/plan.md` — Implementation plan archived in repository.
+* `docs/hurdles/hurdle-4/walkthrough.md` — Walkthrough document archived in repository.
+
+## Commands and Verification Flow
+
+```bash
+# Build frontend with TypeScript and Vite
+npm run build --workspace=@vlms/frontend
+
+# Build full workspace
+npm run build
+
+# Verify Vite dev server response
+curl -i http://localhost:5173/
+
+# Verify live health contract through API client
+node -e "fetch('http://localhost:3000/api/v1/health').then(r => r.json()).then(d => console.log('DB Status:', d.data.database.status));"
+```
+
+## Errors Encountered and Root-Cause Fixes
+
+| Error | Root cause | Fix |
+|---|---|---|
+| `Could not resolve '@tailwindcss/vite'` in container on initial startup | Mounted `node_modules` volume in Docker container needed sync after adding new dependencies | Executed `npm install` inside container to sync dependencies into the volume |
+
+## Final Verification Result
+
+All Hurdle 4 definition-of-done criteria passed:
+- React + Vite development server running on port 5173 with hot reloading.
+- Tailwind CSS v4 styled with modern dark glassmorphism aesthetic.
+- React Router active with clean routing between Dashboard and module placeholder routes.
+- Mobile bottom navigation bar and responsive header rendering properly.
+- Live end-to-end communication established: Browser → Frontend → Backend → PostgreSQL.
+- Health card displays real-time backend and database latency and uptime.
+
+## Handover Notes
+
+* API calls from the frontend should always use `apiClient<T>(endpoint, options)` in `frontend/src/api/client.ts`.
+* Mobile navigation items automatically highlight active routes based on React Router `NavLink`.
+
+## Next Hurdle
+
+Hurdle 5 — Authentication:
+1. Password hashing with bcrypt.
+2. User authentication with JWT (Access token / Refresh token).
+3. Auth guards and role guards (`SUPER_ADMIN` and `USER`).
+4. Auth endpoints (`POST /api/v1/auth/login`, `GET /api/v1/auth/me`).
+5. Frontend authentication state, login screen, and protected route wrappers.
+
+---
+
 # Template for Future Hurdles
 
 Copy this section to the end of this file after each completed hurdle.

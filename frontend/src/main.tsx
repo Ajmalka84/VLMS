@@ -1,19 +1,13 @@
 import { StrictMode } from 'react';
 import { createRoot } from 'react-dom/client';
+import { BrowserRouter } from 'react-router-dom';
+import { App } from './App';
 import './styles.css';
-
-function App() {
-  return (
-    <main>
-      <h1>Vehicle Load Management System</h1>
-      <p>Frontend foundation is running.</p>
-    </main>
-  );
-}
 
 createRoot(document.getElementById('root')!).render(
   <StrictMode>
-    <App />
+    <BrowserRouter>
+      <App />
+    </BrowserRouter>
   </StrictMode>,
 );
-

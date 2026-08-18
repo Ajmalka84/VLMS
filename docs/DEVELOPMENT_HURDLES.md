@@ -205,7 +205,7 @@ Backend is running and database is reachable.
 
 # HURDLE 4 — FRONTEND FOUNDATION
 
-Status: ⬜ Not Started
+Status: ✅ Done
 
 ## Objective
 
@@ -552,7 +552,7 @@ real customer feedback.
 
 Current hurdle:
 
-HURDLE 4 — FRONTEND FOUNDATION
+HURDLE 5 — AUTHENTICATION
 
 Current blocker:
 
@@ -560,7 +560,7 @@ None.
 
 Immediate goal:
 
-Create the basic React application layout and establish communication with the backend (/api/v1/health).
+Implement JWT authentication, password hashing, role guards (SUPER_ADMIN / USER), and auth state management.
 
 
 # DEVELOPMENT RULES
