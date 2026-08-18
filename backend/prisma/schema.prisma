@@ -1,0 +1,142 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+enum PaymentType {
+  CASH
+  CREDIT
+
+  @@map("payment_type")
+}
+
+model User {
+  id           String   @id @default(uuid()) @db.Uuid
+  businessName String   @map("business_name") @db.VarChar
+  mobile       String   @unique @map("mobile") @db.VarChar
+  passwordHash String   @map("password_hash") @db.VarChar
+  gstin        String?  @map("gstin") @db.VarChar
+  isActive     Boolean  @default(true) @map("is_active")
+  createdAt    DateTime @default(now()) @map("created_at") @db.Timestamp
+  updatedAt    DateTime @updatedAt @map("updated_at") @db.Timestamp
+
+  sites       Site[]
+  vehicles    Vehicle[]
+  contractors Contractor[]
+
+  @@map("users")
+}
+
+model Site {
+  id        String   @id @default(uuid()) @db.Uuid
+  userId    String   @map("user_id") @db.Uuid
+  siteName  String   @map("site_name") @db.VarChar
+  location  String   @map("location") @db.VarChar
+  pincode   String   @map("pincode") @db.VarChar
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamp
+  updatedAt DateTime @updatedAt @map("updated_at") @db.Timestamp
+
+  user  User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  rates Rate[]
+  loads Load[]
+
+  @@map("sites")
+}
+
+model VehicleType {
+  id        String   @id @default(uuid()) @db.Uuid
+  name      String   @unique @map("name") @db.VarChar
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamp
+  updatedAt DateTime @updatedAt @map("updated_at") @db.Timestamp
+
+  vehicles Vehicle[]
+  rates    Rate[]
+
+  @@map("vehicle_types")
+}
+
+model Vehicle {
+  id            String   @id @default(uuid()) @db.Uuid
+  userId        String   @map("user_id") @db.Uuid
+  vehicleNumber String   @map("vehicle_number") @db.VarChar
+  vehicleTypeId String   @map("vehicle_type_id") @db.Uuid
+  createdAt     DateTime @default(now()) @map("created_at") @db.Timestamp
+  updatedAt     DateTime @updatedAt @map("updated_at") @db.Timestamp
+
+  user        User        @relation(fields: [userId], references: [id], onDelete: Cascade)
+  vehicleType VehicleType @relation(fields: [vehicleTypeId], references: [id], onDelete: Restrict)
+  loads       Load[]
+
+  @@unique([userId, vehicleNumber])
+  @@map("vehicles")
+}
+
+model MaterialType {
+  id        String   @id @default(uuid()) @db.Uuid
+  name      String   @unique @map("name") @db.VarChar
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamp
+  updatedAt DateTime @updatedAt @map("updated_at") @db.Timestamp
+
+  rates Rate[]
+  loads Load[]
+
+  @@map("material_types")
+}
+
+model Contractor {
+  id        String   @id @default(uuid()) @db.Uuid
+  userId    String   @map("user_id") @db.Uuid
+  name      String   @map("name") @db.VarChar
+  mobile    String   @map("mobile") @db.VarChar
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamp
+  updatedAt DateTime @updatedAt @map("updated_at") @db.Timestamp
+
+  user  User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  loads Load[]
+
+  @@map("contractors")
+}
+
+model Rate {
+  id             String   @id @default(uuid()) @db.Uuid
+  siteId         String   @map("site_id") @db.Uuid
+  vehicleTypeId  String   @map("vehicle_type_id") @db.Uuid
+  materialTypeId String   @map("material_type_id") @db.Uuid
+  amount         Decimal  @map("amount") @db.Decimal(12, 2)
+  createdAt      DateTime @default(now()) @map("created_at") @db.Timestamp
+  updatedAt      DateTime @updatedAt @map("updated_at") @db.Timestamp
+
+  site         Site         @relation(fields: [siteId], references: [id], onDelete: Cascade)
+  vehicleType  VehicleType  @relation(fields: [vehicleTypeId], references: [id], onDelete: Restrict)
+  materialType MaterialType @relation(fields: [materialTypeId], references: [id], onDelete: Restrict)
+  loads        Load[]
+
+  @@unique([siteId, vehicleTypeId, materialTypeId])
+  @@map("rates")
+}
+
+model Load {
+  id             String      @id @default(uuid()) @db.Uuid
+  siteId         String      @map("site_id") @db.Uuid
+  date           DateTime    @map("date") @db.Date
+  vehicleId      String      @map("vehicle_id") @db.Uuid
+  materialTypeId String      @map("material_type_id") @db.Uuid
+  contractorId   String      @map("contractor_id") @db.Uuid
+  rateId         String      @map("rate_id") @db.Uuid
+  amount         Decimal     @map("amount") @db.Decimal(12, 2)
+  paymentType    PaymentType @map("payment_type")
+  createdAt      DateTime    @default(now()) @map("created_at") @db.Timestamp
+  updatedAt      DateTime    @updatedAt @map("updated_at") @db.Timestamp
+  deletedAt      DateTime?   @map("deleted_at") @db.Timestamp
+
+  site         Site         @relation(fields: [siteId], references: [id], onDelete: Cascade)
+  vehicle      Vehicle      @relation(fields: [vehicleId], references: [id], onDelete: Restrict)
+  materialType MaterialType @relation(fields: [materialTypeId], references: [id], onDelete: Restrict)
+  contractor   Contractor   @relation(fields: [contractorId], references: [id], onDelete: Restrict)
+  rate         Rate         @relation(fields: [rateId], references: [id], onDelete: Restrict)
+
+  @@map("loads")
+}

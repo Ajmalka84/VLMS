@@ -132,7 +132,7 @@ PostgreSQL services start successfully in Docker with no restart loop.
 
 # HURDLE 2 — DATABASE FOUNDATION
 
-Status: 🔄 In Progress
+Status: ✅ Done
 
 ## Objective
 
@@ -552,7 +552,7 @@ real customer feedback.
 
 Current hurdle:
 
-HURDLE 2 — DATABASE FOUNDATION
+HURDLE 3 — BACKEND FOUNDATION
 
 Current blocker:
 
@@ -560,8 +560,7 @@ None.
 
 Immediate goal:
 
-Configure Prisma, define the documented V1 schema, and verify the
-initial PostgreSQL migration.
+Create a stable NestJS API foundation (versioning, global validation, error handling, health endpoint, and Prisma integration).
 
 
 # DEVELOPMENT RULES

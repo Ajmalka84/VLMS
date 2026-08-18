@@ -22,6 +22,7 @@ services:
     environment:
       PORT: 3000
       FRONTEND_ORIGIN: ${FRONTEND_ORIGIN:-http://localhost:5173}
+      DATABASE_URL: postgresql://${POSTGRES_USER:-vlms}:${POSTGRES_PASSWORD:-vlms_dev_password}@postgres:5432/${POSTGRES_DB:-vlms}?schema=public
     ports:
       - "${BACKEND_PORT:-3000}:3000"
     volumes:
