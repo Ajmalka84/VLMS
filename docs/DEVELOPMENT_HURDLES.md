@@ -352,7 +352,7 @@ A customer can completely configure their operating environment.
 
 # HURDLE 8 — LOAD MANAGEMENT
 
-Status: ⬜ Not Started
+Status: ✅ Done
 
 ## Objective
 
@@ -552,7 +552,7 @@ real customer feedback.
 
 Current hurdle:
 
-HURDLE 8 — LOAD MANAGEMENT
+HURDLE 9 — SETTLEMENT REPORTS
 
 Current blocker:
 
@@ -560,7 +560,7 @@ None.
 
 Immediate goal:
 
-Implement load recording transaction API (POST /loads, auto-rate resolution, paymentType CASH/CREDIT), load history queries (GET /loads, filters by site/contractor/vehicle/material/date), edit/soft-delete, and responsive Load Entry UI.
+Implement contractor C/O settlement aggregation engine (date range filtering, contractor totals, summary tables) and exportable reports interface.
 
 
 # DEVELOPMENT RULES

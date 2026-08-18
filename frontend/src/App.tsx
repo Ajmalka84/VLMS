@@ -1,6 +1,8 @@
 import React from 'react';
 import { Routes, Route, Navigate } from 'react-router-dom';
 import { AuthProvider } from './context/AuthContext';
+import { LanguageProvider } from './context/LanguageContext';
+import { ToastProvider } from './context/ToastContext';
 import { ProtectedRoute } from './components/auth/ProtectedRoute';
 import { AppLayout } from './components/layout/AppLayout';
 import { DashboardPage } from './pages/DashboardPage';
@@ -9,13 +11,16 @@ import { PlaceholderPage } from './pages/PlaceholderPage';
 import { NotFoundPage } from './pages/NotFoundPage';
 import { CustomersPage } from './pages/admin/CustomersPage';
 import { MasterDataPage } from './pages/MasterDataPage';
+import { LoadsPage } from './pages/LoadsPage';
 
 export function App() {
   return (
-    <AuthProvider>
-      <Routes>
-        {/* Public Login Route */}
-        <Route path="/login" element={<LoginPage />} />
+    <LanguageProvider>
+      <ToastProvider>
+        <AuthProvider>
+          <Routes>
+            {/* Public Login Route */}
+            <Route path="/login" element={<LoginPage />} />
 
         {/* Protected App Routes */}
         <Route
@@ -39,16 +44,7 @@ export function App() {
           />
 
           {/* Operational Customer Routes */}
-          <Route
-            path="loads"
-            element={
-              <PlaceholderPage
-                title="Load Management"
-                hurdleNumber={8}
-                description="Rapid vehicle load entry, auto-rate resolution, and load history management."
-              />
-            }
-          />
+          <Route path="loads" element={<LoadsPage />} />
           <Route
             path="reports"
             element={
@@ -64,5 +60,7 @@ export function App() {
         </Route>
       </Routes>
     </AuthProvider>
+    </ToastProvider>
+    </LanguageProvider>
   );
 }

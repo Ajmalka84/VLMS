@@ -5,6 +5,7 @@ import { AuthModule } from './auth/auth.module';
 import { CommonModule } from './common/common.module';
 import { ContractorsModule } from './contractors/contractors.module';
 import { HealthModule } from './health/health.module';
+import { LoadsModule } from './loads/loads.module';
 import { MaterialTypesModule } from './material-types/material-types.module';
 import { PrismaModule } from './prisma/prisma.module';
 import { RatesModule } from './rates/rates.module';
@@ -25,6 +26,7 @@ import { VehiclesModule } from './vehicles/vehicles.module';
     VehiclesModule,
     ContractorsModule,
     RatesModule,
+    LoadsModule,
   ],
   controllers: [AppController],
 })

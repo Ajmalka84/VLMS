@@ -21,6 +21,7 @@ import {
 } from 'lucide-react';
 import { Card } from '../components/common/Card';
 import { ConfirmModal } from '../components/common/ConfirmModal';
+import { CustomSelect } from '../components/common/CustomSelect';
 import { useAuth } from '../context/AuthContext';
 import {
   Site,
@@ -1141,26 +1142,18 @@ export const MasterDataPage: React.FC = () => {
                   className="w-full px-3.5 py-2.5 rounded-xl bg-slate-900 border border-slate-800 text-sm text-slate-100 focus:outline-none focus:border-amber-500 font-mono uppercase"
                 />
               </div>
-              <div>
-                <label className="block text-xs font-semibold text-slate-300 mb-1">
-                  Vehicle Category / Type
-                </label>
-                <select
-                  required
-                  value={vehicleForm.vehicleTypeId}
-                  onChange={(e) =>
-                    setVehicleForm({ ...vehicleForm, vehicleTypeId: e.target.value })
-                  }
-                  className="w-full px-3.5 py-2.5 rounded-xl bg-slate-900 border border-slate-800 text-sm text-slate-100 focus:outline-none focus:border-amber-500"
-                >
-                  <option value="" disabled>Select Vehicle Type</option>
-                  {vehicleTypes.map((vt) => (
-                    <option key={vt.id} value={vt.id}>
-                      {vt.name}
-                    </option>
-                  ))}
-                </select>
-              </div>
+              <CustomSelect
+                label="Vehicle Category / Type"
+                required
+                options={vehicleTypes.map((vt) => ({
+                  value: vt.id,
+                  label: vt.name,
+                  icon: <Truck className="w-4 h-4" />,
+                }))}
+                value={vehicleForm.vehicleTypeId}
+                onChange={(val) => setVehicleForm({ ...vehicleForm, vehicleTypeId: val })}
+                placeholder="Select Vehicle Category"
+              />
               <div className="flex justify-end gap-2 pt-2">
                 <button
                   type="button"
@@ -1262,48 +1255,45 @@ export const MasterDataPage: React.FC = () => {
             <form onSubmit={handleRateSubmit} className="space-y-4">
               {modalMode === 'rate-add' ? (
                 <>
-                  <div>
-                    <label className="block text-xs font-semibold text-slate-300 mb-1">Site</label>
-                    <select
-                      required
-                      value={rateForm.siteId}
-                      onChange={(e) => setRateForm({ ...rateForm, siteId: e.target.value })}
-                      className="w-full px-3.5 py-2.5 rounded-xl bg-slate-900 border border-slate-800 text-sm text-slate-100 focus:outline-none focus:border-amber-500"
-                    >
-                      <option value="" disabled>Select Site</option>
-                      {sites.map((s) => (
-                        <option key={s.id} value={s.id}>{s.siteName}</option>
-                      ))}
-                    </select>
-                  </div>
-                  <div>
-                    <label className="block text-xs font-semibold text-slate-300 mb-1">Vehicle Type</label>
-                    <select
-                      required
-                      value={rateForm.vehicleTypeId}
-                      onChange={(e) => setRateForm({ ...rateForm, vehicleTypeId: e.target.value })}
-                      className="w-full px-3.5 py-2.5 rounded-xl bg-slate-900 border border-slate-800 text-sm text-slate-100 focus:outline-none focus:border-amber-500"
-                    >
-                      <option value="" disabled>Select Vehicle Type</option>
-                      {vehicleTypes.map((vt) => (
-                        <option key={vt.id} value={vt.id}>{vt.name}</option>
-                      ))}
-                    </select>
-                  </div>
-                  <div>
-                    <label className="block text-xs font-semibold text-slate-300 mb-1">Material Type</label>
-                    <select
-                      required
-                      value={rateForm.materialTypeId}
-                      onChange={(e) => setRateForm({ ...rateForm, materialTypeId: e.target.value })}
-                      className="w-full px-3.5 py-2.5 rounded-xl bg-slate-900 border border-slate-800 text-sm text-slate-100 focus:outline-none focus:border-amber-500"
-                    >
-                      <option value="" disabled>Select Material Type</option>
-                      {materialTypes.map((mt) => (
-                        <option key={mt.id} value={mt.id}>{mt.name}</option>
-                      ))}
-                    </select>
-                  </div>
+                  <CustomSelect
+                    label="Site"
+                    required
+                    options={sites.map((s) => ({
+                      value: s.id,
+                      label: s.siteName,
+                      subLabel: s.location,
+                      icon: <MapPin className="w-4 h-4" />,
+                    }))}
+                    value={rateForm.siteId}
+                    onChange={(val) => setRateForm({ ...rateForm, siteId: val })}
+                    placeholder="Select Operational Site"
+                  />
+
+                  <CustomSelect
+                    label="Vehicle Type"
+                    required
+                    options={vehicleTypes.map((vt) => ({
+                      value: vt.id,
+                      label: vt.name,
+                      icon: <Truck className="w-4 h-4" />,
+                    }))}
+                    value={rateForm.vehicleTypeId}
+                    onChange={(val) => setRateForm({ ...rateForm, vehicleTypeId: val })}
+                    placeholder="Select Vehicle Category"
+                  />
+
+                  <CustomSelect
+                    label="Material Type"
+                    required
+                    options={materialTypes.map((mt) => ({
+                      value: mt.id,
+                      label: mt.name,
+                      icon: <Layers className="w-4 h-4" />,
+                    }))}
+                    value={rateForm.materialTypeId}
+                    onChange={(val) => setRateForm({ ...rateForm, materialTypeId: val })}
+                    placeholder="Select Material Type"
+                  />
                 </>
               ) : (
                 <div className="p-3 rounded-xl bg-slate-900 border border-slate-800 space-y-1 text-xs text-slate-300">

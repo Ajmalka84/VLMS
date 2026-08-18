@@ -16,9 +16,11 @@ import {
 import { fetchHealth, HealthData } from '../../api/health';
 import { StatusBadge } from '../common/StatusBadge';
 import { useAuth } from '../../context/AuthContext';
+import { useLanguage } from '../../context/LanguageContext';
 
 export const AppLayout: React.FC = () => {
   const { user, logout } = useAuth();
+  const { language, setLanguage, t } = useLanguage();
   const [health, setHealth] = useState<HealthData | null>(null);
   const [loading, setLoading] = useState(true);
 
@@ -52,15 +54,15 @@ export const AppLayout: React.FC = () => {
 
   const navItems = isSuperAdmin
     ? [
-        { to: '/', label: 'Dashboard', icon: LayoutDashboard },
-        { to: '/admin/users', label: 'Customers', icon: Users },
-        { to: '/settings', label: 'Global Master', icon: Layers },
+        { to: '/', label: t('dashboard'), icon: LayoutDashboard },
+        { to: '/admin/users', label: t('customers'), icon: Users },
+        { to: '/settings', label: t('global_master'), icon: Layers },
       ]
     : [
-        { to: '/', label: 'Dashboard', icon: LayoutDashboard },
-        { to: '/loads', label: 'Loads', icon: Truck },
-        { to: '/reports', label: 'Reports', icon: FileSpreadsheet },
-        { to: '/settings', label: 'Master Data', icon: Settings },
+        { to: '/', label: t('dashboard'), icon: LayoutDashboard },
+        { to: '/loads', label: t('loads'), icon: Truck },
+        { to: '/reports', label: t('reports'), icon: FileSpreadsheet },
+        { to: '/settings', label: t('master_data'), icon: Settings },
       ];
 
   return (
@@ -121,8 +123,34 @@ export const AppLayout: React.FC = () => {
             })}
           </nav>
 
-          {/* Header Actions: User Info & Health Indicator & Logout */}
-          <div className="flex items-center gap-3 shrink-0">
+          {/* Header Actions: Language Switcher, Health & Logout */}
+          <div className="flex items-center gap-2 sm:gap-3 shrink-0">
+            {/* Language Switcher Pill */}
+            <div className="flex items-center p-0.5 rounded-xl bg-slate-900 border border-slate-800 text-xs font-bold">
+              <button
+                onClick={() => setLanguage('en')}
+                className={`px-2 py-1 rounded-lg transition-all cursor-pointer ${
+                  language === 'en'
+                    ? 'bg-amber-500 text-slate-950 shadow-sm'
+                    : 'text-slate-400 hover:text-white'
+                }`}
+                title="Switch to English"
+              >
+                EN
+              </button>
+              <button
+                onClick={() => setLanguage('ml')}
+                className={`px-2 py-1 rounded-lg transition-all cursor-pointer ${
+                  language === 'ml'
+                    ? 'bg-amber-500 text-slate-950 shadow-sm'
+                    : 'text-slate-400 hover:text-white'
+                }`}
+                title="മലയാളത്തിലേക്ക് മാറ്റുക"
+              >
+                മലയാളം
+              </button>
+            </div>
+
             <div className="hidden xs:flex items-center gap-2">
               <StatusBadge
                 status={loading && !health ? 'loading' : isDbUp ? 'up' : 'down'}

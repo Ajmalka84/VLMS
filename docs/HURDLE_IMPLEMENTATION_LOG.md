@@ -928,6 +928,111 @@ Hurdle 8 — Load Management:
 
 ---
 
+# Hurdle 8 — Load Management
+
+Status: ✅ Done
+
+Completed: 18-Aug-2026
+
+## Objective
+
+Implement the core transactional capability of VLMS: recording vehicle dispatches on-site with automatic rate matrix resolution, manual price overrides, multi-parameter history filtering, soft-deletions, and a high-speed mobile supervisor interface.
+
+## Starting State
+
+Following Hurdle 7, all Master Data (Sites, Vehicles, Contractors, Material Types, Vehicle Types, and the Rate Matrix) were configured and operational, but no transactions could be recorded.
+
+## Architecture Created
+
+```text
+Site Supervisor (Mobile / Tablet / Desktop)
+  ↓
+POST /api/v1/loads
+  ├── Validate Site, Vehicle, Contractor belong to JWT user_id
+  ├── Vehicle -> Vehicle Type
+  ├── Rate Lookup: (Site + Vehicle Type + Material Type)
+  ├── Amount: Override Amount || Resolved Rate Amount
+  └── Create Load Record (with rateId, amount, paymentType: CASH | CREDIT)
+
+GET /api/v1/loads
+  ├── Filters: siteId, vehicleId, contractorId, materialTypeId, paymentType, date range, search
+  ├── Excludes soft-deleted records (deletedAt: null)
+  └── Returns: Paginated loads list + Real-time summary metrics (Turnover, Cash, Credit)
+```
+
+## Files Created or Changed
+
+### Backend Loads Module
+* `backend/src/loads/dto/create-load.dto.ts` — Validates siteId, vehicleId, materialTypeId, contractorId, paymentType (CASH/CREDIT), date, and optional amount.
+* `backend/src/loads/dto/update-load.dto.ts` — Validates optional updates to load parameters.
+* `backend/src/loads/dto/query-loads.dto.ts` — Validates query parameters for multi-filter search, date ranges, and pagination.
+* `backend/src/loads/loads.service.ts` — Handles core transaction logic, auto-rate matrix lookup, manual override handling, filtered queries, summary aggregations, and soft-delete.
+* `backend/src/loads/loads.controller.ts` — Exposes `/api/v1/loads` guarded by `JwtAuthGuard`.
+* `backend/src/loads/loads.module.ts` — Bundles Loads module.
+* `backend/src/app.module.ts` — Registered `LoadsModule`.
+
+### Frontend Loads Client & UI
+* `frontend/src/api/loads.ts` — Typed client methods for load recording, querying, updating, and deleting.
+* `frontend/src/context/LanguageContext.tsx` — Dynamic English ⟷ മലയാളം localization context with persistent local storage state.
+* `frontend/src/context/ToastContext.tsx` — Fixed viewport floating toast notification system with glowing themes and mobile haptic vibration feedback.
+* `frontend/src/components/common/CustomSelect.tsx` — Reusable dark glassmorphism searchable dropdown component.
+* `frontend/src/pages/LoadsPage.tsx` — Supervisor-optimized Touch-First Dispatch Cockpit featuring:
+  - **Quick Entry Mode**: Single site auto-selection, sticky material and contractor memory, 4-digit fast vehicle search, recent shuttle tipper chips, live dynamic auto-rate HUD with custom override toggle, 52px Cash/Credit buttons, and 56px primary dispatch button.
+  - **Load Register Mode**: Summary metric cards (Total Loads, Total Turnover, Cash Collected, Credit Outstanding), CustomSelect filter toolbar, and load history list with Edit and Soft Delete actions (using `ConfirmModal`).
+* `frontend/src/components/layout/AppLayout.tsx` — Added language toggle `[ EN | മലയാളം ]` and reactive translated navigation menu.
+* `frontend/src/App.tsx` — Mounted `LoadsPage` on `/loads` and wrapped app in `LanguageProvider` and `ToastProvider`.
+
+### Per-Hurdle Archiving
+* `docs/hurdles/hurdle-8/plan.md` — Implementation plan archived in repository.
+* `docs/hurdles/hurdle-8/walkthrough.md` — Comprehensive walkthrough document archived in repository.
+
+## Commands and Verification Flow
+
+```bash
+# Build workspace
+npm run build
+
+# Record load with auto-rate resolution (amount omitted) -> HTTP 201 Created
+curl -X POST http://localhost:3000/api/v1/loads \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer <CUSTOMER_TOKEN>" \
+  -d '{"siteId":"<SITE_ID>","vehicleId":"<VEHICLE_ID>","materialTypeId":"<MATERIAL_TYPE_ID>","contractorId":"<CONTRACTOR_ID>","paymentType":"CREDIT"}'
+
+# Record load with manual price override (amount: 4200.00) & CASH -> HTTP 201 Created
+curl -X POST http://localhost:3000/api/v1/loads \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer <CUSTOMER_TOKEN>" \
+  -d '{"siteId":"<SITE_ID>","vehicleId":"<VEHICLE_ID>","materialTypeId":"<MATERIAL_TYPE_ID>","contractorId":"<CONTRACTOR_ID>","amount":4200.00,"paymentType":"CASH"}'
+
+# Query load register with summary metrics
+curl -H "Authorization: Bearer <CUSTOMER_TOKEN>" "http://localhost:3000/api/v1/loads?paymentType=CASH"
+
+# Soft delete load -> Sets deletedAt timestamp, excluded from active queries
+curl -X DELETE -H "Authorization: Bearer <CUSTOMER_TOKEN>" "http://localhost:3000/api/v1/loads/<LOAD_ID>"
+```
+
+## Final Verification Result
+
+All Hurdle 8 definition-of-done criteria passed:
+- Site supervisors can record a load with automatic rate lookup in under 10 seconds.
+- Manual price override functions smoothly when special rates are negotiated on-site.
+- Load register accurately reflects filtered transactions and turnover aggregates.
+- Soft-deletion safely preserves foreign key integrity for historical auditability.
+- Multi-tenant isolation verified with zero cross-tenant data leakage.
+
+## Handover Notes
+
+* For Hurdle 9 (Settlement Reports), report generation will aggregate these load records by contractor (C/O) over arbitrary date ranges and payment types.
+
+## Next Hurdle
+
+Hurdle 9 — Settlement Reports:
+1. Contractor (C/O) settlement aggregation engine (`GET /api/v1/reports/settlements`).
+2. Filterable date range breakdowns (daily loads, trip counts, material subtotals, cash vs credit).
+3. Exportable settlement statements and PDF previews.
+
+---
+
 # Template for Future Hurdles
 
 Copy this section to the end of this file after each completed hurdle.
