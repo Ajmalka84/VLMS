@@ -30,6 +30,14 @@ const getBaseUrl = (): string => {
   if (import.meta.env.VITE_API_URL) {
     return import.meta.env.VITE_API_URL.replace(/\/+$/, '');
   }
+  // When served behind Nginx reverse proxy, automatically use current window origin
+  if (typeof window !== 'undefined' && window.location?.origin) {
+    // If running on Vite dev server port 5173, connect to local backend port 3000
+    if (window.location.port === '5173') {
+      return `${window.location.protocol}//${window.location.hostname}:3000`;
+    }
+    return window.location.origin;
+  }
   return 'http://localhost:3000';
 };
 
