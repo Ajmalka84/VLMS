@@ -22,13 +22,29 @@ const ToastContext = createContext<ToastContextType | undefined>(undefined);
 
 export const ToastProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [toasts, setToasts] = useState<Toast[]>([]);
+  const lastToastRef = React.useRef<{ message: string; timestamp: number }>({
+    message: '',
+    timestamp: 0,
+  });
 
   const removeToast = useCallback((id: string) => {
     setToasts((prev) => prev.filter((t) => t.id !== id));
   }, []);
 
   const showToast = useCallback(
-    (type: ToastType, message: string, duration = 4000) => {
+    (type: ToastType, message: string, duration = 2200) => {
+      if (!message) return;
+
+      // Suppress duplicate toasts within 1.5s window
+      const now = Date.now();
+      if (
+        lastToastRef.current.message === message &&
+        now - lastToastRef.current.timestamp < 1500
+      ) {
+        return;
+      }
+      lastToastRef.current = { message, timestamp: now };
+
       const id = `${Date.now()}-${Math.random()}`;
       const newToast: Toast = { id, type, message, duration };
 
@@ -58,12 +74,17 @@ export const ToastProvider: React.FC<{ children: React.ReactNode }> = ({ childre
   const warning = useCallback((msg: string, d?: number) => showToast('warning', msg, d), [showToast]);
   const info = useCallback((msg: string, d?: number) => showToast('info', msg, d), [showToast]);
 
+  const value = React.useMemo(
+    () => ({ showToast, success, error, warning, info }),
+    [showToast, success, error, warning, info]
+  );
+
   return (
-    <ToastContext.Provider value={{ showToast, success, error, warning, info }}>
+    <ToastContext.Provider value={value}>
       {children}
 
-      {/* Fixed Floating Toast Container (Always visible regardless of scroll position) */}
-      <div className="fixed top-5 left-1/2 -translate-x-1/2 z-50 w-[92%] max-w-md flex flex-col gap-2 pointer-events-none">
+      {/* Fixed Floating Toast Container (Always visible on top of modals and backdrops) */}
+      <div className="fixed top-5 left-1/2 -translate-x-1/2 z-[9999] w-[92%] max-w-md flex flex-col gap-2 pointer-events-none">
         {toasts.map((t) => (
           <div
             key={t.id}

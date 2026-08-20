@@ -232,9 +232,6 @@ export const CustomersPage: React.FC = () => {
           <h1 className="text-2xl sm:text-3xl font-extrabold text-white tracking-tight mt-1">
             Customer Management
           </h1>
-          <p className="text-xs sm:text-sm text-slate-400">
-            Onboard new businesses, manage active access, and handle credentials.
-          </p>
         </div>
 
         <button

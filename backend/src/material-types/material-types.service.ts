@@ -2,6 +2,7 @@ import {
   Injectable,
   NotFoundException,
   ConflictException,
+  BadRequestException,
 } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { CreateMaterialTypeDto } from './dto/create-material-type.dto';
@@ -84,7 +85,25 @@ export class MaterialTypesService {
   }
 
   async remove(id: string) {
-    await this.findOne(id);
+    const materialType = await this.findOne(id);
+
+    const linkedLoadsCount = await this.prisma.load.count({
+      where: { materialTypeId: id, deletedAt: null },
+    });
+    if (linkedLoadsCount > 0) {
+      throw new BadRequestException(
+        `Cannot delete material type "${materialType.name}" because ${linkedLoadsCount} active dispatch load(s) are recorded with it.`,
+      );
+    }
+
+    const linkedRatesCount = await this.prisma.rate.count({
+      where: { materialTypeId: id },
+    });
+    if (linkedRatesCount > 0) {
+      throw new BadRequestException(
+        `Cannot delete material type "${materialType.name}" because ${linkedRatesCount} rate rule(s) are configured for it.`,
+      );
+    }
 
     return this.prisma.materialType.delete({
       where: { id },

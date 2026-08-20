@@ -3,6 +3,7 @@ import {
   NotFoundException,
   ForbiddenException,
   ConflictException,
+  BadRequestException,
 } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { CreateRateDto } from './dto/create-rate.dto';
@@ -45,8 +46,8 @@ export class RatesService {
       );
     }
 
-    // 4. Create or update (upsert) rate
-    return this.prisma.rate.upsert({
+    // 4. Check for duplicate rate combination
+    const existing = await this.prisma.rate.findUnique({
       where: {
         siteId_vehicleTypeId_materialTypeId: {
           siteId: dto.siteId,
@@ -54,10 +55,16 @@ export class RatesService {
           materialTypeId: dto.materialTypeId,
         },
       },
-      update: {
-        amount: dto.amount,
-      },
-      create: {
+    });
+
+    if (existing) {
+      throw new ConflictException(
+        `A rate (₹${Number(existing.amount).toLocaleString('en-IN')}) already exists for this Site, Vehicle Type, and Material combination. Please edit the existing rate instead.`,
+      );
+    }
+
+    return this.prisma.rate.create({
+      data: {
         siteId: dto.siteId,
         vehicleTypeId: dto.vehicleTypeId,
         materialTypeId: dto.materialTypeId,
@@ -163,6 +170,15 @@ export class RatesService {
 
   async remove(userId: string, id: string) {
     await this.findOne(userId, id);
+
+    const linkedLoadsCount = await this.prisma.load.count({
+      where: { rateId: id, deletedAt: null },
+    });
+    if (linkedLoadsCount > 0) {
+      throw new BadRequestException(
+        `Cannot delete this rate rule because ${linkedLoadsCount} active dispatch load(s) are linked to it.`,
+      );
+    }
 
     return this.prisma.rate.delete({
       where: { id },

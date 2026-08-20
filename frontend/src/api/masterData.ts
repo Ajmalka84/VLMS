@@ -254,3 +254,33 @@ export async function lookupRateApi(
     `/rates/lookup?siteId=${siteId}&vehicleTypeId=${vehicleTypeId}&materialTypeId=${materialTypeId}`,
   );
 }
+
+// ----------------- MASTER DATA BUNDLE API -----------------
+export interface MasterDataBundle {
+  sites: Site[];
+  vehicles: Vehicle[];
+  vehicleTypes: VehicleType[];
+  materialTypes: MaterialType[];
+  contractors: Contractor[];
+  rates: Rate[];
+}
+
+let inFlightBundlePromise: Promise<MasterDataBundle> | null = null;
+
+export async function getMasterDataBundleApi(force = false): Promise<MasterDataBundle> {
+  if (inFlightBundlePromise && !force) {
+    return inFlightBundlePromise;
+  }
+
+  const promise = apiClient<MasterDataBundle>('/master-data/bundle')
+    .finally(() => {
+      if (inFlightBundlePromise === promise) {
+        inFlightBundlePromise = null;
+      }
+    });
+
+  inFlightBundlePromise = promise;
+  return promise;
+}
+
+

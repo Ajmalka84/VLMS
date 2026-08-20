@@ -153,31 +153,35 @@ export class ReportsService {
       }
     }
 
-    const summaries = contractors.map((c) => {
-      const stats = contractorMap.get(c.id)!;
-      return {
-        contractor: {
-          id: c.id,
-          name: c.name,
-          mobile: c.mobile,
-          createdAt: c.createdAt,
-        },
-        stats,
-      };
-    });
+    const summaries = contractors
+      .map((c) => {
+        const stats = contractorMap.get(c.id)!;
+        return {
+          contractor: {
+            id: c.id,
+            name: c.name,
+            mobile: c.mobile,
+            createdAt: c.createdAt,
+          },
+          stats,
+        };
+      })
+      .filter((item) => item.stats.totalTrips > 0);
 
-    // Include Direct Sales in summary list if any direct sales exist
+    // Include Direct Sales in summary list if any direct sales exist for this period/filter
     if (hasDirectSales) {
       const directStats = contractorMap.get(directSalesKey)!;
-      summaries.unshift({
-        contractor: {
-          id: directSalesKey,
-          name: 'Direct / Spot Cash Sales (Walk-in)',
-          mobile: 'N/A',
-          createdAt: new Date(),
-        },
-        stats: directStats,
-      });
+      if (directStats.totalTrips > 0) {
+        summaries.unshift({
+          contractor: {
+            id: directSalesKey,
+            name: 'Direct / Spot Cash Sales (Walk-in)',
+            mobile: 'N/A',
+            createdAt: new Date(),
+          },
+          stats: directStats,
+        });
+      }
     }
 
     // Fetch tenant customer profile if Super Admin

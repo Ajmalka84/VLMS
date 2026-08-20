@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback, useMemo } from 'react';
+import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import {
   FileSpreadsheet,
   FileText,
@@ -32,8 +32,11 @@ import {
   getSettlementReportApi,
 } from '../api/reports';
 import { PaymentType } from '../api/loads';
-import { exportSettlementPdf } from '../utils/pdfGenerator';
+import { useMasterCache } from '../context/MasterCacheContext';
+import { useDebounce } from '../hooks/useDebounce';
 import { exportToCsv } from '../utils/csvExporter';
+import { numberToWordsINR } from '../utils/numberToWords';
+import { groupTrips } from '../utils/tripGrouper';
 
 export const ReportsPage: React.FC = () => {
   const { user } = useAuth();
@@ -41,20 +44,22 @@ export const ReportsPage: React.FC = () => {
   const toast = useToast();
 
   const isSuperAdmin = user?.role === 'SUPER_ADMIN';
+  const { sites } = useMasterCache();
 
   // Super Admin Customer selection
   const [customers, setCustomers] = useState<CustomerUser[]>([]);
   const [selectedCustomerId, setSelectedCustomerId] = useState<string>('');
+  const [customersLoaded, setCustomersLoaded] = useState(!isSuperAdmin);
 
   // State
   const [selectedContractorId, setSelectedContractorId] = useState<string | null>(null);
   const [summaryData, setSummaryData] = useState<ContractorsSummaryResponse | null>(null);
   const [settlementData, setSettlementData] = useState<SettlementReportResponse | null>(null);
   const [loading, setLoading] = useState(false);
-  const [sites, setSites] = useState<Site[]>([]);
 
   // Filter State
   const [search, setSearch] = useState('');
+  const debouncedSearch = useDebounce(search, 200);
   const [siteId, setSiteId] = useState('');
   const [paymentType, setPaymentType] = useState<'' | PaymentType>('');
   const [presetRange, setPresetRange] = useState<
@@ -63,26 +68,31 @@ export const ReportsPage: React.FC = () => {
   const [startDate, setStartDate] = useState('');
   const [endDate, setEndDate] = useState('');
 
+  const overviewFetchingRef = useRef(false);
+  const settlementFetchingRef = useRef(false);
+
   // Load Customers if Super Admin
   useEffect(() => {
     if (isSuperAdmin) {
+      let isMounted = true;
       getCustomersApi({ limit: 100 })
         .then((res) => {
-          setCustomers(res.users);
-          if (res.users.length > 0 && !selectedCustomerId) {
-            setSelectedCustomerId(res.users[0].id);
+          if (isMounted) {
+            setCustomers(res.users);
+            if (res.users.length > 0) {
+              setSelectedCustomerId(res.users[0].id);
+            }
           }
         })
-        .catch(() => {});
+        .catch(() => {})
+        .finally(() => {
+          if (isMounted) setCustomersLoaded(true);
+        });
+      return () => {
+        isMounted = false;
+      };
     }
   }, [isSuperAdmin]);
-
-  // Load Sites for filter
-  useEffect(() => {
-    getSitesApi()
-      .then(setSites)
-      .catch(() => {});
-  }, []);
 
   // Preset Date Handlers
   const applyPreset = (preset: 'all' | 'today' | 'yesterday' | 'week' | 'month' | 'custom') => {
@@ -116,13 +126,15 @@ export const ReportsPage: React.FC = () => {
 
   // Fetch Contractors Overview
   const fetchContractorsOverview = useCallback(async () => {
+    if (overviewFetchingRef.current) return;
+    overviewFetchingRef.current = true;
     setLoading(true);
     try {
       const res = await getContractorsSummaryApi({
         startDate: startDate || undefined,
         endDate: endDate || undefined,
         siteId: siteId || undefined,
-        search: search.trim() || undefined,
+        search: debouncedSearch.trim() || undefined,
         customerId: isSuperAdmin && selectedCustomerId ? selectedCustomerId : undefined,
       });
       setSummaryData(res);
@@ -130,12 +142,15 @@ export const ReportsPage: React.FC = () => {
       toast.error(err.message || 'Failed to load contractor summaries');
     } finally {
       setLoading(false);
+      overviewFetchingRef.current = false;
     }
-  }, [startDate, endDate, siteId, search, isSuperAdmin, selectedCustomerId, toast]);
+  }, [startDate, endDate, siteId, debouncedSearch, isSuperAdmin, selectedCustomerId]);
 
   // Fetch Detailed Statement
   const fetchSettlementStatement = useCallback(
     async (contractorId: string) => {
+      if (settlementFetchingRef.current) return;
+      settlementFetchingRef.current = true;
       setLoading(true);
       try {
         const res = await getSettlementReportApi({
@@ -151,72 +166,123 @@ export const ReportsPage: React.FC = () => {
         toast.error(err.message || 'Failed to load settlement report');
       } finally {
         setLoading(false);
+        settlementFetchingRef.current = false;
       }
     },
-    [startDate, endDate, siteId, paymentType, isSuperAdmin, selectedCustomerId, toast]
+    [startDate, endDate, siteId, paymentType, isSuperAdmin, selectedCustomerId]
   );
 
   useEffect(() => {
+    if (!customersLoaded) return;
     if (selectedContractorId) {
       void fetchSettlementStatement(selectedContractorId);
     } else {
       void fetchContractorsOverview();
     }
-  }, [selectedContractorId, fetchSettlementStatement, fetchContractorsOverview]);
+  }, [customersLoaded, selectedContractorId, fetchSettlementStatement, fetchContractorsOverview]);
 
   // Print Handler
   const handlePrint = () => {
     window.print();
   };
 
-  // CSV Export Handler
+  // Professional Multi-Section Settlement Ledger CSV Export Handler
   const handleExportCSV = () => {
     if (!settlementData || settlementData.trips.length === 0) {
       toast.warning('No trip data to export');
       return;
     }
 
+    const businessName = settlementData.business?.businessName || user?.businessName || 'VLMS OPERATIONAL QUARRY';
+    const businessContact = settlementData.business?.mobile || user?.mobile || 'N/A';
+    const businessGstin = settlementData.business?.gstin || 'N/A';
+    const contractorName = settlementData.contractor.name;
+    const contractorMobile = settlementData.contractor.mobile;
+    const periodText = settlementData.period.startDate && settlementData.period.endDate
+      ? `${new Date(settlementData.period.startDate).toLocaleDateString('en-IN')} to ${new Date(settlementData.period.endDate).toLocaleDateString('en-IN')}`
+      : 'All Time Records';
+    
+    const prefix = contractorName.replace(/[^a-zA-Z0-9]/g, '').slice(0, 4).toUpperCase() || 'CASH';
+    const monthStr = String(new Date().getMonth() + 1).padStart(2, '0');
+    const stmtRef = `STMT-${new Date().getFullYear()}${monthStr}-${prefix}-${String(settlementData.summary.totalTrips).padStart(3, '0')}`;
+    const amountInWords = numberToWordsINR(settlementData.summary.creditAmount);
+
     const headers = [
-      'Trip #',
+      '#',
       'Date',
       'Vehicle Number',
       'Vehicle Type',
-      'Material',
-      'Site',
+      'Material Loaded',
+      'Quarry Site',
+      'Trips (Qty)',
+      'Trip Rate (INR)',
+      'Total Amount (INR)',
       'Payment Mode',
-      'Amount (INR)',
     ];
 
-    const rows: (string | number)[][] = settlementData.trips.map((t, idx) => [
-      idx + 1,
-      new Date(t.date).toLocaleDateString('en-IN'),
-      t.vehicleNumber,
-      t.vehicleType,
-      t.materialName,
-      t.siteName,
-      t.paymentType,
-      t.amount,
-    ]);
+    const rows: (string | number)[][] = [
+      ['COMMERCIAL QUARRY SETTLEMENT BILL & STATEMENT'],
+      ['Quarry Operator', businessName, 'Statement Ref', stmtRef],
+      ['Quarry Mobile', `+91 ${businessContact}`, 'Issue Date', new Date().toLocaleDateString('en-IN')],
+      ['Quarry GSTIN', businessGstin, 'Billing Period', periodText],
+      ['Contractor Name', contractorName, 'Contractor Mobile', `+91 ${contractorMobile}`],
+      [],
+      ['=== EXECUTIVE FINANCIAL SUMMARY ==='],
+      ['Total Dispatches', `${settlementData.summary.totalTrips} Loads`, 'Gross Billed (INR)', Math.round(settlementData.summary.totalAmount)],
+      ['Cash Settled (INR)', Math.round(settlementData.summary.cashAmount), 'Net Credit Balance (INR)', Math.round(settlementData.summary.creditAmount)],
+      ['Net Balance in Words', amountInWords],
+      [],
+    ];
+
+    if (settlementData.materialBreakdown.length > 0) {
+      rows.push(['=== MATERIAL VOLUME BREAKDOWN ===']);
+      rows.push(['Material Name', 'Trips Count', 'Share %', 'Subtotal Amount (INR)']);
+      settlementData.materialBreakdown.forEach((m) => {
+        rows.push([m.materialName, m.tripCount, `${m.percentage}%`, Math.round(m.totalAmount)]);
+      });
+      rows.push([]);
+    }
+
+    rows.push(['=== CONSOLIDATED DISPATCH REGISTER ===']);
+    rows.push(headers);
+
+    const grouped = groupTrips(settlementData.trips);
+    grouped.forEach((g, idx) => {
+      rows.push([
+        idx + 1,
+        new Date(g.date).toLocaleDateString('en-IN'),
+        g.vehicleNumber,
+        g.vehicleType || 'N/A',
+        g.materialName,
+        g.siteName,
+        g.tripCount,
+        g.rate,
+        g.totalAmount,
+        g.paymentType,
+      ]);
+    });
 
     rows.push([]);
     rows.push([
-      'TOTAL TRIPS',
+      '',
+      '',
+      '',
+      '',
+      '',
+      'TOTAL TRIPS:',
       settlementData.summary.totalTrips,
-      'TOTAL BILLED',
-      settlementData.summary.totalAmount,
-      'CASH SETTLED',
-      settlementData.summary.cashAmount,
-      'NET CREDIT DUE',
-      settlementData.summary.creditAmount,
+      'NET SETTLEMENT DUE:',
+      Math.round(settlementData.summary.creditAmount),
+      '',
     ]);
 
     const sanitizedName = settlementData.contractor.name.replace(/[^a-zA-Z0-9_-]/g, '_');
     exportToCsv(
-      `Settlement_${sanitizedName}_${new Date().toISOString().split('T')[0]}`,
-      headers,
+      `Settlement_Bill_${sanitizedName}_${new Date().toISOString().split('T')[0]}`,
+      [],
       rows
     );
-    toast.success('Settlement CSV exported successfully!');
+    toast.success('Professional settlement CSV exported successfully!');
   };
 
   // Export Overview All Contractors Ledger
@@ -233,7 +299,7 @@ export const ReportsPage: React.FC = () => {
       'Total Trips',
       'Gross Billed (INR)',
       'Cash Paid (INR)',
-      'Net Credit Due (INR)',
+      'Net Credit Balance (INR)',
     ];
 
     const rows: (string | number)[][] = summaryData.contractors.map(({ contractor, stats }, idx) => [
@@ -241,20 +307,20 @@ export const ReportsPage: React.FC = () => {
       contractor.name,
       contractor.mobile,
       stats.totalTrips,
-      stats.totalAmount,
-      stats.cashAmount,
-      stats.creditAmount,
+      Math.round(stats.totalAmount),
+      Math.round(stats.cashAmount),
+      Math.round(stats.creditAmount),
     ]);
 
     rows.push([]);
     rows.push([
       'GRAND TOTAL',
-      `${summaryData.grandTotal.contractorCount} Contractors`,
+      `${summaryData.grandTotal.contractorCount} Accounts`,
       '',
       summaryData.grandTotal.totalTrips,
-      summaryData.grandTotal.totalAmount,
-      summaryData.grandTotal.cashAmount,
-      summaryData.grandTotal.creditAmount,
+      Math.round(summaryData.grandTotal.totalAmount),
+      Math.round(summaryData.grandTotal.cashAmount),
+      Math.round(summaryData.grandTotal.creditAmount),
     ]);
 
     exportToCsv(
@@ -265,13 +331,14 @@ export const ReportsPage: React.FC = () => {
     toast.success('Contractor ledger summary exported successfully!');
   };
 
-  // PDF Export Handler (Direct Download)
-  const handleDownloadPDF = () => {
+  // PDF Export Handler (Dynamic on-demand chunk import)
+  const handleDownloadPDF = async () => {
     if (!settlementData || settlementData.trips.length === 0) {
       toast.warning('No trip data to export');
       return;
     }
     try {
+      const { exportSettlementPdf } = await import('../utils/pdfGenerator');
       exportSettlementPdf(settlementData, user?.businessName);
       toast.success(
         language === 'ml'
@@ -357,18 +424,13 @@ export const ReportsPage: React.FC = () => {
 
       {/* Top Header */}
       <div className="no-print flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-        <div>
-          <div className="flex items-center gap-2">
-            <div className="p-2 rounded-xl bg-amber-500/10 text-amber-400 border border-amber-500/20">
-              <FileSpreadsheet className="w-5 h-5" />
-            </div>
-            <h1 className="text-xl sm:text-2xl font-extrabold text-white tracking-tight">
-              {t('settlement_reports_title')}
-            </h1>
+        <div className="flex items-center gap-2">
+          <div className="p-2 rounded-xl bg-amber-500/10 text-amber-400 border border-amber-500/20">
+            <FileSpreadsheet className="w-5 h-5" />
           </div>
-          <p className="text-xs sm:text-sm text-slate-400 mt-1">
-            {t('settlement_reports_sub')}
-          </p>
+          <h1 className="text-xl sm:text-2xl font-extrabold text-white tracking-tight">
+            {t('settlement_reports_title')}
+          </h1>
         </div>
 
         {/* Super Admin Quarry Switcher / Back Button */}
@@ -407,29 +469,29 @@ export const ReportsPage: React.FC = () => {
           <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
             <div className="p-4 rounded-2xl bg-slate-900/80 border border-slate-800">
               <span className="text-xs text-slate-400 font-medium">{t('active_contractors')}</span>
-              <div className="text-2xl font-extrabold text-white mt-1">
+              <div className="text-lg sm:text-2xl font-extrabold text-white mt-1 truncate">
                 {summaryData?.grandTotal.contractorCount ?? 0}
               </div>
             </div>
 
             <div className="p-4 rounded-2xl bg-slate-900/80 border border-slate-800">
               <span className="text-xs text-slate-400 font-medium">{t('total_loads')}</span>
-              <div className="text-2xl font-extrabold text-slate-200 mt-1">
+              <div className="text-lg sm:text-2xl font-extrabold text-slate-200 mt-1 truncate">
                 {summaryData?.grandTotal.totalTrips ?? 0}
               </div>
             </div>
 
             <div className="p-4 rounded-2xl bg-slate-900/80 border border-slate-800">
               <span className="text-xs text-slate-400 font-medium">{t('total_billed')}</span>
-              <div className="text-2xl font-extrabold text-slate-200 mt-1">
-                ₹{(summaryData?.grandTotal.totalAmount ?? 0).toLocaleString('en-IN', { minimumFractionDigits: 2 })}
+              <div className="text-lg sm:text-2xl font-extrabold text-slate-200 mt-1 truncate">
+                ₹{Math.round(summaryData?.grandTotal.totalAmount ?? 0).toLocaleString('en-IN')}
               </div>
             </div>
 
             <div className="p-4 rounded-2xl bg-amber-500/10 border border-amber-500/30">
               <span className="text-xs text-amber-400 font-bold uppercase">{t('net_payable')}</span>
-              <div className="text-2xl font-extrabold text-amber-300 mt-1">
-                ₹{(summaryData?.grandTotal.creditAmount ?? 0).toLocaleString('en-IN', { minimumFractionDigits: 2 })}
+              <div className="text-lg sm:text-2xl font-extrabold text-amber-300 mt-1 truncate">
+                ₹{Math.round(summaryData?.grandTotal.creditAmount ?? 0).toLocaleString('en-IN')}
               </div>
             </div>
           </div>
@@ -476,7 +538,7 @@ export const ReportsPage: React.FC = () => {
                 />
               </div>
 
-              <div className="relative z-30">
+              <div className="relative">
                 <CustomSelect
                   options={siteFilterOptions}
                   value={siteId}
@@ -487,7 +549,7 @@ export const ReportsPage: React.FC = () => {
 
               <button
                 onClick={handleExportAllLedgerCSV}
-                className="flex items-center justify-center gap-1.5 px-3.5 py-2.5 rounded-xl bg-slate-950 border border-slate-800 hover:border-slate-700 text-xs font-bold text-slate-200 hover:text-white transition-all cursor-pointer"
+                className="flex items-center justify-center gap-1.5 px-3.5 py-2.5 rounded-xl bg-slate-950 border border-slate-800 hover:border-slate-700 text-xs font-bold text-slate-200 hover:text-white transition-all cursor-pointer select-none touch-manipulation"
               >
                 <Download className="w-4 h-4 text-emerald-400" />
                 Export Ledger (CSV)
@@ -499,14 +561,16 @@ export const ReportsPage: React.FC = () => {
                     type="date"
                     value={startDate}
                     onChange={(e) => setStartDate(e.target.value)}
-                    className="w-full px-3 py-2 rounded-xl bg-slate-950 border border-slate-800 text-xs text-white"
+                    onClick={(e) => (e.target as any).showPicker?.()}
+                    className="w-full px-3 py-2 rounded-xl bg-slate-950 border border-slate-800 text-xs text-white cursor-pointer font-mono focus:border-amber-500 focus:outline-none"
                   />
-                  <span className="text-slate-500 text-xs">to</span>
+                  <span className="text-slate-500 text-xs font-bold">to</span>
                   <input
                     type="date"
                     value={endDate}
                     onChange={(e) => setEndDate(e.target.value)}
-                    className="w-full px-3 py-2 rounded-xl bg-slate-950 border border-slate-800 text-xs text-white"
+                    onClick={(e) => (e.target as any).showPicker?.()}
+                    className="w-full px-3 py-2 rounded-xl bg-slate-950 border border-slate-800 text-xs text-white cursor-pointer font-mono focus:border-amber-500 focus:outline-none"
                   />
                 </div>
               )}
@@ -534,7 +598,6 @@ export const ReportsPage: React.FC = () => {
                       <th className="py-3 px-4 text-center">Total Trips</th>
                       <th className="py-3 px-4 text-right">Gross Billed</th>
                       <th className="py-3 px-4 text-right">Cash Paid</th>
-                      <th className="py-3 px-4 text-right text-amber-400 font-extrabold">Credit Due (₹)</th>
                       <th className="py-3 px-4 text-right">Action</th>
                     </tr>
                   </thead>
@@ -547,24 +610,25 @@ export const ReportsPage: React.FC = () => {
                         <td className="py-3.5 px-4 text-slate-500 font-mono">{idx + 1}</td>
                         <td className="py-3.5 px-4">
                           <div className="font-bold text-white text-sm">{contractor.name}</div>
-                          <div className="text-xs font-mono text-slate-400 mt-0.5">+91 {contractor.mobile}</div>
+                          <div className="text-xs font-mono text-slate-400 mt-0.5">
+                            {contractor.mobile && contractor.mobile !== 'N/A'
+                              ? `+91 ${contractor.mobile}`
+                              : 'Spot Cash / Direct Sales'}
+                          </div>
                         </td>
                         <td className="py-3.5 px-4 text-center font-bold">
                           {stats.totalTrips}
                         </td>
                         <td className="py-3.5 px-4 text-right font-medium">
-                          ₹{stats.totalAmount.toLocaleString('en-IN', { minimumFractionDigits: 2 })}
+                          ₹{Math.round(stats.totalAmount).toLocaleString('en-IN')}
                         </td>
                         <td className="py-3.5 px-4 text-right text-emerald-400 font-medium">
-                          ₹{stats.cashAmount.toLocaleString('en-IN', { minimumFractionDigits: 2 })}
-                        </td>
-                        <td className="py-3.5 px-4 text-right text-amber-400 font-extrabold text-sm sm:text-base">
-                          ₹{stats.creditAmount.toLocaleString('en-IN', { minimumFractionDigits: 2 })}
+                          ₹{Math.round(stats.cashAmount).toLocaleString('en-IN')}
                         </td>
                         <td className="py-3.5 px-4 text-right">
                           <button
                             onClick={() => setSelectedContractorId(contractor.id)}
-                            className="px-3.5 py-1.5 rounded-xl bg-amber-500 hover:bg-amber-400 text-slate-950 font-bold text-xs inline-flex items-center gap-1.5 transition-all shadow-sm cursor-pointer"
+                            className="px-3.5 py-1.5 rounded-xl bg-amber-500 hover:bg-amber-400 text-slate-950 font-bold text-xs inline-flex items-center gap-1.5 transition-all shadow-sm cursor-pointer select-none touch-manipulation"
                           >
                             <span>{t('generate_statement')}</span>
                             <ArrowRight className="w-3.5 h-3.5" />
@@ -635,7 +699,7 @@ export const ReportsPage: React.FC = () => {
 
             {/* Secondary Filters */}
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5 pt-2 border-t border-slate-800/80">
-              <div className="relative z-30">
+              <div className="relative">
                 <CustomSelect
                   options={siteFilterOptions}
                   value={siteId}
@@ -643,7 +707,7 @@ export const ReportsPage: React.FC = () => {
                   placeholder={t('all_sites')}
                 />
               </div>
-              <div className="relative z-30">
+              <div className="relative">
                 <CustomSelect
                   options={paymentFilterOptions}
                   value={paymentType}
@@ -655,35 +719,38 @@ export const ReportsPage: React.FC = () => {
             </div>
           </div>
 
-          {/* Simple Clean Printable Settlement Statement Voucher */}
+          {/* Professional Printable Settlement Statement Voucher */}
           <div
             id="settlement-voucher"
-            className="print-clean bg-slate-900/80 border border-slate-800 rounded-3xl p-6 sm:p-8 space-y-6 shadow-xl"
+            className="print-clean bg-slate-900/90 border border-slate-800 rounded-3xl p-6 sm:p-8 space-y-6 shadow-2xl print:bg-white print:border-none print:p-0 print:shadow-none"
           >
-            {/* Clean Invoice Header */}
-            <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-4 pb-6 border-b border-slate-800 print:border-gray-400">
+            {/* Clean Corporate Invoice Header */}
+            <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-4 pb-5 border-b border-slate-800 print:border-gray-400">
               <div>
                 <h2 className="text-xl sm:text-2xl font-extrabold text-white print:text-black uppercase tracking-tight">
                   {settlementData.business?.businessName || user?.businessName || 'VLMS OPERATIONAL QUARRY'}
                 </h2>
                 <div className="text-xs text-slate-400 print:text-gray-600 mt-1">
-                  Contact: +91 {settlementData.business?.mobile || user?.mobile || '9876543210'}
+                  Mobile: +91 {settlementData.business?.mobile || user?.mobile || 'N/A'}
                   {settlementData.business?.gstin && ` • GSTIN: ${settlementData.business.gstin}`}
                 </div>
               </div>
 
               <div className="text-left sm:text-right">
-                <div className="text-xs font-mono font-extrabold uppercase px-2.5 py-1 rounded bg-amber-500/10 text-amber-400 border border-amber-500/30 print:border-black print:text-black inline-block">
-                  SETTLEMENT STATEMENT
+                <div className="text-xs font-mono font-extrabold uppercase px-3 py-1 rounded-lg bg-amber-500/10 text-amber-400 border border-amber-500/30 print:border-black print:text-black inline-block">
+                  SETTLEMENT STATEMENT / BILL
                 </div>
-                <div className="text-xs text-slate-400 print:text-gray-600 mt-1.5">
-                  Date: {new Date().toLocaleDateString()}
+                <div className="text-xs font-mono text-slate-400 print:text-gray-600 mt-1.5">
+                  Ref: STMT-{new Date().getFullYear()}{String(new Date().getMonth() + 1).padStart(2, '0')}-{(settlementData.contractor.name.replace(/[^a-zA-Z0-9]/g, '').slice(0, 4).toUpperCase() || 'CASH')}-{String(settlementData.summary.totalTrips).padStart(3, '0')}
+                </div>
+                <div className="text-xs text-slate-400 print:text-gray-600 mt-0.5">
+                  Issue Date: {new Date().toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' })}
                 </div>
               </div>
             </div>
 
-            {/* Billed-To & Period Info */}
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 p-4 rounded-2xl bg-slate-950/80 border border-slate-800 print:bg-transparent print:border-gray-400 text-xs">
+            {/* Billed-To & Period Info Dual Box */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 p-4 rounded-2xl bg-slate-950/80 border border-slate-800 print:bg-transparent print:border-gray-300 text-xs">
               <div>
                 <span className="text-slate-400 print:text-gray-600 uppercase font-bold tracking-wider block">
                   {t('billed_to')}:
@@ -692,7 +759,12 @@ export const ReportsPage: React.FC = () => {
                   {settlementData.contractor.name}
                 </div>
                 <div className="font-mono text-slate-400 print:text-gray-700 mt-0.5">
-                  Mobile: +91 {settlementData.contractor.mobile}
+                  {settlementData.contractor.mobile && settlementData.contractor.mobile !== 'N/A'
+                    ? `Mobile: +91 ${settlementData.contractor.mobile}`
+                    : 'Spot Cash / Direct Account'}
+                </div>
+                <div className="text-[11px] text-slate-500 print:text-gray-600 mt-0.5">
+                  Account: {!settlementData.contractor.id || settlementData.contractor.name.toLowerCase().includes('direct') ? 'Spot Cash / Counter Sales' : 'Transport C/O Contractor Ledger'}
                 </div>
               </div>
 
@@ -702,50 +774,11 @@ export const ReportsPage: React.FC = () => {
                 </span>
                 <div className="text-sm font-extrabold text-white print:text-black mt-0.5">
                   {settlementData.period.startDate && settlementData.period.endDate
-                    ? `${new Date(settlementData.period.startDate).toLocaleDateString()} — ${new Date(settlementData.period.endDate).toLocaleDateString()}`
+                    ? `${new Date(settlementData.period.startDate).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' })} — ${new Date(settlementData.period.endDate).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' })}`
                     : t('all_time')}
                 </div>
                 <div className="text-slate-400 print:text-gray-700 mt-0.5">
-                  Total Dispatches: {settlementData.summary.totalTrips} Loads
-                </div>
-              </div>
-            </div>
-
-            {/* Simple Clean 4-Column Financial Summary */}
-            <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-              <div className="p-3.5 rounded-xl bg-slate-950 border border-slate-800 print:border-gray-400">
-                <span className="text-[11px] text-slate-400 print:text-gray-600 uppercase font-semibold">
-                  {t('total_loads')}
-                </span>
-                <div className="text-lg font-extrabold text-white print:text-black mt-0.5">
-                  {settlementData.summary.totalTrips}
-                </div>
-              </div>
-
-              <div className="p-3.5 rounded-xl bg-slate-950 border border-slate-800 print:border-gray-400">
-                <span className="text-[11px] text-slate-400 print:text-gray-600 uppercase font-semibold">
-                  {t('total_billed')}
-                </span>
-                <div className="text-lg font-extrabold text-slate-200 print:text-black mt-0.5">
-                  ₹{settlementData.summary.totalAmount.toLocaleString('en-IN', { minimumFractionDigits: 2 })}
-                </div>
-              </div>
-
-              <div className="p-3.5 rounded-xl bg-slate-950 border border-slate-800 print:border-gray-400">
-                <span className="text-[11px] text-emerald-400 print:text-black uppercase font-semibold">
-                  {t('cash_settled')}
-                </span>
-                <div className="text-lg font-extrabold text-emerald-400 print:text-black mt-0.5">
-                  ₹{settlementData.summary.cashAmount.toLocaleString('en-IN', { minimumFractionDigits: 2 })}
-                </div>
-              </div>
-
-              <div className="p-3.5 rounded-xl bg-amber-500/10 border border-amber-500/40 print:border-black">
-                <span className="text-[11px] text-amber-400 print:text-black uppercase font-extrabold">
-                  {t('net_payable')}
-                </span>
-                <div className="text-lg font-extrabold text-amber-300 print:text-black mt-0.5">
-                  ₹{settlementData.summary.creditAmount.toLocaleString('en-IN', { minimumFractionDigits: 2 })}
+                  Total Dispatches: {settlementData.summary.totalTrips}
                 </div>
               </div>
             </div>
@@ -760,17 +793,17 @@ export const ReportsPage: React.FC = () => {
                   <table className="w-full text-left text-xs border-collapse">
                     <thead>
                       <tr className="bg-slate-950 border-b border-slate-800 text-slate-400 print:bg-gray-100 print:text-black print:border-gray-400 font-bold">
-                        <th className="py-2 px-3">Material</th>
-                        <th className="py-2 px-3 text-center">Trips</th>
-                        <th className="py-2 px-3 text-right">Subtotal (₹)</th>
+                        <th className="py-2 px-3">Material Specification</th>
+                        <th className="py-2 px-3 text-center">Dispatch Trips & Share</th>
+                        <th className="py-2 px-3 text-right">Subtotal Volume (₹)</th>
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-slate-800/80 print:divide-gray-300 text-slate-300 print:text-black">
                       {settlementData.materialBreakdown.map((m) => (
                         <tr key={m.materialTypeId}>
                           <td className="py-2 px-3 font-semibold">{m.materialName}</td>
-                          <td className="py-2 px-3 text-center">{m.tripCount} ({m.percentage}%)</td>
-                          <td className="py-2 px-3 text-right font-medium">₹{m.totalAmount.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</td>
+                          <td className="py-2 px-3 text-center">{m.tripCount} Trips ({m.percentage}%)</td>
+                          <td className="py-2 px-3 text-right font-medium">₹{Math.round(m.totalAmount).toLocaleString('en-IN')}</td>
                         </tr>
                       ))}
                     </tbody>
@@ -779,10 +812,10 @@ export const ReportsPage: React.FC = () => {
               </div>
             )}
 
-            {/* Simple Clean Itemized Trip Table */}
+            {/* Consolidated Dispatch Ledger Table */}
             <div className="space-y-1.5">
               <span className="text-xs font-bold text-slate-300 print:text-black uppercase tracking-wider block">
-                {t('itemized_trip_log')}:
+                {t('itemized_trip_log')} (Consolidated by Date & Vehicle):
               </span>
               <div className="overflow-x-auto rounded-xl border border-slate-800 print:border-gray-400">
                 <table className="w-full text-left text-xs border-collapse">
@@ -793,47 +826,57 @@ export const ReportsPage: React.FC = () => {
                       <th className="py-2.5 px-3">{t('vehicle_no')}</th>
                       <th className="py-2.5 px-3">{t('material')}</th>
                       <th className="py-2.5 px-3">{t('site')}</th>
-                      <th className="py-2.5 px-3">{t('filter_by_payment')}</th>
-                      <th className="py-2.5 px-3 text-right">{t('amount')}</th>
+                      <th className="py-2.5 px-3 text-center">Trips</th>
+                      <th className="py-2.5 px-3 text-right">Trip Rate</th>
+                      <th className="py-2.5 px-3 text-right">Total Amount</th>
+                      <th className="py-2.5 px-3 text-center">{t('filter_by_payment')}</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-slate-800/80 print:divide-gray-300 text-slate-200 print:text-black">
                     {settlementData.trips.length === 0 ? (
                       <tr>
-                        <td colSpan={7} className="py-6 text-center text-slate-500">
+                        <td colSpan={9} className="py-6 text-center text-slate-500">
                           {t('no_settlement_trips')}
                         </td>
                       </tr>
                     ) : (
-                      settlementData.trips.map((trip, idx) => (
+                      groupTrips(settlementData.trips).map((g, idx) => (
                         <tr
-                          key={trip.id}
+                          key={`${g.date}_${g.vehicleNumber}_${g.materialName}_${g.siteName}_${idx}`}
                           className="hover:bg-slate-800/30 print:hover:bg-transparent"
                         >
                           <td className="py-2 px-3 font-mono text-slate-500">{idx + 1}</td>
                           <td className="py-2 px-3 font-mono">
-                            {new Date(trip.date).toLocaleDateString()}
+                            {new Date(g.date).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' })}
                           </td>
-                          <td className="py-2 px-3 font-mono font-bold text-white print:text-black">
-                            {trip.vehicleNumber}
+                          <td className="py-2 px-3 font-mono font-bold text-white print:text-black tracking-wide">
+                            {g.vehicleNumber.replace(/[\s-]+/g, ' ')}
                           </td>
-                          <td className="py-2 px-3">{trip.materialName}</td>
+                          <td className="py-2 px-3">{g.materialName}</td>
                           <td className="py-2 px-3 text-slate-400 print:text-gray-700">
-                            {trip.siteName}
+                            {g.siteName}
                           </td>
-                          <td className="py-2 px-3">
-                            <span
-                              className={`px-2 py-0.5 rounded text-[10px] font-extrabold uppercase ${
-                                trip.paymentType === 'CASH'
-                                  ? 'bg-emerald-500/20 text-emerald-300 print:border print:border-black print:text-black'
-                                  : 'bg-amber-500/20 text-amber-300 print:border print:border-black print:text-black'
-                              }`}
-                            >
-                              {trip.paymentType}
+                          <td className="py-2 px-3 text-center font-bold text-amber-400 print:text-black">
+                            <span className="px-2 py-0.5 rounded bg-slate-800 print:bg-transparent">
+                              {g.tripCount}
                             </span>
                           </td>
+                          <td className="py-2 px-3 text-right text-slate-300 print:text-black">
+                            ₹{Math.round(g.rate).toLocaleString('en-IN')}
+                          </td>
                           <td className="py-2 px-3 font-bold text-right text-emerald-400 print:text-black">
-                            ₹{trip.amount.toLocaleString('en-IN', { minimumFractionDigits: 2 })}
+                            ₹{Math.round(g.totalAmount).toLocaleString('en-IN')}
+                          </td>
+                          <td className="py-2 px-3 text-center">
+                            <span
+                              className={`px-2 py-0.5 rounded text-[10px] font-extrabold uppercase ${
+                                g.paymentType === 'CASH'
+                                  ? 'bg-emerald-500/20 text-emerald-300 print:border print:border-emerald-700 print:text-emerald-700'
+                                  : 'bg-amber-500/20 text-amber-300 print:border print:border-amber-700 print:text-amber-700'
+                              }`}
+                            >
+                              {g.paymentType}
+                            </span>
                           </td>
                         </tr>
                       ))
@@ -842,12 +885,19 @@ export const ReportsPage: React.FC = () => {
                   {settlementData.trips.length > 0 && (
                     <tfoot>
                       <tr className="bg-slate-950 border-t-2 border-slate-700 print:bg-gray-100 print:border-black font-extrabold text-white print:text-black">
-                        <td colSpan={6} className="py-2.5 px-3 uppercase text-right">
-                          {t('net_payable')}:
+                        <td colSpan={5} className="py-2.5 px-3 uppercase text-right">
+                          GROSS TOTALS:
                         </td>
-                        <td className="py-2.5 px-3 text-right text-amber-300 print:text-black text-sm">
-                          ₹{settlementData.summary.creditAmount.toLocaleString('en-IN', { minimumFractionDigits: 2 })}
+                        <td className="py-2.5 px-3 text-center text-amber-400 print:text-black font-extrabold">
+                          {settlementData.summary.totalTrips}
                         </td>
+                        <td className="py-2.5 px-3 text-right text-slate-400 print:text-black">
+                          {/* Blank for rate */}
+                        </td>
+                        <td className="py-2.5 px-3 text-right text-emerald-400 print:text-black text-sm font-extrabold">
+                          ₹{Math.round(settlementData.summary.totalAmount).toLocaleString('en-IN')}
+                        </td>
+                        <td className="py-2.5 px-3"></td>
                       </tr>
                     </tfoot>
                   )}
@@ -855,19 +905,85 @@ export const ReportsPage: React.FC = () => {
               </div>
             </div>
 
-            {/* Official Signature Lines for Physical Billing Printouts */}
-            <div className="pt-8 grid grid-cols-2 gap-8 border-t border-slate-800 print:border-gray-400 text-xs text-slate-400 print:text-black">
+            {/* Executive 4-Column Financial Settlement Summary Matrix */}
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 pt-2">
+              <div className="p-3.5 rounded-xl bg-slate-950 border border-slate-800 print:border-gray-400">
+                <span className="text-[11px] text-slate-400 print:text-gray-600 uppercase font-semibold">
+                  {t('total_loads')}
+                </span>
+                <div className="text-lg sm:text-xl font-extrabold text-white print:text-black mt-0.5 truncate">
+                  {settlementData.summary.totalTrips}
+                </div>
+              </div>
+
+              <div className="p-3.5 rounded-xl bg-slate-950 border border-slate-800 print:border-gray-400">
+                <span className="text-[11px] text-slate-400 print:text-gray-600 uppercase font-semibold">
+                  {t('total_billed')}
+                </span>
+                <div className="text-lg sm:text-xl font-extrabold text-slate-200 print:text-black mt-0.5 truncate">
+                  ₹{Math.round(settlementData.summary.totalAmount).toLocaleString('en-IN')}
+                </div>
+              </div>
+
+              <div className="p-3.5 rounded-xl bg-slate-950 border border-slate-800 print:border-gray-400">
+                <span className="text-[11px] text-emerald-400 print:text-black uppercase font-semibold">
+                  {t('cash_settled')}
+                </span>
+                <div className="text-lg sm:text-xl font-extrabold text-emerald-400 print:text-black mt-0.5 truncate">
+                  ₹{Math.round(settlementData.summary.cashAmount).toLocaleString('en-IN')}
+                </div>
+              </div>
+
+              <div className="p-3.5 rounded-xl bg-amber-500/10 border border-amber-500/40 print:border-black">
+                <span className="text-[11px] text-amber-400 print:text-black uppercase font-extrabold">
+                  {t('net_payable')}
+                </span>
+                <div className="text-lg sm:text-xl font-extrabold text-amber-300 print:text-black mt-0.5 truncate">
+                  ₹{Math.round(settlementData.summary.creditAmount).toLocaleString('en-IN')}
+                </div>
+              </div>
+            </div>
+
+            {/* Amount in Words Banner */}
+            <div className="p-3 rounded-xl bg-slate-950/60 border border-slate-800/80 print:border-gray-300 flex flex-col sm:flex-row sm:items-center justify-between text-xs gap-1">
+              <span className="text-slate-400 print:text-gray-600 font-semibold uppercase tracking-wider text-[11px]">
+                Net Balance in Words:
+              </span>
+              <span className="font-bold text-amber-300 print:text-black">
+                {numberToWordsINR(settlementData.summary.creditAmount)}
+              </span>
+            </div>
+
+            {/* Terms & Notes */}
+            <div className="p-3 rounded-xl bg-slate-950/40 border border-slate-800 text-[11px] text-slate-500 print:text-gray-600 space-y-0.5">
+              <div className="font-bold text-slate-400 print:text-black">Terms & Acknowledgement:</div>
+              <div>1. All dispatches recorded from automated weighbridge and site register entries.</div>
+              <div>2. Dues must be settled according to agreed contractor credit cycles.</div>
+            </div>
+
+            {/* Dual Signature Lines with Seal Placeholder for Physical Billing Printouts */}
+            <div className="pt-6 grid grid-cols-3 gap-4 border-t border-slate-800 print:border-gray-400 text-xs text-slate-400 print:text-black items-end">
               <div>
-                <div className="w-48 border-b border-slate-700 print:border-black mb-1.5" />
+                <div className="w-36 sm:w-48 border-b border-slate-700 print:border-black mb-1.5" />
                 <div className="font-bold">{t('authorized_signature')}</div>
                 <div className="text-[11px] text-slate-500 print:text-gray-600">
                   {settlementData.business?.businessName || user?.businessName || 'Quarry Management'}
                 </div>
               </div>
 
+              <div className="text-center flex flex-col items-center justify-center">
+                <div className="w-24 h-14 border border-dashed border-slate-700 print:border-gray-400 rounded-lg flex items-center justify-center text-[10px] text-slate-500 uppercase">
+                  [ SEAL / STAMP ]
+                </div>
+              </div>
+
               <div className="text-right flex flex-col items-end">
-                <div className="w-48 border-b border-slate-700 print:border-black mb-1.5" />
-                <div className="font-bold">{t('contractor_signature')}</div>
+                <div className="w-36 sm:w-48 border-b border-slate-700 print:border-black mb-1.5" />
+                <div className="font-bold">
+                  {!settlementData.contractor.id || settlementData.contractor.name.toLowerCase().includes('direct')
+                    ? 'Customer / Receiver Signature'
+                    : t('contractor_signature')}
+                </div>
                 <div className="text-[11px] text-slate-500 print:text-gray-600">
                   {settlementData.contractor.name}
                 </div>

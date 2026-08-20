@@ -98,7 +98,7 @@ export const translations = {
   active_contractors: { en: 'Active Contractors', ml: 'ആക്ടീവ് കോൺട്രാക്ടർമാർ' },
   total_billed: { en: 'Total Billed', ml: 'ആകെ ബിൽ ചെയ്തത്' },
   cash_settled: { en: 'Cash Settled', ml: 'ക്യാഷ് നൽകിയത്' },
-  net_payable: { en: 'Net Credit Balance (Payable)', ml: 'ബാക്കി നിൽക്കുന്ന കടം തുക' },
+  net_payable: { en: 'Net Credit Balance', ml: 'ബാക്കി നിൽക്കുന്ന കടം തുക' },
   statement_for: { en: 'Statement for', ml: 'സ്റ്റേറ്റ്‌മെന്റ്:' },
   billed_to: { en: 'Billed To (C/O Contractor)', ml: 'ബിൽ ചെയ്തത് (കോൺട്രാക്ടർ)' },
   period: { en: 'Period', ml: 'കാലയളവ്' },
@@ -146,19 +146,27 @@ export const LanguageProvider: React.FC<{ children: React.ReactNode }> = ({ chil
     return saved === 'ml' || saved === 'en' ? saved : 'en';
   });
 
-  const setLanguage = (lang: Language) => {
+  const setLanguage = React.useCallback((lang: Language) => {
     setLanguageState(lang);
     localStorage.setItem(LANG_STORAGE_KEY, lang);
-  };
+  }, []);
 
-  const t = (key: TranslationKey): string => {
-    const entry = translations[key];
-    if (!entry) return key;
-    return entry[language] || entry.en || key;
-  };
+  const t = React.useCallback(
+    (key: TranslationKey): string => {
+      const entry = translations[key];
+      if (!entry) return key;
+      return entry[language] || entry.en || key;
+    },
+    [language]
+  );
+
+  const value = React.useMemo(
+    () => ({ language, setLanguage, t }),
+    [language, setLanguage, t]
+  );
 
   return (
-    <LanguageContext.Provider value={{ language, setLanguage, t }}>
+    <LanguageContext.Provider value={value}>
       {children}
     </LanguageContext.Provider>
   );

@@ -453,13 +453,13 @@ Generate PDF from a known test report and verify its contents.
 Customer can generate and share/print a correct settlement PDF.
 
 
-# HURDLE 11 — END-TO-END TESTING
+# HURDLE 11 — END-TO-END TESTING & SYSTEM HARDENING
 
-Status: ⬜ Not Started
+Status: ✅ Done
 
 ## Objective
 
-Verify the complete system as a real customer would use it.
+Verify the complete system as a real customer would use it, perform full-stack hardening, eliminate redundant API calls, and resolve edge cases.
 
 ## Main Scenario
 
@@ -552,7 +552,7 @@ real customer feedback.
 
 Current hurdle:
 
-HURDLE 9 — SETTLEMENT REPORTS
+HURDLE 12 — PRODUCTION DEPLOYMENT
 
 Current blocker:
 
@@ -560,7 +560,7 @@ None.
 
 Immediate goal:
 
-Implement contractor C/O settlement aggregation engine (date range filtering, contractor totals, summary tables) and exportable reports interface.
+Prepare production deployment configuration, environment profiles, domain SSL orchestration, and container health safeguards.
 
 
 # DEVELOPMENT RULES

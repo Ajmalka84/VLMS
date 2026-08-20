@@ -31,3 +31,10 @@ export async function loginApi(credentials: LoginCredentials): Promise<LoginResu
 export async function getMeApi(): Promise<AuthUser> {
   return apiClient<AuthUser>('/auth/me');
 }
+
+export async function changePasswordApi(data: { oldPassword: string; newPassword: string }): Promise<{ message: string }> {
+  return apiClient<{ message: string }>('/auth/change-password', {
+    method: 'POST',
+    body: JSON.stringify(data),
+  });
+}

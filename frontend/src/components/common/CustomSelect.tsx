@@ -1,4 +1,4 @@
-import React, { useState, useRef, useEffect } from 'react';
+import React, { useState, useRef, useEffect, useMemo } from 'react';
 import { ChevronDown, Search, Check, X } from 'lucide-react';
 
 export interface CustomSelectOption {
@@ -14,6 +14,7 @@ interface CustomSelectProps {
   onChange: (value: string) => void;
   placeholder?: string;
   label?: string;
+  labelRight?: React.ReactNode;
   searchable?: boolean;
   searchPlaceholder?: string;
   required?: boolean;
@@ -27,6 +28,7 @@ export const CustomSelect: React.FC<CustomSelectProps> = ({
   onChange,
   placeholder = 'Select an option',
   label,
+  labelRight,
   searchable = true,
   searchPlaceholder = 'Search...',
   required = false,
@@ -38,7 +40,10 @@ export const CustomSelect: React.FC<CustomSelectProps> = ({
   const containerRef = useRef<HTMLDivElement>(null);
   const searchInputRef = useRef<HTMLInputElement>(null);
 
-  const selectedOption = options.find((opt) => opt.value === value);
+  const selectedOption = useMemo(
+    () => options.find((opt) => opt.value === value),
+    [options, value]
+  );
 
   // Close dropdown on click outside
   useEffect(() => {
@@ -67,18 +72,27 @@ export const CustomSelect: React.FC<CustomSelectProps> = ({
     }
   }, [isOpen, searchable]);
 
-  const filteredOptions = options.filter(
-    (opt) =>
-      opt.label.toLowerCase().includes(search.toLowerCase()) ||
-      (opt.subLabel && opt.subLabel.toLowerCase().includes(search.toLowerCase()))
-  );
+  const filteredOptions = useMemo(() => {
+    if (!search.trim()) return options;
+    const query = search.trim().toLowerCase();
+    return options.filter(
+      (opt) =>
+        opt.label.toLowerCase().includes(query) ||
+        (opt.subLabel && opt.subLabel.toLowerCase().includes(query))
+    );
+  }, [options, search]);
 
   return (
-    <div className={`relative ${isOpen ? 'z-50' : 'z-10'} ${className}`} ref={containerRef}>
-      {label && (
-        <label className="block text-xs font-bold text-slate-300 uppercase tracking-wider mb-1.5">
-          {label} {required && <span className="text-amber-400">*</span>}
-        </label>
+    <div className={`relative ${isOpen ? 'z-[100]' : 'z-10'} ${className}`} ref={containerRef}>
+      {(label || labelRight) && (
+        <div className="flex items-center justify-between mb-1.5 gap-2">
+          {label && (
+            <label className="block text-xs font-bold text-slate-300 uppercase tracking-wider">
+              {label} {required && <span className="text-amber-400">*</span>}
+            </label>
+          )}
+          {labelRight && <div className="shrink-0">{labelRight}</div>}
+        </div>
       )}
 
       {/* Trigger Button */}
@@ -86,34 +100,29 @@ export const CustomSelect: React.FC<CustomSelectProps> = ({
         type="button"
         disabled={disabled}
         onClick={() => setIsOpen(!isOpen)}
-        className={`w-full px-4 py-3 rounded-2xl bg-slate-900/90 border text-left flex items-center justify-between gap-3 transition-all cursor-pointer ${
+        className={`w-full h-[46px] min-h-[46px] px-3.5 py-2.5 rounded-2xl bg-slate-900 border text-left flex items-center justify-between gap-2.5 transition-all cursor-pointer select-none touch-manipulation ${
           isOpen
             ? 'border-amber-500 ring-2 ring-amber-500/20 shadow-lg shadow-amber-500/10'
             : 'border-slate-800 hover:border-slate-700'
         } ${disabled ? 'opacity-50 cursor-not-allowed' : ''}`}
       >
-        <div className="flex items-center gap-3 truncate min-w-0">
+        <div className="flex items-center gap-2.5 truncate min-w-0 flex-1 pointer-events-none">
           {selectedOption?.icon && (
             <div className="text-amber-400 shrink-0">{selectedOption.icon}</div>
           )}
           {selectedOption ? (
-            <div className="truncate">
-              <span className="text-sm font-semibold text-white truncate block">
-                {selectedOption.label}
-              </span>
-              {selectedOption.subLabel && (
-                <span className="text-[11px] text-slate-400 truncate block">
-                  {selectedOption.subLabel}
-                </span>
-              )}
-            </div>
+            <span className="text-xs sm:text-sm font-semibold text-white truncate block">
+              {selectedOption.label}
+            </span>
           ) : (
-            <span className="text-sm text-slate-500 font-medium">{placeholder}</span>
+            <span className="text-xs sm:text-sm text-slate-500 font-medium truncate block">
+              {placeholder}
+            </span>
           )}
         </div>
 
         <ChevronDown
-          className={`w-4 h-4 text-slate-400 transition-transform shrink-0 ${
+          className={`w-4 h-4 text-slate-400 transition-transform shrink-0 pointer-events-none ${
             isOpen ? 'rotate-180 text-amber-400' : ''
           }`}
         />
@@ -121,7 +130,7 @@ export const CustomSelect: React.FC<CustomSelectProps> = ({
 
       {/* Dropdown Menu */}
       {isOpen && (
-        <div className="absolute left-0 right-0 top-full mt-2 z-50 rounded-2xl bg-slate-900 border border-slate-700/80 shadow-2xl shadow-slate-950 backdrop-blur-xl overflow-hidden animate-fade-in">
+        <div className="absolute left-0 right-0 top-full mt-1.5 z-[100] rounded-2xl bg-slate-900 border border-slate-700 shadow-2xl shadow-black/90 overflow-hidden animate-fade-in">
           {/* Search Bar inside dropdown */}
           {searchable && options.length > 5 && (
             <div className="p-2.5 border-b border-slate-800 bg-slate-950/60">

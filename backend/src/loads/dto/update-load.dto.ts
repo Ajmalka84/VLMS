@@ -5,6 +5,7 @@ import {
   IsPositive,
   IsString,
   IsUUID,
+  ValidateIf,
 } from 'class-validator';
 import { Type } from 'class-transformer';
 import { PaymentType } from '@prisma/client';
@@ -26,9 +27,10 @@ export class UpdateLoadDto {
   @IsOptional()
   materialTypeId?: string;
 
-  @IsUUID('4', { message: 'contractorId must be a valid UUID' })
   @IsOptional()
-  contractorId?: string;
+  @ValidateIf((_, value) => value !== null && value !== '' && value !== undefined)
+  @IsUUID('4', { message: 'contractorId must be a valid UUID' })
+  contractorId?: string | null;
 
   @IsOptional()
   @Type(() => Number)

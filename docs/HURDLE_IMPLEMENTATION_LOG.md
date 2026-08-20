@@ -1168,9 +1168,105 @@ All Hurdle 10 definition-of-done criteria passed:
 
 ## Next Hurdle
 
-Hurdle 11 — End-to-End Testing & Verification:
+Hurdle 11 — End-to-End Testing & System Hardening:
 1. Complete lifecycle testing from Super Admin onboarding to load recording and settlement statement PDF generation.
 2. Cross-device validation.
+
+---
+
+# Hurdle 11 — End-to-End Testing & System Hardening
+
+Status: ✅ Done
+
+Completed: 20-Aug-2026
+
+## Objective
+
+Conduct comprehensive system-wide hardening, eliminate duplicate API requests, refine master data caching, streamline authentication and Super Admin credentials, and polish user experience across ~65 files.
+
+## Starting State
+
+All individual modules (Hurdles 1 through 10) were functional, but edge cases existed around redundant network queries (`/master-data/bundle`), authentication validation limits, and component state synchronization.
+
+## Architecture & Improvements Created
+
+```text
+1. API Optimization & In-Flight Request Deduplication:
+   - getMasterDataBundleApi(force) reuses active in-flight Promises.
+   - MasterCacheContext centralizes bundle state and provides 0ms rate matrix resolver.
+   - MasterDataPage directly binds to shared cache, eliminating duplicate network fetches.
+
+2. Auth & Credential Hardening:
+   - Super Admin configured to ajmalka84@gmail.com / 05thDec1995.
+   - LoginPage upgraded to accept both email and mobile identifiers without regex restrictions.
+   - Removed demo helper buttons for clean production UI.
+   - Added password reset (POST /admin/users/:id/reset-password) and password change endpoints.
+
+3. Master Data & Deletion Safety:
+   - Created backend MasterDataModule (GET /api/v1/master-data/bundle) with relation counts.
+   - Added PIN code validation and uppercase vehicle registration normalization.
+   - Added deletion safety checks protecting relational integrity.
+
+4. Transactional Cockpit & Settlement PDF:
+   - 0ms memory rate lookup HUD with manual price override.
+   - 4-digit rapid vehicle search and shuttle tipper chips.
+   - Grouped trips utility (tripGrouper.ts) and INR number-to-words converter.
+   - High-fidelity vector PDF generation engine (pdfGenerator.ts) with multi-page pagination.
+```
+
+## Files Created or Changed
+
+* `backend/src/master-data/*` — Backend MasterDataModule with atomic bundle API.
+* `backend/src/auth/*` — Auth service fallback updates, password reset DTOs and endpoints.
+* `frontend/src/api/masterData.ts` — In-flight request deduplication on bundle API.
+* `frontend/src/context/MasterCacheContext.tsx` — Central master cache context and fast rate lookup matrix.
+* `frontend/src/pages/MasterDataPage.tsx` — Integrated with `useMasterCache` and optimized CRUD synchronization.
+* `frontend/src/pages/LoginPage.tsx` — Email/phone username input, removed test helper buttons, button spacing adjustment.
+* `frontend/src/pages/LoadsPage.tsx` — Rapid load logging cockpit with sticky input memory.
+* `frontend/src/pages/ReportsPage.tsx` — Multi-range settlement vouchers, CSV export, and PDF generation.
+* `frontend/src/utils/pdfGenerator.ts` — Client-side vector PDF generation engine.
+* `frontend/src/utils/tripGrouper.ts` — Trip aggregation and dispatch grouping.
+* `frontend/src/utils/numberToWords.ts` — INR currency in words generator.
+* `.env`, `.env.example`, `docker-compose.yml` — Super Admin credential updates.
+* `docs/hurdles/hurdle-11/plan.md` — Archived implementation plan.
+* `docs/hurdles/hurdle-11/walkthrough.md` — Comprehensive walkthrough.
+
+## Commands and Verification Flow
+
+```bash
+# Build frontend
+npm run build --prefix frontend
+
+# Build backend
+npm run build --prefix backend
+
+# Super Admin Login verification (HTTP 200 OK)
+curl -X POST http://localhost:3000/api/v1/auth/login \
+  -H "Content-Type: application/json" \
+  -d '{"mobile":"ajmalka84@gmail.com","password":"05thDec1995"}'
+
+# Verify health endpoint
+curl http://localhost:3000/api/v1/health
+```
+
+## Final Verification Result
+
+All Hurdle 11 criteria passed:
+- Zero build or TypeScript errors across frontend and backend.
+- Duplicate bundle fetching on Master Data navigation completely eliminated.
+- Super Admin login with `ajmalka84@gmail.com` and customer user logins verified.
+- Complete end-to-end load dispatch to PDF settlement workflow operational.
+
+## Handover Notes
+
+Ready for Hurdle 12 — Production Deployment.
+
+## Next Hurdle
+
+Hurdle 12 — Production Deployment:
+1. Production environment configuration.
+2. Domain SSL and reverse proxy orchestration.
+3. Database backup automation.
 
 ---
 
@@ -1208,3 +1304,4 @@ Completed: YYYY-MM-DD
 
 ## Next Hurdle
 ~~~
+

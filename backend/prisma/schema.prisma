@@ -139,5 +139,10 @@ model Load {
   contractor   Contractor?  @relation(fields: [contractorId], references: [id], onDelete: Restrict)
   rate         Rate         @relation(fields: [rateId], references: [id], onDelete: Restrict)
 
+  @@index([siteId, date])
+  @@index([contractorId, date])
+  @@index([vehicleId, date])
+  @@index([deletedAt])
+  @@index([date])
   @@map("loads")
 }

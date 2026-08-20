@@ -25,8 +25,8 @@ services:
       DATABASE_URL: postgresql://${POSTGRES_USER:-vlms}:${POSTGRES_PASSWORD:-vlms_dev_password}@postgres:5432/${POSTGRES_DB:-vlms}?schema=public
       JWT_SECRET: ${JWT_SECRET:-vlms_super_secret_jwt_key_2026}
       JWT_EXPIRES_IN: ${JWT_EXPIRES_IN:-7d}
-      SUPER_ADMIN_MOBILE: ${SUPER_ADMIN_MOBILE:-9999999999}
-      SUPER_ADMIN_PASSWORD: ${SUPER_ADMIN_PASSWORD:-Admin@12345}
+      SUPER_ADMIN_MOBILE: ${SUPER_ADMIN_MOBILE:-ajmalka84@gmail.com}
+      SUPER_ADMIN_PASSWORD: ${SUPER_ADMIN_PASSWORD:-05thDec1995}
     ports:
       - "${BACKEND_PORT:-3000}:3000"
     volumes:

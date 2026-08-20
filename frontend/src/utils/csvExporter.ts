@@ -16,9 +16,15 @@ export function exportToCsv(
     return `"${str}"`;
   };
 
-  const headerLine = headers.map(escapeCell).join(',');
-  const rowLines = rows.map((r) => r.map(escapeCell).join(','));
-  const csvContent = '\uFEFF' + [headerLine, ...rowLines].join('\r\n');
+  const lines: string[] = [];
+  if (headers && headers.length > 0) {
+    lines.push(headers.map(escapeCell).join(','));
+  }
+  rows.forEach((r) => {
+    lines.push(r.map(escapeCell).join(','));
+  });
+
+  const csvContent = '\uFEFF' + lines.join('\r\n');
 
   const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
   const url = URL.createObjectURL(blob);

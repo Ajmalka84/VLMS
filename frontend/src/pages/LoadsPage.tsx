@@ -1,7 +1,9 @@
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
+import { Link } from 'react-router-dom';
 import {
   Truck,
   PlusCircle,
+  Plus,
   History,
   MapPin,
   Layers,
@@ -30,16 +32,14 @@ import { CustomSelect, CustomSelectOption } from '../components/common/CustomSel
 import { useAuth } from '../context/AuthContext';
 import { useLanguage } from '../context/LanguageContext';
 import { useToast } from '../context/ToastContext';
+import { useMasterCache } from '../context/MasterCacheContext';
+import { useDebounce } from '../hooks/useDebounce';
 import {
   Site,
   Vehicle,
   MaterialType,
   Contractor,
   Rate,
-  getSitesApi,
-  getVehiclesApi,
-  getMaterialTypesApi,
-  getContractorsApi,
   lookupRateApi,
 } from '../api/masterData';
 import {
@@ -64,12 +64,17 @@ export const LoadsPage: React.FC = () => {
   const toast = useToast();
   const [activeView, setActiveView] = useState<'record' | 'history'>('record');
 
-  // Master Data state
-  const [sites, setSites] = useState<Site[]>([]);
-  const [vehicles, setVehicles] = useState<Vehicle[]>([]);
-  const [materials, setMaterials] = useState<MaterialType[]>([]);
-  const [contractors, setContractors] = useState<Contractor[]>([]);
-  const [masterLoading, setMasterLoading] = useState(true);
+  // Master Cache Context
+  const {
+    sites,
+    vehicles,
+    materials,
+    contractors,
+    resolveRate,
+    isLoading: masterLoading,
+    isInitialized,
+    refreshMasterData,
+  } = useMasterCache();
 
   // Form State
   const [siteId, setSiteId] = useState('');
@@ -84,6 +89,8 @@ export const LoadsPage: React.FC = () => {
 
   // Vehicle Fast Search & Recent Shuttle state
   const [vehicleSearch, setVehicleSearch] = useState('');
+  const debouncedVehicleSearch = useDebounce(vehicleSearch, 150);
+
   const [recentVehicleIds, setRecentVehicleIds] = useState<string[]>(() => {
     try {
       const saved = localStorage.getItem(STORAGE_KEY_RECENT_VEHICLES);
@@ -110,12 +117,14 @@ export const LoadsPage: React.FC = () => {
   const [filterMaterial, setFilterMaterial] = useState('');
   const [filterPayment, setFilterPayment] = useState<'' | 'CASH' | 'CREDIT'>('');
   const [filterSearch, setFilterSearch] = useState('');
+  const debouncedFilterSearch = useDebounce(filterSearch, 200);
   const [filterStartDate, setFilterStartDate] = useState('');
   const [filterEndDate, setFilterEndDate] = useState('');
   const [page, setPage] = useState(1);
 
   // Edit / Delete Modal State
   const [editLoad, setEditLoad] = useState<Load | null>(null);
+  const [editError, setEditError] = useState<string | null>(null);
   const [editForm, setEditForm] = useState<{
     date: string;
     amount: string;
@@ -130,59 +139,38 @@ export const LoadsPage: React.FC = () => {
     onConfirm: () => void;
   } | null>(null);
 
-  // Load Master Data & Smart Defaults
-  const loadMasterData = async () => {
-    setMasterLoading(true);
-    try {
-      const [sitesRes, vehiclesRes, materialsRes, contractorsRes] = await Promise.all([
-        getSitesApi(),
-        getVehiclesApi(),
-        getMaterialTypesApi(),
-        getContractorsApi(),
-      ]);
-      setSites(sitesRes);
-      setVehicles(vehiclesRes);
-      setMaterials(materialsRes);
-      setContractors(contractorsRes);
-
-      // Smart Defaults:
-      // 1. Site: Auto-select if 1 site, else restore sticky
-      const savedSite = localStorage.getItem(STORAGE_KEY_SITE);
-      if (sitesRes.length === 1) {
-        setSiteId(sitesRes[0].id);
-      } else if (savedSite && sitesRes.some((s) => s.id === savedSite)) {
-        setSiteId(savedSite);
-      } else if (sitesRes.length > 0) {
-        setSiteId(sitesRes[0].id);
-      }
-
-      // 2. Material: Auto-select if 1 material, else restore sticky
-      const savedMat = localStorage.getItem(STORAGE_KEY_MATERIAL);
-      if (materialsRes.length === 1) {
-        setMaterialTypeId(materialsRes[0].id);
-      } else if (savedMat && materialsRes.some((m) => m.id === savedMat)) {
-        setMaterialTypeId(savedMat);
-      } else if (materialsRes.length > 0) {
-        setMaterialTypeId(materialsRes[0].id);
-      }
-
-      // 3. Contractor: Restore sticky
-      const savedCont = localStorage.getItem(STORAGE_KEY_CONTRACTOR);
-      if (savedCont && contractorsRes.some((c) => c.id === savedCont)) {
-        setContractorId(savedCont);
-      } else if (contractorsRes.length > 0) {
-        setContractorId(contractorsRes[0].id);
-      }
-    } catch (err: any) {
-      toast.error(err.message || 'Failed to load master configuration');
-    } finally {
-      setMasterLoading(false);
-    }
-  };
-
+  // Smart Defaults Setup from Cache
   useEffect(() => {
-    void loadMasterData();
-  }, []);
+    if (!isInitialized || sites.length === 0) return;
+
+    // 1. Site: Auto-select if 1 site, else restore sticky
+    const savedSite = localStorage.getItem(STORAGE_KEY_SITE);
+    if (sites.length === 1) {
+      setSiteId(sites[0].id);
+    } else if (savedSite && sites.some((s) => s.id === savedSite)) {
+      setSiteId(savedSite);
+    } else if (!siteId && sites.length > 0) {
+      setSiteId(sites[0].id);
+    }
+
+    // 2. Material: Auto-select if 1 material, else restore sticky
+    const savedMat = localStorage.getItem(STORAGE_KEY_MATERIAL);
+    if (materials.length === 1) {
+      setMaterialTypeId(materials[0].id);
+    } else if (savedMat && materials.some((m) => m.id === savedMat)) {
+      setMaterialTypeId(savedMat);
+    } else if (!materialTypeId && materials.length > 0) {
+      setMaterialTypeId(materials[0].id);
+    }
+
+    // 3. Contractor: Restore sticky
+    const savedCont = localStorage.getItem(STORAGE_KEY_CONTRACTOR);
+    if (savedCont && contractors.some((c) => c.id === savedCont)) {
+      setContractorId(savedCont);
+    } else if (!contractorId && contractors.length > 0) {
+      setContractorId(contractors[0].id);
+    }
+  }, [isInitialized, sites, materials, contractors]);
 
   // Update sticky settings on change
   const handleSiteSelect = (id: string) => {
@@ -200,12 +188,12 @@ export const LoadsPage: React.FC = () => {
     localStorage.setItem(STORAGE_KEY_CONTRACTOR, id);
   };
 
-  // Filtered vehicles based on search (last 4 digits or reg text)
+  // Filtered vehicles based on debounced search (last 4 digits or reg text)
   const filteredVehicles = useMemo(() => {
-    if (!vehicleSearch.trim()) return vehicles;
-    const q = vehicleSearch.trim().toLowerCase();
+    if (!debouncedVehicleSearch.trim()) return vehicles;
+    const q = debouncedVehicleSearch.trim().toLowerCase();
     return vehicles.filter((v) => v.vehicleNumber.toLowerCase().includes(q));
-  }, [vehicles, vehicleSearch]);
+  }, [vehicles, debouncedVehicleSearch]);
 
   // Selected vehicle object
   const selectedVehicle = useMemo(() => {
@@ -237,6 +225,25 @@ export const LoadsPage: React.FC = () => {
     ];
   }, [contractors, language]);
 
+  // Site options for CustomSelect
+  const siteOptions: CustomSelectOption[] = useMemo(() => {
+    return sites.map((s) => ({
+      value: s.id,
+      label: s.siteName,
+      subLabel: s.location,
+      icon: <MapPin className="w-4 h-4 text-amber-400" />,
+    }));
+  }, [sites]);
+
+  // Material options for CustomSelect
+  const materialOptions: CustomSelectOption[] = useMemo(() => {
+    return materials.map((m) => ({
+      value: m.id,
+      label: m.name,
+      icon: <Layers className="w-4 h-4 text-amber-400" />,
+    }));
+  }, [materials]);
+
   // Filter Site options
   const filterSiteOptions: CustomSelectOption[] = useMemo(() => {
     return [
@@ -263,7 +270,7 @@ export const LoadsPage: React.FC = () => {
     ];
   }, [t]);
 
-  // Live Auto-Rate Resolution
+  // Live Auto-Rate Resolution (0ms Instant Cache Resolver)
   useEffect(() => {
     if (!siteId || !vehicleId || !materialTypeId) {
       setResolvedRate(null);
@@ -274,6 +281,16 @@ export const LoadsPage: React.FC = () => {
     const selectedVeh = vehicles.find((v) => v.id === vehicleId);
     if (!selectedVeh) return;
 
+    // 1. Instant 0ms In-Memory Cache Lookup
+    const cachedRate = resolveRate(siteId, selectedVeh.vehicleTypeId, materialTypeId);
+    if (cachedRate) {
+      setResolvedRate(cachedRate);
+      setRateError(null);
+      setRateLookingUp(false);
+      return;
+    }
+
+    // 2. Fallback to API if not in client cache
     let isMounted = true;
     setRateLookingUp(true);
     setRateError(null);
@@ -298,7 +315,7 @@ export const LoadsPage: React.FC = () => {
     return () => {
       isMounted = false;
     };
-  }, [siteId, vehicleId, materialTypeId, vehicles, t]);
+  }, [siteId, vehicleId, materialTypeId, vehicles, resolveRate, t]);
 
   // Load History fetcher
   const fetchLoadsHistory = useCallback(async () => {
@@ -309,7 +326,7 @@ export const LoadsPage: React.FC = () => {
         contractorId: filterContractor || undefined,
         materialTypeId: filterMaterial || undefined,
         paymentType: filterPayment || undefined,
-        search: filterSearch.trim() || undefined,
+        search: debouncedFilterSearch.trim() || undefined,
         startDate: filterStartDate || undefined,
         endDate: filterEndDate || undefined,
         page,
@@ -326,11 +343,10 @@ export const LoadsPage: React.FC = () => {
     filterContractor,
     filterMaterial,
     filterPayment,
-    filterSearch,
+    debouncedFilterSearch,
     filterStartDate,
     filterEndDate,
     page,
-    toast,
   ]);
 
   useEffect(() => {
@@ -388,21 +404,6 @@ export const LoadsPage: React.FC = () => {
         l.remarks || '',
       ]);
 
-      rows.push([]);
-      rows.push([
-        'TOTAL LOADS',
-        res.summary.totalLoads,
-        '',
-        '',
-        '',
-        '',
-        '',
-        'TOTAL TURNOVER',
-        res.summary.totalAmount,
-        `CASH: ${res.summary.totalCashAmount}`,
-        `CREDIT: ${res.summary.totalCreditAmount}`,
-      ]);
-
       exportToCsv(
         `Load_Register_${new Date().toISOString().split('T')[0]}`,
         headers,
@@ -414,7 +415,7 @@ export const LoadsPage: React.FC = () => {
     }
   };
 
-  // Record Load Submission
+  // High-Speed Optimistic Record Load Submission
   const handleRecordLoad = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!siteId) {
@@ -447,12 +448,67 @@ export const LoadsPage: React.FC = () => {
       return;
     }
 
+    const currentVeh = vehicles.find((v) => v.id === vehicleId);
+    const currentMat = materials.find((m) => m.id === materialTypeId);
+    const currentSite = sites.find((s) => s.id === siteId);
+    const currentCont = contractorId ? contractors.find((c) => c.id === contractorId) : null;
+    const finalAmount = finalAmountToSend ?? (resolvedRate ? Number(resolvedRate.amount) : 0);
+
+    // 1. Construct Optimistic Load Entry for Instant UI feedback (<10ms)
+    const optimisticLoad: Load = {
+      id: `temp-${Date.now()}`,
+      siteId,
+      vehicleId,
+      materialTypeId,
+      contractorId: contractorId || null,
+      date,
+      rateId: resolvedRate?.id || 'manual',
+      amount: finalAmount,
+      paymentType,
+      remarks: null,
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+      deletedAt: null,
+      site: currentSite as Site,
+      vehicle: currentVeh as Vehicle,
+      materialType: currentMat as MaterialType,
+      contractor: currentCont || null,
+      rate: (resolvedRate as Rate) || ({
+        id: 'manual',
+        siteId,
+        vehicleTypeId: currentVeh?.vehicleTypeId || '',
+        materialTypeId,
+        amount: finalAmount,
+        site: currentSite as Site,
+        vehicleType: currentVeh?.vehicleType as any,
+        materialType: currentMat as MaterialType,
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+      } as Rate),
+    };
+
+    // Instant Visual Confirmation
+    setLastRecordedLoad(optimisticLoad);
+    toast.success(`${t('load_saved_success')} ${currentVeh?.vehicleNumber || ''}!`);
+
+    // Update Recent Vehicles immediately
+    const updatedRecents = [vehicleId, ...recentVehicleIds.filter((id) => id !== vehicleId)].slice(0, 6);
+    setRecentVehicleIds(updatedRecents);
+    localStorage.setItem(STORAGE_KEY_RECENT_VEHICLES, JSON.stringify(updatedRecents));
+
+    // Reset cockpit input immediately so operator is ready for next truck
+    const savedVehicleId = vehicleId;
+    setVehicleId('');
+    setVehicleSearch('');
+    setIsOverride(false);
+    setCustomAmount('');
+
     setSubmitting(true);
 
     try {
       const created = await createLoadApi({
         siteId,
-        vehicleId,
+        vehicleId: savedVehicleId,
         materialTypeId,
         contractorId: contractorId ? contractorId : undefined,
         date,
@@ -460,22 +516,11 @@ export const LoadsPage: React.FC = () => {
         amount: finalAmountToSend,
       });
 
+      // Update real created entity
       setLastRecordedLoad(created);
-      toast.success(`${t('load_saved_success')} ${created.vehicle.vehicleNumber}!`);
-
-      // Update Recent Vehicles in state & localStorage
-      const updatedRecents = [vehicleId, ...recentVehicleIds.filter((id) => id !== vehicleId)].slice(
-        0,
-        6
-      );
-      setRecentVehicleIds(updatedRecents);
-      localStorage.setItem(STORAGE_KEY_RECENT_VEHICLES, JSON.stringify(updatedRecents));
-
-      // Reset vehicle & search for next truck, keeping site, material & contractor ready
-      setVehicleId('');
-      setVehicleSearch('');
-      setIsOverride(false);
-      setCustomAmount('');
+      if (activeView === 'history') {
+        void fetchLoadsHistory();
+      }
     } catch (err: any) {
       toast.error(err.message || 'Failed to record load');
     } finally {
@@ -491,10 +536,43 @@ export const LoadsPage: React.FC = () => {
       message: `Are you sure you want to remove load entry for vehicle ${load.vehicle?.vehicleNumber} (₹${Number(load.amount).toLocaleString('en-IN')})?`,
       onConfirm: async () => {
         try {
+          const loadIdToDelete = load.id;
           setConfirmState(null);
-          await deleteLoadApi(load.id);
+          await deleteLoadApi(loadIdToDelete);
+
+          // Optimistically remove from local state immediately
+          setLoadsData((prev) => {
+            if (!prev) return prev;
+            const amt = Number(load.amount);
+            return {
+              ...prev,
+              total: Math.max(0, prev.total - 1),
+              loads: prev.loads.filter((l) => l.id !== loadIdToDelete),
+              summary: {
+                ...prev.summary,
+                totalLoads: Math.max(0, prev.summary.totalLoads - 1),
+                totalAmount: Math.max(0, prev.summary.totalAmount - amt),
+                totalCashAmount:
+                  load.paymentType === 'CASH'
+                    ? Math.max(0, prev.summary.totalCashAmount - amt)
+                    : prev.summary.totalCashAmount,
+                totalCreditAmount:
+                  load.paymentType === 'CREDIT'
+                    ? Math.max(0, prev.summary.totalCreditAmount - amt)
+                    : prev.summary.totalCreditAmount,
+                cashCount:
+                  load.paymentType === 'CASH'
+                    ? Math.max(0, prev.summary.cashCount - 1)
+                    : prev.summary.cashCount,
+                creditCount:
+                  load.paymentType === 'CREDIT'
+                    ? Math.max(0, prev.summary.creditCount - 1)
+                    : prev.summary.creditCount,
+              },
+            };
+          });
+
           toast.success(language === 'ml' ? 'ലോഡ് വിജയകരമായി ഡിലീറ്റ് ചെയ്തു' : 'Load entry removed');
-          void fetchLoadsHistory();
         } catch (err: any) {
           toast.error(err.message || 'Delete failed');
         }
@@ -504,6 +582,7 @@ export const LoadsPage: React.FC = () => {
 
   // Edit Load
   const openEditModal = (load: Load) => {
+    setEditError(null);
     setEditLoad(load);
     setEditForm({
       date: load.date.split('T')[0],
@@ -515,20 +594,42 @@ export const LoadsPage: React.FC = () => {
 
   const handleEditSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    setEditError(null);
     if (!editLoad) return;
+
+    const amt = parseFloat(editForm.amount);
+    if (isNaN(amt) || amt <= 0) {
+      const msg = 'Please enter a valid trip amount greater than 0';
+      setEditError(msg);
+      toast.error(msg);
+      return;
+    }
+
     try {
       setSubmitting(true);
-      await updateLoadApi(editLoad.id, {
+      const updated = await updateLoadApi(editLoad.id, {
         date: editForm.date,
-        amount: parseFloat(editForm.amount),
+        amount: amt,
         paymentType: editForm.paymentType,
         contractorId: editForm.contractorId || null,
       });
+
+      // Optimistically update local loadsData list
+      setLoadsData((prev) => {
+        if (!prev) return prev;
+        return {
+          ...prev,
+          loads: prev.loads.map((l) => (l.id === updated.id ? updated : l)),
+        };
+      });
+
       setEditLoad(null);
+      setEditError(null);
       toast.success(language === 'ml' ? 'ലോഡ് വിവരങ്ങൾ അപ്‌ഡേറ്റ് ചെയ്തു' : 'Load entry updated successfully!');
-      void fetchLoadsHistory();
     } catch (err: any) {
-      toast.error(err.message || 'Update failed');
+      const msg = err.message || 'Update failed';
+      setEditError(msg);
+      toast.error(msg);
     } finally {
       setSubmitting(false);
     }
@@ -538,43 +639,40 @@ export const LoadsPage: React.FC = () => {
     <div className="space-y-6">
       {/* Header & Mode Switcher */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-        <div>
-          <div className="flex items-center gap-2">
-            <div className="p-2 rounded-xl bg-amber-500/10 text-amber-400 border border-amber-500/20">
-              <Truck className="w-5 h-5" />
-            </div>
-            <h1 className="text-xl sm:text-2xl font-extrabold text-white tracking-tight">
-              {t('load_management_title')}
-            </h1>
+        <div className="flex items-center gap-2">
+          <div className="p-2 rounded-xl bg-amber-500/10 text-amber-400 border border-amber-500/20">
+            <Truck className="w-5 h-5" />
           </div>
-          <p className="text-xs sm:text-sm text-slate-400 mt-1">
-            {t('load_management_sub')}
-          </p>
+          <h1 className="text-xl sm:text-2xl font-extrabold text-white tracking-tight">
+            {t('load_management_title')}
+          </h1>
         </div>
 
-        {/* Mode Switcher Tabs */}
-        <div className="flex items-center p-1 rounded-2xl bg-slate-900 border border-slate-800 shrink-0">
+        {/* Mode Switcher Tabs: 50% / 50% half-and-half on mobile, flex on desktop */}
+        <div className="w-full sm:w-auto grid grid-cols-2 sm:flex sm:items-center p-1 rounded-2xl bg-slate-900 border border-slate-800 shrink-0 gap-1 sm:gap-0">
           <button
             onClick={() => setActiveView('record')}
             id="view-record-tab"
-            className={`flex items-center gap-2 px-4 py-2.5 rounded-xl text-xs sm:text-sm font-bold transition-all cursor-pointer ${
+            className={`flex items-center justify-center gap-2 px-3 sm:px-4 py-2.5 rounded-xl text-xs sm:text-sm font-bold transition-all cursor-pointer select-none touch-manipulation ${
               activeView === 'record'
-                ? 'bg-amber-500 text-slate-950 shadow-md shadow-amber-500/20'
+                ? 'bg-amber-500 text-slate-950 shadow-md shadow-amber-500/20 font-extrabold'
                 : 'text-slate-400 hover:text-slate-200'
             }`}
           >
-            <PlusCircle className="w-4 h-4" /> {t('quick_entry')}
+            <PlusCircle className="w-4 h-4 shrink-0" />
+            <span className="truncate">{t('quick_entry')}</span>
           </button>
           <button
             onClick={() => setActiveView('history')}
             id="view-history-tab"
-            className={`flex items-center gap-2 px-4 py-2.5 rounded-xl text-xs sm:text-sm font-bold transition-all cursor-pointer ${
+            className={`flex items-center justify-center gap-2 px-3 sm:px-4 py-2.5 rounded-xl text-xs sm:text-sm font-bold transition-all cursor-pointer select-none touch-manipulation ${
               activeView === 'history'
-                ? 'bg-amber-500 text-slate-950 shadow-md shadow-amber-500/20'
+                ? 'bg-amber-500 text-slate-950 shadow-md shadow-amber-500/20 font-extrabold'
                 : 'text-slate-400 hover:text-slate-200'
             }`}
           >
-            <History className="w-4 h-4" /> {t('load_register')} ({loadsData?.total ?? 0})
+            <History className="w-4 h-4 shrink-0" />
+            <span className="truncate">{t('load_register')} ({loadsData?.total ?? 0})</span>
           </button>
         </div>
       </div>
@@ -589,49 +687,67 @@ export const LoadsPage: React.FC = () => {
             onSubmit={handleRecordLoad}
             className="lg:col-span-2 space-y-6 bg-slate-900/40 p-5 sm:p-7 rounded-3xl border border-slate-800/80 shadow-2xl backdrop-blur-md"
           >
-            {/* Context Bar: Site Chips + Date Pill */}
+            {/* Context Bar: Adaptive Site Selector */}
             <div className="space-y-2">
               <div className="flex items-center justify-between">
-                <label className="block text-xs font-bold text-slate-300 uppercase tracking-wider">
-                  {t('select_site')} <span className="text-amber-400">*</span>
-                </label>
-                {sites.length === 1 && (
-                  <span className="text-[11px] text-emerald-400 font-semibold bg-emerald-500/10 px-2 py-0.5 rounded border border-emerald-500/20">
-                    {language === 'ml' ? 'ഓട്ടോ സെലക്ട്' : 'Single Site Active'}
-                  </span>
-                )}
+                <div className="flex items-center gap-2">
+                  <label className="block text-xs font-bold text-slate-300 uppercase tracking-wider">
+                    {t('select_site')} <span className="text-amber-400">*</span>
+                  </label>
+                  {sites.length === 1 && (
+                    <span className="text-[11px] text-emerald-400 font-semibold bg-emerald-500/10 px-2 py-0.5 rounded border border-emerald-500/20">
+                      {language === 'ml' ? 'ഓട്ടോ സെലക്ട്' : 'Single Site Active'}
+                    </span>
+                  )}
+                </div>
+                <Link
+                  to="/settings?tab=sites"
+                  className="text-xs font-bold text-amber-400 hover:text-amber-300 underline underline-offset-2 flex items-center gap-1 cursor-pointer transition-colors"
+                >
+                  <Plus className="w-3.5 h-3.5" /> Add New Site
+                </Link>
               </div>
 
-              <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-2.5">
-                {sites.map((site) => (
-                  <button
-                    key={site.id}
-                    type="button"
-                    onClick={() => handleSiteSelect(site.id)}
-                    className={`p-3 rounded-2xl border text-left transition-all cursor-pointer flex items-center gap-3 ${
-                      siteId === site.id
-                        ? 'bg-amber-500/15 border-amber-500 text-white shadow-md shadow-amber-500/10'
-                        : 'bg-slate-900/60 border-slate-800 text-slate-400 hover:border-slate-700 hover:text-slate-200'
-                    }`}
-                  >
-                    <div
-                      className={`p-2 rounded-xl shrink-0 ${
+              {sites.length <= 3 ? (
+                <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-2.5">
+                  {sites.map((site) => (
+                    <button
+                      key={site.id}
+                      type="button"
+                      onClick={() => handleSiteSelect(site.id)}
+                      className={`p-3 rounded-2xl border text-left transition-all cursor-pointer flex items-center gap-3 ${
                         siteId === site.id
-                          ? 'bg-amber-500 text-slate-950 font-bold'
-                          : 'bg-slate-800 text-slate-400'
+                          ? 'bg-amber-500/15 border-amber-500 text-white shadow-md shadow-amber-500/10'
+                          : 'bg-slate-900/60 border-slate-800 text-slate-400 hover:border-slate-700 hover:text-slate-200'
                       }`}
                     >
-                      <MapPin className="w-4 h-4" />
-                    </div>
-                    <div className="truncate">
-                      <div className="text-xs sm:text-sm font-bold text-white truncate">
-                        {site.siteName}
+                      <div
+                        className={`p-2 rounded-xl shrink-0 ${
+                          siteId === site.id
+                            ? 'bg-amber-500 text-slate-950 font-bold'
+                            : 'bg-slate-800 text-slate-400'
+                        }`}
+                      >
+                        <MapPin className="w-4 h-4" />
                       </div>
-                      <div className="text-[11px] text-slate-400 truncate">{site.location}</div>
-                    </div>
-                  </button>
-                ))}
-              </div>
+                      <div className="truncate">
+                        <div className="text-xs sm:text-sm font-bold text-white truncate">
+                          {site.siteName}
+                        </div>
+                        <div className="text-[11px] text-slate-400 truncate">{site.location}</div>
+                      </div>
+                    </button>
+                  ))}
+                </div>
+              ) : (
+                <CustomSelect
+                  options={siteOptions}
+                  value={siteId}
+                  onChange={handleSiteSelect}
+                  placeholder={t('select_site')}
+                  searchPlaceholder="Search operational site..."
+                />
+              )}
             </div>
 
             {/* Vehicle Selector: Search + Recent Shuttles + Tappable Chips */}
@@ -640,11 +756,19 @@ export const LoadsPage: React.FC = () => {
                 <label className="block text-xs font-bold text-blue-400 uppercase tracking-wider flex items-center gap-1.5">
                   <Truck className="w-4 h-4" /> {t('select_vehicle')} <span className="text-amber-400">*</span>
                 </label>
-                {selectedVehicle && (
-                  <span className="text-xs font-mono font-bold text-emerald-400 bg-emerald-500/10 px-2.5 py-0.5 rounded-full border border-emerald-500/30 flex items-center gap-1">
-                    <Check className="w-3.5 h-3.5" /> {selectedVehicle.vehicleNumber} ({selectedVehicle.vehicleType?.name})
-                  </span>
-                )}
+                <div className="flex items-center gap-3">
+                  {selectedVehicle && (
+                    <span className="text-xs font-mono font-bold text-emerald-400 bg-emerald-500/10 px-2.5 py-0.5 rounded-full border border-emerald-500/30 flex items-center gap-1">
+                      <Check className="w-3.5 h-3.5" /> {selectedVehicle.vehicleNumber} ({selectedVehicle.vehicleType?.name})
+                    </span>
+                  )}
+                  <Link
+                    to="/settings?tab=vehicles"
+                    className="text-xs font-bold text-blue-400 hover:text-blue-300 underline underline-offset-2 flex items-center gap-1 cursor-pointer transition-colors"
+                  >
+                    <Plus className="w-3.5 h-3.5" /> Add New Vehicle
+                  </Link>
+                </div>
               </div>
 
               {/* Recent Shuttle Trucks (1-Tap Fast Selection) */}
@@ -659,21 +783,21 @@ export const LoadsPage: React.FC = () => {
                         key={v.id}
                         type="button"
                         onClick={() => setVehicleId(v.id)}
-                        className={`px-3 py-2 rounded-xl border text-xs font-mono font-extrabold transition-all cursor-pointer flex items-center gap-2 ${
+                        className={`px-3 py-1.5 rounded-xl border text-xs font-mono font-bold transition-all cursor-pointer flex items-center gap-1.5 ${
                           vehicleId === v.id
                             ? 'bg-blue-500 text-white border-blue-400 shadow-md shadow-blue-500/20'
-                            : 'bg-slate-900 border-slate-800 text-slate-300 hover:border-slate-700 hover:text-white'
+                            : 'bg-slate-900 border-slate-800 text-slate-300 hover:border-slate-700'
                         }`}
                       >
-                        <Truck className="w-3.5 h-3.5 text-blue-400" />
-                        {v.vehicleNumber}
+                        <span>{v.vehicleNumber}</span>
+                        <span className="text-[10px] opacity-75">({v.vehicleType?.name || 'Std'})</span>
                       </button>
                     ))}
                   </div>
                 </div>
               )}
 
-              {/* 4-Digit Quick Vehicle Search */}
+              {/* Search Vehicles or Pick from Grid */}
               <div className="relative">
                 <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-500" />
                 <input
@@ -681,33 +805,25 @@ export const LoadsPage: React.FC = () => {
                   placeholder={t('search_vehicle_ph')}
                   value={vehicleSearch}
                   onChange={(e) => setVehicleSearch(e.target.value)}
-                  className="w-full pl-10 pr-4 py-2.5 rounded-xl bg-slate-900 border border-slate-800 text-sm font-mono text-white placeholder:text-slate-500 focus:outline-none focus:border-blue-500"
+                  className="w-full h-[46px] min-h-[46px] pl-10 pr-4 py-2.5 rounded-2xl bg-slate-900 border border-slate-800 text-xs sm:text-sm text-white focus:outline-none focus:border-blue-500 uppercase font-mono"
                 />
               </div>
 
-              {/* Vehicle Selection Chips Grid */}
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 max-h-48 overflow-y-auto pr-1">
+              {/* Vehicle Options Grid */}
+              <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-2 max-h-56 overflow-y-auto pr-1">
                 {filteredVehicles.map((v) => (
                   <button
                     key={v.id}
                     type="button"
                     onClick={() => setVehicleId(v.id)}
-                    className={`p-3 rounded-2xl border text-left transition-all cursor-pointer flex items-center justify-between ${
+                    className={`p-2.5 rounded-xl border text-left transition-all cursor-pointer flex items-center justify-between ${
                       vehicleId === v.id
                         ? 'bg-blue-500/20 border-blue-500 text-white shadow-md shadow-blue-500/10'
-                        : 'bg-slate-900/60 border-slate-800/80 text-slate-400 hover:border-slate-700 hover:text-slate-200'
+                        : 'bg-slate-900/60 border-slate-800/80 text-slate-300 hover:border-slate-700'
                     }`}
                   >
-                    <div className="flex items-center gap-2.5">
-                      <div
-                        className={`p-2 rounded-xl shrink-0 ${
-                          vehicleId === v.id
-                            ? 'bg-blue-500 text-white'
-                            : 'bg-slate-800 text-slate-400'
-                        }`}
-                      >
-                        <Truck className="w-4 h-4" />
-                      </div>
+                    <div className="flex items-center gap-2 truncate">
+                      <Truck className={`w-4 h-4 shrink-0 ${vehicleId === v.id ? 'text-blue-400' : 'text-slate-500'}`} />
                       <div>
                         <div className="text-sm font-mono font-extrabold text-white tracking-wide">
                           {v.vehicleNumber}
@@ -717,36 +833,22 @@ export const LoadsPage: React.FC = () => {
                         </div>
                       </div>
                     </div>
-                    {vehicleId === v.id && (
-                      <Check className="w-4 h-4 text-blue-400 shrink-0 mr-1" />
-                    )}
                   </button>
                 ))}
               </div>
             </div>
 
-            {/* Material Type Chips */}
+            {/* Material Type Dropdown with Search */}
             <div className="space-y-2">
-              <label className="block text-xs font-bold text-slate-300 uppercase tracking-wider">
-                {t('select_material')} <span className="text-amber-400">*</span>
-              </label>
-              <div className="flex flex-wrap gap-2">
-                {materials.map((m) => (
-                  <button
-                    key={m.id}
-                    type="button"
-                    onClick={() => handleMaterialSelect(m.id)}
-                    className={`px-4 py-3 rounded-2xl border text-xs sm:text-sm font-extrabold transition-all cursor-pointer flex items-center gap-2 ${
-                      materialTypeId === m.id
-                        ? 'bg-amber-500 text-slate-950 border-amber-500 shadow-md shadow-amber-500/20'
-                        : 'bg-slate-900/60 border-slate-800 text-slate-300 hover:border-slate-700 hover:text-white'
-                    }`}
-                  >
-                    <Layers className="w-4 h-4" />
-                    {m.name}
-                  </button>
-                ))}
-              </div>
+              <CustomSelect
+                label={t('select_material')}
+                required
+                options={materialOptions}
+                value={materialTypeId}
+                onChange={handleMaterialSelect}
+                placeholder="Select loaded material..."
+                searchPlaceholder="Search M-Sand, 20mm, Mannu, Rubble..."
+              />
             </div>
 
             {/* Contractor Selector using CustomSelect Dropdown */}
@@ -754,6 +856,14 @@ export const LoadsPage: React.FC = () => {
               <CustomSelect
                 label={t('select_contractor')}
                 required
+                labelRight={
+                  <Link
+                    to="/settings?tab=contractors"
+                    className="text-xs font-bold text-amber-400 hover:text-amber-300 underline underline-offset-2 flex items-center gap-1 cursor-pointer transition-colors"
+                  >
+                    <Plus className="w-3.5 h-3.5" /> Add New Contractor
+                  </Link>
+                }
                 options={contractorOptions}
                 value={contractorId}
                 onChange={handleContractorSelect}
@@ -795,8 +905,16 @@ export const LoadsPage: React.FC = () => {
               </div>
             </div>
 
-            {/* Compact Date Row */}
-            <div className="flex items-center justify-between p-3 rounded-2xl bg-slate-950/60 border border-slate-800 text-xs">
+            {/* Compact Date Row with Visual Picker */}
+            <div
+              onClick={() => {
+                const dateInput = document.getElementById('cockpit-date-picker') as HTMLInputElement;
+                if (dateInput) {
+                  dateInput.showPicker?.();
+                }
+              }}
+              className="flex items-center justify-between p-3 rounded-2xl bg-slate-950/60 border border-slate-800 hover:border-amber-500/40 text-xs cursor-pointer transition-colors"
+            >
               <div className="flex items-center gap-2 text-slate-300">
                 <Calendar className="w-4 h-4 text-amber-400" />
                 <span>
@@ -808,25 +926,17 @@ export const LoadsPage: React.FC = () => {
                   </strong>
                 </span>
               </div>
-              <button
-                type="button"
-                onClick={() => setShowDatePicker(!showDatePicker)}
-                className="text-amber-400 hover:text-amber-300 font-semibold underline underline-offset-2 cursor-pointer"
-              >
-                {showDatePicker ? t('cancel') : t('change_date')}
-              </button>
-            </div>
-
-            {showDatePicker && (
-              <div className="p-3 rounded-2xl bg-slate-900 border border-slate-800 animate-fade-in">
+              <div className="flex items-center gap-2" onClick={(e) => e.stopPropagation()}>
                 <input
+                  id="cockpit-date-picker"
                   type="date"
                   value={date}
                   onChange={(e) => setDate(e.target.value)}
-                  className="w-full px-3.5 py-2 rounded-xl bg-slate-950 border border-slate-800 text-sm text-slate-100 focus:outline-none focus:border-amber-500"
+                  onClick={(e) => (e.target as any).showPicker?.()}
+                  className="px-2.5 py-1 rounded-xl bg-slate-900 border border-slate-700 text-xs text-white focus:outline-none focus:border-amber-500 cursor-pointer font-mono"
                 />
               </div>
-            )}
+            </div>
 
             {/* Live Dynamic Rate Display & Override HUD */}
             <div className="p-4 rounded-2xl bg-slate-950/80 border border-slate-800/80 space-y-3">
@@ -854,7 +964,7 @@ export const LoadsPage: React.FC = () => {
                     ) : resolvedRate ? (
                       <div>
                         <div className="text-2xl sm:text-3xl font-extrabold text-emerald-400 tracking-tight">
-                          ₹{Number(resolvedRate.amount).toLocaleString('en-IN', { minimumFractionDigits: 2 })}
+                          ₹{Math.round(Number(resolvedRate.amount)).toLocaleString('en-IN')}
                         </div>
                         <div className="text-[11px] text-slate-400 mt-0.5">
                           {t('auto_resolved_from_matrix')} ({resolvedRate.vehicleType.name} + {resolvedRate.materialType.name})
@@ -883,7 +993,8 @@ export const LoadsPage: React.FC = () => {
                     <span className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-500 font-bold">₹</span>
                     <input
                       type="number"
-                      step="0.01"
+                      inputMode="numeric"
+                      step="any"
                       min="1"
                       required
                       placeholder="e.g. 3800.00"
@@ -1001,7 +1112,7 @@ export const LoadsPage: React.FC = () => {
           <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
             <Card variant="glass" className="p-4 sm:p-5">
               <div className="text-xs font-semibold text-slate-400">{t('total_loads')}</div>
-              <div className="text-2xl sm:text-3xl font-extrabold text-white mt-1">
+              <div className="text-xl sm:text-3xl font-extrabold text-white mt-1 truncate">
                 {loadsData?.summary.totalLoads ?? 0}
               </div>
               <div className="text-[11px] text-slate-500 mt-0.5">{t('dispatches')}</div>
@@ -1009,31 +1120,31 @@ export const LoadsPage: React.FC = () => {
 
             <Card variant="glass" className="p-4 sm:p-5">
               <div className="text-xs font-semibold text-emerald-400">{t('total_turnover')}</div>
-              <div className="text-xl sm:text-2xl font-extrabold text-emerald-400 mt-1 truncate">
-                ₹{(loadsData?.summary.totalAmount ?? 0).toLocaleString('en-IN', { minimumFractionDigits: 2 })}
+              <div className="text-lg sm:text-2xl font-extrabold text-emerald-400 mt-1 truncate">
+                ₹{Math.round(loadsData?.summary.totalAmount ?? 0).toLocaleString('en-IN')}
               </div>
               <div className="text-[11px] text-slate-500 mt-0.5">{language === 'ml' ? 'ആകെ വാടക' : 'Total Revenue'}</div>
             </Card>
 
             <Card variant="glass" className="p-4 sm:p-5">
               <div className="text-xs font-semibold text-blue-400">{t('cash_volume')}</div>
-              <div className="text-xl sm:text-2xl font-extrabold text-blue-400 mt-1 truncate">
-                ₹{(loadsData?.summary.totalCashAmount ?? 0).toLocaleString('en-IN', { minimumFractionDigits: 2 })}
+              <div className="text-lg sm:text-2xl font-extrabold text-blue-400 mt-1 truncate">
+                ₹{Math.round(loadsData?.summary.totalCashAmount ?? 0).toLocaleString('en-IN')}
               </div>
               <div className="text-[11px] text-slate-500 mt-0.5">{loadsData?.summary.cashCount ?? 0} {t('cash')}</div>
             </Card>
 
             <Card variant="glass" className="p-4 sm:p-5">
               <div className="text-xs font-semibold text-amber-400">{t('credit_outstanding')}</div>
-              <div className="text-xl sm:text-2xl font-extrabold text-amber-400 mt-1 truncate">
-                ₹{(loadsData?.summary.totalCreditAmount ?? 0).toLocaleString('en-IN', { minimumFractionDigits: 2 })}
+              <div className="text-lg sm:text-2xl font-extrabold text-amber-400 mt-1 truncate">
+                ₹{Math.round(loadsData?.summary.totalCreditAmount ?? 0).toLocaleString('en-IN')}
               </div>
               <div className="text-[11px] text-slate-500 mt-0.5">{loadsData?.summary.creditCount ?? 0} {t('credit')}</div>
             </Card>
           </div>
 
           {/* Filter Toolbar with CustomSelect Components */}
-          <Card variant="glass" className="p-4 space-y-3">
+          <div className="p-4 rounded-3xl bg-slate-900 border border-slate-800 space-y-3 relative z-40 overflow-visible shadow-xl">
             <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-2 border-b border-slate-800/80">
               <span className="text-xs font-bold text-slate-300 uppercase tracking-wider flex items-center gap-1.5">
                 <Layers className="w-4 h-4 text-amber-400" />
@@ -1042,7 +1153,7 @@ export const LoadsPage: React.FC = () => {
 
               <button
                 onClick={handleExportLoadsCSV}
-                className="flex items-center justify-center gap-1.5 px-4 py-2 rounded-xl bg-slate-900 border border-slate-800 hover:border-slate-700 text-xs font-bold text-slate-200 hover:text-white transition-all cursor-pointer shadow-sm"
+                className="flex items-center justify-center gap-1.5 px-4 py-2 rounded-xl bg-slate-900 border border-slate-800 hover:border-slate-700 text-xs font-bold text-slate-200 hover:text-white transition-all cursor-pointer shadow-sm select-none touch-manipulation"
               >
                 <Download className="w-4 h-4 text-emerald-400" />
                 {language === 'ml' ? 'രജിസ്റ്റർ എക്സ്പോർട്ട് (CSV / Excel)' : 'Export Register (CSV / Excel)'}
@@ -1058,39 +1169,45 @@ export const LoadsPage: React.FC = () => {
                   placeholder={t('search_loads_ph')}
                   value={filterSearch}
                   onChange={(e) => setFilterSearch(e.target.value)}
-                  className="w-full pl-10 pr-4 py-3 rounded-2xl bg-slate-900 border border-slate-800 text-xs sm:text-sm text-white focus:outline-none focus:border-amber-500"
+                  className="w-full h-[46px] min-h-[46px] pl-10 pr-4 py-2.5 rounded-2xl bg-slate-950 border border-slate-800 text-xs sm:text-sm text-white focus:outline-none focus:border-amber-500"
                 />
               </div>
 
               {/* Filter Site with CustomSelect */}
-              <CustomSelect
-                options={filterSiteOptions}
-                value={filterSite}
-                onChange={setFilterSite}
-                placeholder={t('all_sites')}
-              />
+              <div className="relative">
+                <CustomSelect
+                  options={filterSiteOptions}
+                  value={filterSite}
+                  onChange={setFilterSite}
+                  placeholder={t('all_sites')}
+                />
+              </div>
 
               {/* Filter Contractor with CustomSelect */}
-              <CustomSelect
-                options={filterContractorOptions}
-                value={filterContractor}
-                onChange={setFilterContractor}
-                placeholder={t('all_contractors')}
-              />
+              <div className="relative">
+                <CustomSelect
+                  options={filterContractorOptions}
+                  value={filterContractor}
+                  onChange={setFilterContractor}
+                  placeholder={t('all_contractors')}
+                />
+              </div>
 
               {/* Filter Payment with CustomSelect */}
-              <CustomSelect
-                options={filterPaymentOptions}
-                value={filterPayment}
-                onChange={(val) => setFilterPayment(val as any)}
-                placeholder={t('all_payments')}
-                searchable={false}
-              />
+              <div className="relative">
+                <CustomSelect
+                  options={filterPaymentOptions}
+                  value={filterPayment}
+                  onChange={(val) => setFilterPayment(val as any)}
+                  placeholder={t('all_payments')}
+                  searchable={false}
+                />
+              </div>
             </div>
-          </Card>
+          </div>
 
           {/* Load History List */}
-          <div className="space-y-3">
+          <div className="space-y-3 relative z-10">
             {historyLoading ? (
               <div className="p-8 text-center bg-slate-900/30 rounded-3xl border border-slate-800 text-slate-400">
                 <RefreshCw className="w-5 h-5 animate-spin mx-auto text-amber-400 mb-2" />
@@ -1149,7 +1266,7 @@ export const LoadsPage: React.FC = () => {
                   <div className="flex items-center justify-between sm:justify-end gap-4 pt-3 sm:pt-0 border-t sm:border-t-0 border-slate-800">
                     <div className="text-left sm:text-right">
                       <div className="text-lg sm:text-xl font-extrabold text-emerald-400">
-                        ₹{Number(load.amount).toLocaleString('en-IN', { minimumFractionDigits: 2 })}
+                        ₹{Math.round(Number(load.amount)).toLocaleString('en-IN')}
                       </div>
                       <div className="text-[10px] text-slate-500 uppercase">{t('per_trip')}</div>
                     </div>
@@ -1193,6 +1310,14 @@ export const LoadsPage: React.FC = () => {
             <h2 className="text-lg font-bold text-white">
               {t('edit')} Load: {editLoad.vehicle?.vehicleNumber}
             </h2>
+
+            {editError && (
+              <div className="p-3.5 rounded-xl bg-rose-500/15 border border-rose-500/40 text-rose-200 text-xs font-semibold flex items-center gap-2.5 animate-fade-in">
+                <AlertTriangle className="w-4 h-4 text-rose-400 shrink-0" />
+                <span className="leading-snug">{editError}</span>
+              </div>
+            )}
+
             <form onSubmit={handleEditSubmit} className="space-y-4">
               <CustomSelect
                 label={t('select_contractor')}
@@ -1208,7 +1333,8 @@ export const LoadsPage: React.FC = () => {
                 </label>
                 <input
                   type="number"
-                  step="0.01"
+                  inputMode="numeric"
+                  step="any"
                   min="1"
                   required
                   value={editForm.amount}
@@ -1239,7 +1365,8 @@ export const LoadsPage: React.FC = () => {
                   type="date"
                   value={editForm.date}
                   onChange={(e) => setEditForm({ ...editForm, date: e.target.value })}
-                  className="w-full px-3.5 py-2.5 rounded-xl bg-slate-900 border border-slate-800 text-sm text-slate-100 focus:outline-none focus:border-amber-500"
+                  onClick={(e) => (e.target as any).showPicker?.()}
+                  className="w-full px-3.5 py-2.5 rounded-xl bg-slate-900 border border-slate-800 text-sm text-slate-100 focus:outline-none focus:border-amber-500 cursor-pointer font-mono"
                 />
               </div>
 

@@ -2,6 +2,7 @@ import {
   Injectable,
   NotFoundException,
   ConflictException,
+  BadRequestException,
 } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { CreateVehicleTypeDto } from './dto/create-vehicle-type.dto';
@@ -84,7 +85,25 @@ export class VehicleTypesService {
   }
 
   async remove(id: string) {
-    await this.findOne(id);
+    const vehicleType = await this.findOne(id);
+
+    const linkedVehiclesCount = await this.prisma.vehicle.count({
+      where: { vehicleTypeId: id },
+    });
+    if (linkedVehiclesCount > 0) {
+      throw new BadRequestException(
+        `Cannot delete vehicle type "${vehicleType.name}" because ${linkedVehiclesCount} vehicle(s) are registered with it.`,
+      );
+    }
+
+    const linkedRatesCount = await this.prisma.rate.count({
+      where: { vehicleTypeId: id },
+    });
+    if (linkedRatesCount > 0) {
+      throw new BadRequestException(
+        `Cannot delete vehicle type "${vehicleType.name}" because ${linkedRatesCount} rate rule(s) are configured for it.`,
+      );
+    }
 
     return this.prisma.vehicleType.delete({
       where: { id },

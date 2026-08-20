@@ -2,6 +2,8 @@ import {
   Injectable,
   NotFoundException,
   ForbiddenException,
+  ConflictException,
+  BadRequestException,
 } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { CreateContractorDto } from './dto/create-contractor.dto';
@@ -12,11 +14,27 @@ export class ContractorsService {
   constructor(private readonly prisma: PrismaService) {}
 
   async create(userId: string, dto: CreateContractorDto) {
+    const cleanMobile = dto.mobile.trim();
+    const cleanName = dto.name.trim();
+
+    const existing = await this.prisma.contractor.findFirst({
+      where: {
+        userId,
+        mobile: cleanMobile,
+      },
+    });
+
+    if (existing) {
+      throw new ConflictException(
+        `A contractor with mobile number "${cleanMobile}" already exists (${existing.name})`,
+      );
+    }
+
     return this.prisma.contractor.create({
       data: {
         userId,
-        name: dto.name.trim(),
-        mobile: dto.mobile.trim(),
+        name: cleanName,
+        mobile: cleanMobile,
       },
     });
   }
@@ -61,11 +79,28 @@ export class ContractorsService {
   }
 
   async update(userId: string, id: string, dto: UpdateContractorDto) {
-    await this.findOne(userId, id);
+    const current = await this.findOne(userId, id);
 
     const updateData: any = {};
     if (dto.name !== undefined) updateData.name = dto.name.trim();
-    if (dto.mobile !== undefined) updateData.mobile = dto.mobile.trim();
+    if (dto.mobile !== undefined) {
+      const cleanMobile = dto.mobile.trim();
+      if (cleanMobile !== current.mobile) {
+        const existing = await this.prisma.contractor.findFirst({
+          where: {
+            userId,
+            mobile: cleanMobile,
+            id: { not: id },
+          },
+        });
+        if (existing) {
+          throw new ConflictException(
+            `A contractor with mobile number "${cleanMobile}" already exists (${existing.name})`,
+          );
+        }
+      }
+      updateData.mobile = cleanMobile;
+    }
 
     return this.prisma.contractor.update({
       where: { id },
@@ -74,7 +109,17 @@ export class ContractorsService {
   }
 
   async remove(userId: string, id: string) {
-    await this.findOne(userId, id);
+    const contractor = await this.findOne(userId, id);
+
+    const linkedLoadsCount = await this.prisma.load.count({
+      where: { contractorId: id, deletedAt: null },
+    });
+
+    if (linkedLoadsCount > 0) {
+      throw new BadRequestException(
+        `Cannot delete contractor "${contractor.name}" because they have ${linkedLoadsCount} active dispatch load(s) recorded. Reassign or delete those load entries first.`,
+      );
+    }
 
     return this.prisma.contractor.delete({
       where: { id },

@@ -153,7 +153,13 @@ export class LoadsService {
 
     if (query.siteId) where.siteId = query.siteId;
     if (query.vehicleId) where.vehicleId = query.vehicleId;
-    if (query.contractorId) where.contractorId = query.contractorId;
+    if (query.contractorId) {
+      if (query.contractorId === 'direct' || query.contractorId === 'direct-sales') {
+        where.contractorId = null;
+      } else {
+        where.contractorId = query.contractorId;
+      }
+    }
     if (query.materialTypeId) where.materialTypeId = query.materialTypeId;
     if (query.paymentType) where.paymentType = query.paymentType;
 
@@ -183,7 +189,7 @@ export class LoadsService {
         where,
         skip,
         take: limit,
-        orderBy: [{ date: 'desc' }, { createdAt: 'desc' }],
+        orderBy: [{ createdAt: 'desc' }, { date: 'desc' }],
         include: {
           site: true,
           vehicle: {
@@ -280,14 +286,18 @@ export class LoadsService {
     if (dto.paymentType) {
       updateData.paymentType = dto.paymentType;
     }
-    if (dto.contractorId) {
-      const contractor = await this.prisma.contractor.findUnique({
-        where: { id: dto.contractorId },
-      });
-      if (!contractor || contractor.userId !== userId) {
-        throw new NotFoundException(`Contractor with ID "${dto.contractorId}" not found`);
+    if (dto.contractorId !== undefined) {
+      if (dto.contractorId) {
+        const contractor = await this.prisma.contractor.findUnique({
+          where: { id: dto.contractorId },
+        });
+        if (!contractor || contractor.userId !== userId) {
+          throw new NotFoundException(`Contractor with ID "${dto.contractorId}" not found`);
+        }
+        updateData.contractorId = dto.contractorId;
+      } else {
+        updateData.contractorId = null;
       }
-      updateData.contractorId = dto.contractorId;
     }
     if (dto.siteId) {
       const site = await this.prisma.site.findUnique({

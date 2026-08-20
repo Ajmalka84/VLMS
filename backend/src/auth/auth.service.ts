@@ -3,6 +3,7 @@ import {
   UnauthorizedException,
   ForbiddenException,
   NotFoundException,
+  BadRequestException,
 } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
 import * as bcrypt from 'bcryptjs';
@@ -24,11 +25,11 @@ export class AuthService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly jwtService: JwtService,
-  ) {}
+  ) { }
 
   async validateUser(dto: LoginDto): Promise<UserAuthProfile> {
-    const superAdminMobile = process.env.SUPER_ADMIN_MOBILE || '9999999999';
-    const superAdminPassword = process.env.SUPER_ADMIN_PASSWORD || 'Admin@12345';
+    const superAdminMobile = process.env.SUPER_ADMIN_MOBILE || 'ajmalka84@gmail.com';
+    const superAdminPassword = process.env.SUPER_ADMIN_PASSWORD || '05thDec1995';
 
     // 1. Check Super Admin Credentials
     if (dto.mobile === superAdminMobile) {
@@ -95,7 +96,7 @@ export class AuthService {
     if (role === 'SUPER_ADMIN') {
       return {
         id: userId,
-        mobile: process.env.SUPER_ADMIN_MOBILE || '9999999999',
+        mobile: process.env.SUPER_ADMIN_MOBILE || 'ajmalka84@gmail.com',
         role: 'SUPER_ADMIN',
         businessName: 'VLMS SaaS Admin',
         isActive: true,
@@ -126,6 +127,35 @@ export class AuthService {
     return {
       ...user,
       role: 'USER' as UserRole,
+    };
+  }
+
+  async changePassword(userId: string, oldPass: string, newPass: string) {
+    const user = await this.prisma.user.findUnique({
+      where: { id: userId },
+    });
+
+    if (!user) {
+      throw new NotFoundException('User account not found');
+    }
+
+    const isMatch = await bcrypt.compare(oldPass, user.passwordHash);
+    if (!isMatch) {
+      throw new BadRequestException('Current password is incorrect');
+    }
+
+    if (oldPass === newPass) {
+      throw new BadRequestException('New password must be different from current password');
+    }
+
+    const newHash = await bcrypt.hash(newPass, 10);
+    await this.prisma.user.update({
+      where: { id: userId },
+      data: { passwordHash: newHash },
+    });
+
+    return {
+      message: 'Password successfully changed',
     };
   }
 }

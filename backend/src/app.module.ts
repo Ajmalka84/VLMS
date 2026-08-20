@@ -13,6 +13,7 @@ import { ReportsModule } from './reports/reports.module';
 import { SitesModule } from './sites/sites.module';
 import { VehicleTypesModule } from './vehicle-types/vehicle-types.module';
 import { VehiclesModule } from './vehicles/vehicles.module';
+import { MasterDataModule } from './master-data/master-data.module';
 
 @Module({
   imports: [
@@ -29,6 +30,7 @@ import { VehiclesModule } from './vehicles/vehicles.module';
     RatesModule,
     LoadsModule,
     ReportsModule,
+    MasterDataModule,
   ],
   controllers: [AppController],
 })

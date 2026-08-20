@@ -3,6 +3,7 @@ import {
   NotFoundException,
   ForbiddenException,
   ConflictException,
+  BadRequestException,
 } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { CreateVehicleDto } from './dto/create-vehicle.dto';
@@ -23,7 +24,7 @@ export class VehiclesService {
       );
     }
 
-    const cleanVehicleNumber = dto.vehicleNumber.trim().toUpperCase();
+    const cleanVehicleNumber = dto.vehicleNumber.replace(/[^a-zA-Z0-9]/g, '').toUpperCase();
 
     // 2. Verify vehicle uniqueness for this customer
     const existing = await this.prisma.vehicle.findUnique({
@@ -112,7 +113,7 @@ export class VehiclesService {
     }
 
     if (dto.vehicleNumber) {
-      const cleanVehicleNumber = dto.vehicleNumber.trim().toUpperCase();
+      const cleanVehicleNumber = dto.vehicleNumber.replace(/[^a-zA-Z0-9]/g, '').toUpperCase();
       if (cleanVehicleNumber !== current.vehicleNumber) {
         const existing = await this.prisma.vehicle.findUnique({
           where: {
@@ -141,7 +142,17 @@ export class VehiclesService {
   }
 
   async remove(userId: string, id: string) {
-    await this.findOne(userId, id);
+    const vehicle = await this.findOne(userId, id);
+
+    const linkedLoadsCount = await this.prisma.load.count({
+      where: { vehicleId: id, deletedAt: null },
+    });
+
+    if (linkedLoadsCount > 0) {
+      throw new BadRequestException(
+        `Cannot delete vehicle "${vehicle.vehicleNumber}" because it is linked to ${linkedLoadsCount} active dispatch load(s). Delete or reassign those load entries first.`,
+      );
+    }
 
     return this.prisma.vehicle.delete({
       where: { id },

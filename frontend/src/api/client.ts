@@ -69,6 +69,18 @@ export async function apiClient<T>(
   }
 
   if (!response.ok) {
+    if (response.status === 401) {
+      const isAuthEndpoint =
+        endpoint.includes('/auth/login') ||
+        endpoint.includes('/auth/reset-password');
+      if (!isAuthEndpoint) {
+        localStorage.removeItem(AUTH_TOKEN_KEY);
+        if (typeof window !== 'undefined') {
+          window.dispatchEvent(new CustomEvent('vlms:unauthorized'));
+        }
+      }
+    }
+
     const errorMessage =
       data && typeof data === 'object' && 'message' in data
         ? data.message

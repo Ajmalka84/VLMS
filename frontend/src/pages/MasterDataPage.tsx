@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import {
   MapPin,
   Truck,
@@ -55,6 +56,7 @@ import {
   updateMaterialTypeApi,
   deleteMaterialTypeApi,
 } from '../api/masterData';
+import { useMasterCache } from '../context/MasterCacheContext';
 
 type CustomerTab = 'sites' | 'vehicles' | 'contractors' | 'rates';
 type AdminTab = 'vehicle-types' | 'material-types';
@@ -62,19 +64,45 @@ type AdminTab = 'vehicle-types' | 'material-types';
 export const MasterDataPage: React.FC = () => {
   const { user } = useAuth();
   const isSuperAdmin = user?.role === 'SUPER_ADMIN';
+  const cache = useMasterCache();
 
-  const [customerTab, setCustomerTab] = useState<CustomerTab>('sites');
+  const [searchParams, setSearchParams] = useSearchParams();
+  const tabFromUrl = searchParams.get('tab') as CustomerTab | null;
+
+  const [customerTab, setCustomerTab] = useState<CustomerTab>(
+    tabFromUrl && ['sites', 'vehicles', 'contractors', 'rates'].includes(tabFromUrl)
+      ? tabFromUrl
+      : 'sites'
+  );
   const [adminTab, setAdminTab] = useState<AdminTab>('vehicle-types');
 
-  // Master Data State
-  const [sites, setSites] = useState<Site[]>([]);
-  const [vehicles, setVehicles] = useState<Vehicle[]>([]);
-  const [contractors, setContractors] = useState<Contractor[]>([]);
-  const [rates, setRates] = useState<Rate[]>([]);
-  const [vehicleTypes, setVehicleTypes] = useState<VehicleType[]>([]);
-  const [materialTypes, setMaterialTypes] = useState<MaterialType[]>([]);
+  useEffect(() => {
+    const t = searchParams.get('tab') as CustomerTab | null;
+    if (t && ['sites', 'vehicles', 'contractors', 'rates'].includes(t)) {
+      setCustomerTab(t);
+    }
+  }, [searchParams]);
 
-  const [loading, setLoading] = useState(true);
+  const handleCustomerTabChange = (newTab: CustomerTab) => {
+    setCustomerTab(newTab);
+    setSearchParams({ tab: newTab });
+    setSearch('');
+  };
+
+  // Super Admin Local Master Data State (for global types)
+  const [adminVehicleTypes, setAdminVehicleTypes] = useState<VehicleType[]>([]);
+  const [adminMaterialTypes, setAdminMaterialTypes] = useState<MaterialType[]>([]);
+  const [adminLoading, setAdminLoading] = useState(false);
+
+  // Unified Data Accessors (Customer uses cached bundle; Admin uses admin state)
+  const sites = isSuperAdmin ? [] : cache.sites;
+  const vehicles = isSuperAdmin ? [] : cache.vehicles;
+  const contractors = isSuperAdmin ? [] : cache.contractors;
+  const rates = isSuperAdmin ? [] : cache.rates;
+  const vehicleTypes = isSuperAdmin ? adminVehicleTypes : cache.vehicleTypes;
+  const materialTypes = isSuperAdmin ? adminMaterialTypes : cache.materialTypes;
+  const loading = isSuperAdmin ? adminLoading : (!cache.isInitialized || cache.isLoading);
+
   const [search, setSearch] = useState('');
   const [notification, setNotification] = useState<{
     type: 'success' | 'error';
@@ -113,52 +141,48 @@ export const MasterDataPage: React.FC = () => {
   const [vtypeForm, setVtypeForm] = useState({ name: '' });
   const [mtypeForm, setMtypeForm] = useState({ name: '' });
   const [submitting, setSubmitting] = useState(false);
+  const [formError, setFormError] = useState<string | null>(null);
 
   const showNotify = (type: 'success' | 'error', message: string) => {
     setNotification({ type, message });
     setTimeout(() => setNotification(null), 4000);
   };
 
-  const loadAllData = async () => {
-    setLoading(true);
-    try {
-      if (isSuperAdmin) {
+  const loadAllData = async (force = false) => {
+    if (isSuperAdmin) {
+      setAdminLoading(true);
+      try {
         const [vtypes, mtypes] = await Promise.all([
           getVehicleTypesApi(),
           getMaterialTypesApi(),
         ]);
-        setVehicleTypes(vtypes);
-        setMaterialTypes(mtypes);
-      } else {
-        const [sitesData, vehiclesData, contractorsData, ratesData, vtypes, mtypes] =
-          await Promise.all([
-            getSitesApi(),
-            getVehiclesApi(),
-            getContractorsApi(),
-            getRatesApi(),
-            getVehicleTypesApi(),
-            getMaterialTypesApi(),
-          ]);
-        setSites(sitesData);
-        setVehicles(vehiclesData);
-        setContractors(contractorsData);
-        setRates(ratesData);
-        setVehicleTypes(vtypes);
-        setMaterialTypes(mtypes);
+        setAdminVehicleTypes(vtypes);
+        setAdminMaterialTypes(mtypes);
+      } catch (err: any) {
+        showNotify('error', err.message || 'Failed to load master data');
+      } finally {
+        setAdminLoading(false);
       }
-    } catch (err: any) {
-      showNotify('error', err.message || 'Failed to load master data');
-    } finally {
-      setLoading(false);
+    } else {
+      try {
+        await cache.refreshMasterData(force);
+      } catch (err: any) {
+        showNotify('error', err.message || 'Failed to load master data');
+      }
     }
   };
 
   useEffect(() => {
-    void loadAllData();
-  }, [isSuperAdmin]);
+    if (isSuperAdmin) {
+      void loadAllData();
+    } else if (!cache.isInitialized) {
+      void cache.refreshMasterData();
+    }
+  }, [isSuperAdmin, cache.isInitialized]);
 
   // ----------------- MODAL HANDLERS -----------------
   const openSiteModal = (site?: Site) => {
+    setFormError(null);
     if (site) {
       setActiveItem(site);
       setSiteForm({ siteName: site.siteName, location: site.location, pincode: site.pincode });
@@ -171,6 +195,7 @@ export const MasterDataPage: React.FC = () => {
   };
 
   const openVehicleModal = (veh?: Vehicle) => {
+    setFormError(null);
     if (veh) {
       setActiveItem(veh);
       setVehicleForm({ vehicleNumber: veh.vehicleNumber, vehicleTypeId: veh.vehicleTypeId });
@@ -186,6 +211,7 @@ export const MasterDataPage: React.FC = () => {
   };
 
   const openContractorModal = (c?: Contractor) => {
+    setFormError(null);
     if (c) {
       setActiveItem(c);
       setContractorForm({ name: c.name, mobile: c.mobile });
@@ -198,6 +224,7 @@ export const MasterDataPage: React.FC = () => {
   };
 
   const openRateModal = (r?: Rate) => {
+    setFormError(null);
     if (r) {
       setActiveItem(r);
       setRateForm({
@@ -220,6 +247,7 @@ export const MasterDataPage: React.FC = () => {
   };
 
   const openVTypeModal = (vt?: VehicleType) => {
+    setFormError(null);
     if (vt) {
       setActiveItem(vt);
       setVtypeForm({ name: vt.name });
@@ -232,6 +260,7 @@ export const MasterDataPage: React.FC = () => {
   };
 
   const openMTypeModal = (mt?: MaterialType) => {
+    setFormError(null);
     if (mt) {
       setActiveItem(mt);
       setMtypeForm({ name: mt.name });
@@ -246,19 +275,60 @@ export const MasterDataPage: React.FC = () => {
   // ----------------- SUBMIT HANDLERS -----------------
   const handleSiteSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    setFormError(null);
+
+    const cleanSiteName = siteForm.siteName.trim();
+    if (!cleanSiteName || cleanSiteName.length < 2) {
+      const msg = 'Site name must be at least 2 characters.';
+      setFormError(msg);
+      showNotify('error', msg);
+      return;
+    }
+
+    const cleanLocation = siteForm.location.trim();
+    if (!cleanLocation || cleanLocation.length < 2) {
+      const msg = 'Location must be at least 2 characters.';
+      setFormError(msg);
+      showNotify('error', msg);
+      return;
+    }
+
+    const cleanPincode = siteForm.pincode.replace(/\D/g, '').slice(0, 6);
+    if (!/^[1-9][0-9]{5}$/.test(cleanPincode)) {
+      const msg = 'Pincode must be a valid 6-digit Indian postal code (e.g. 682001).';
+      setFormError(msg);
+      showNotify('error', msg);
+      return;
+    }
+
+    const isDuplicate = sites.some(
+      (s) =>
+        s.siteName.trim().toLowerCase() === cleanSiteName.toLowerCase() &&
+        (modalMode === 'site-add' || s.id !== activeItem?.id),
+    );
+    if (isDuplicate) {
+      const msg = `A site named "${cleanSiteName}" already exists in your account.`;
+      setFormError(msg);
+      showNotify('error', msg);
+      return;
+    }
+
     setSubmitting(true);
     try {
       if (modalMode === 'site-add') {
-        await createSiteApi(siteForm);
+        await createSiteApi({ siteName: cleanSiteName, location: cleanLocation, pincode: cleanPincode });
         showNotify('success', 'Site added successfully!');
       } else {
-        await updateSiteApi(activeItem.id, siteForm);
+        await updateSiteApi(activeItem.id, { siteName: cleanSiteName, location: cleanLocation, pincode: cleanPincode });
         showNotify('success', 'Site updated successfully!');
       }
       setModalMode(null);
+      setFormError(null);
       void loadAllData();
     } catch (err: any) {
-      showNotify('error', err.message || 'Action failed');
+      const msg = err.message || 'Action failed';
+      setFormError(msg);
+      showNotify('error', msg);
     } finally {
       setSubmitting(false);
     }
@@ -294,19 +364,51 @@ export const MasterDataPage: React.FC = () => {
 
   const handleVehicleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    setFormError(null);
+
+    const cleanVehicleNumber = vehicleForm.vehicleNumber.replace(/[^a-zA-Z0-9]/g, '').toUpperCase();
+    if (!cleanVehicleNumber || cleanVehicleNumber.length < 4 || cleanVehicleNumber.length > 15) {
+      const msg = 'Vehicle number must contain 4 to 15 alphanumeric characters (letters and numbers only, no spaces or dashes).';
+      setFormError(msg);
+      showNotify('error', msg);
+      return;
+    }
+
+    if (!vehicleForm.vehicleTypeId) {
+      const msg = 'Please select a valid vehicle category.';
+      setFormError(msg);
+      showNotify('error', msg);
+      return;
+    }
+
+    const isDuplicate = vehicles.some(
+      (v) =>
+        v.vehicleNumber.replace(/[^a-zA-Z0-9]/g, '').toUpperCase() === cleanVehicleNumber &&
+        (modalMode === 'vehicle-add' || v.id !== activeItem?.id),
+    );
+    if (isDuplicate) {
+      const msg = `Vehicle "${cleanVehicleNumber}" is already registered in your fleet.`;
+      setFormError(msg);
+      showNotify('error', msg);
+      return;
+    }
+
     setSubmitting(true);
     try {
       if (modalMode === 'vehicle-add') {
-        await createVehicleApi(vehicleForm);
+        await createVehicleApi({ vehicleNumber: cleanVehicleNumber, vehicleTypeId: vehicleForm.vehicleTypeId });
         showNotify('success', 'Vehicle registered successfully!');
       } else {
-        await updateVehicleApi(activeItem.id, vehicleForm);
+        await updateVehicleApi(activeItem.id, { vehicleNumber: cleanVehicleNumber, vehicleTypeId: vehicleForm.vehicleTypeId });
         showNotify('success', 'Vehicle updated successfully!');
       }
       setModalMode(null);
+      setFormError(null);
       void loadAllData();
     } catch (err: any) {
-      showNotify('error', err.message || 'Action failed');
+      const msg = err.message || 'Action failed';
+      setFormError(msg);
+      showNotify('error', msg);
     } finally {
       setSubmitting(false);
     }
@@ -333,19 +435,54 @@ export const MasterDataPage: React.FC = () => {
 
   const handleContractorSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    setFormError(null);
+
+    const cleanName = contractorForm.name.trim();
+    const cleanMobile = contractorForm.mobile.replace(/\D/g, '').slice(0, 10);
+
+    if (!cleanName || cleanName.length < 2) {
+      const msg = 'Contractor name must be at least 2 characters.';
+      setFormError(msg);
+      showNotify('error', msg);
+      return;
+    }
+
+    if (!/^[0-9]{10}$/.test(cleanMobile)) {
+      const msg = 'Mobile number must be a valid 10-digit number.';
+      setFormError(msg);
+      showNotify('error', msg);
+      return;
+    }
+
+    const isDuplicate = contractors.some(
+      (c) =>
+        c.mobile.trim() === cleanMobile &&
+        (modalMode === 'contractor-add' || c.id !== activeItem?.id),
+    );
+    if (isDuplicate) {
+      const existing = contractors.find((c) => c.mobile.trim() === cleanMobile);
+      const msg = `A contractor with mobile number "${cleanMobile}" already exists (${existing?.name}).`;
+      setFormError(msg);
+      showNotify('error', msg);
+      return;
+    }
+
     setSubmitting(true);
     try {
       if (modalMode === 'contractor-add') {
-        await createContractorApi(contractorForm);
+        await createContractorApi({ name: cleanName, mobile: cleanMobile });
         showNotify('success', 'Contractor added successfully!');
       } else {
-        await updateContractorApi(activeItem.id, contractorForm);
+        await updateContractorApi(activeItem.id, { name: cleanName, mobile: cleanMobile });
         showNotify('success', 'Contractor updated successfully!');
       }
       setModalMode(null);
+      setFormError(null);
       void loadAllData();
     } catch (err: any) {
-      showNotify('error', err.message || 'Action failed');
+      const msg = err.message || 'Action failed';
+      setFormError(msg);
+      showNotify('error', msg);
     } finally {
       setSubmitting(false);
     }
@@ -372,13 +509,40 @@ export const MasterDataPage: React.FC = () => {
 
   const handleRateSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    setFormError(null);
+
+    const amt = parseFloat(rateForm.amount);
+    if (isNaN(amt) || amt <= 0) {
+      const msg = 'Please enter a valid rate amount greater than 0.';
+      setFormError(msg);
+      showNotify('error', msg);
+      return;
+    }
+
+    if (!rateForm.siteId || !rateForm.vehicleTypeId || !rateForm.materialTypeId) {
+      const msg = 'Please select a Site, Vehicle Category, and Material Type.';
+      setFormError(msg);
+      showNotify('error', msg);
+      return;
+    }
+
+    if (modalMode === 'rate-add') {
+      const isDuplicate = rates.some(
+        (r) =>
+          r.siteId === rateForm.siteId &&
+          r.vehicleTypeId === rateForm.vehicleTypeId &&
+          r.materialTypeId === rateForm.materialTypeId,
+      );
+      if (isDuplicate) {
+        const msg = 'A rate is already configured for this Site, Vehicle Category, and Material combination. Please edit the existing rate instead.';
+        setFormError(msg);
+        showNotify('error', msg);
+        return;
+      }
+    }
+
     setSubmitting(true);
     try {
-      const amt = parseFloat(rateForm.amount);
-      if (isNaN(amt) || amt <= 0) {
-        throw new Error('Please enter a valid rate amount greater than 0');
-      }
-
       if (modalMode === 'rate-add') {
         await createRateApi({
           siteId: rateForm.siteId,
@@ -392,9 +556,12 @@ export const MasterDataPage: React.FC = () => {
         showNotify('success', 'Rate amount updated successfully!');
       }
       setModalMode(null);
+      setFormError(null);
       void loadAllData();
     } catch (err: any) {
-      showNotify('error', err.message || 'Action failed');
+      const msg = err.message || 'Action failed';
+      setFormError(msg);
+      showNotify('error', msg);
     } finally {
       setSubmitting(false);
     }
@@ -421,19 +588,44 @@ export const MasterDataPage: React.FC = () => {
 
   const handleVTypeSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    setFormError(null);
+
+    const cleanName = vtypeForm.name.trim();
+    if (!cleanName || cleanName.length < 2) {
+      const msg = 'Category name must be at least 2 characters.';
+      setFormError(msg);
+      showNotify('error', msg);
+      return;
+    }
+
+    const isDuplicate = vehicleTypes.some(
+      (vt) =>
+        vt.name.trim().toLowerCase() === cleanName.toLowerCase() &&
+        (modalMode === 'vtype-add' || vt.id !== activeItem?.id),
+    );
+    if (isDuplicate) {
+      const msg = `Vehicle category "${cleanName}" already exists.`;
+      setFormError(msg);
+      showNotify('error', msg);
+      return;
+    }
+
     setSubmitting(true);
     try {
       if (modalMode === 'vtype-add') {
-        await createVehicleTypeApi(vtypeForm);
-        showNotify('success', 'Vehicle type added successfully!');
+        await createVehicleTypeApi({ name: cleanName });
+        showNotify('success', 'Vehicle category added successfully!');
       } else {
-        await updateVehicleTypeApi(activeItem.id, vtypeForm);
-        showNotify('success', 'Vehicle type updated successfully!');
+        await updateVehicleTypeApi(activeItem.id, { name: cleanName });
+        showNotify('success', 'Vehicle category updated successfully!');
       }
       setModalMode(null);
+      setFormError(null);
       void loadAllData();
     } catch (err: any) {
-      showNotify('error', err.message || 'Action failed');
+      const msg = err.message || 'Action failed';
+      setFormError(msg);
+      showNotify('error', msg);
     } finally {
       setSubmitting(false);
     }
@@ -460,19 +652,44 @@ export const MasterDataPage: React.FC = () => {
 
   const handleMTypeSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    setFormError(null);
+
+    const cleanName = mtypeForm.name.trim();
+    if (!cleanName || cleanName.length < 2) {
+      const msg = 'Material name must be at least 2 characters.';
+      setFormError(msg);
+      showNotify('error', msg);
+      return;
+    }
+
+    const isDuplicate = materialTypes.some(
+      (mt) =>
+        mt.name.trim().toLowerCase() === cleanName.toLowerCase() &&
+        (modalMode === 'mtype-add' || mt.id !== activeItem?.id),
+    );
+    if (isDuplicate) {
+      const msg = `Material type "${cleanName}" already exists.`;
+      setFormError(msg);
+      showNotify('error', msg);
+      return;
+    }
+
     setSubmitting(true);
     try {
       if (modalMode === 'mtype-add') {
-        await createMaterialTypeApi(mtypeForm);
+        await createMaterialTypeApi({ name: cleanName });
         showNotify('success', 'Material type added successfully!');
       } else {
-        await updateMaterialTypeApi(activeItem.id, mtypeForm);
+        await updateMaterialTypeApi(activeItem.id, { name: cleanName });
         showNotify('success', 'Material type updated successfully!');
       }
       setModalMode(null);
+      setFormError(null);
       void loadAllData();
     } catch (err: any) {
-      showNotify('error', err.message || 'Action failed');
+      const msg = err.message || 'Action failed';
+      setFormError(msg);
+      showNotify('error', msg);
     } finally {
       setSubmitting(false);
     }
@@ -501,38 +718,22 @@ export const MasterDataPage: React.FC = () => {
     <div className="space-y-6">
       {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-        <div>
-          <div className="flex items-center gap-2">
-            <div className="p-2 rounded-xl bg-amber-500/10 text-amber-400 border border-amber-500/20">
-              <Layers className="w-5 h-5" />
-            </div>
-            <h1 className="text-xl sm:text-2xl font-extrabold text-white">
-              {isSuperAdmin ? 'Global Master Configuration' : 'Master Data Configuration'}
-            </h1>
+        <div className="flex items-center gap-2">
+          <div className="p-2 rounded-xl bg-amber-500/10 text-amber-400 border border-amber-500/20">
+            <Layers className="w-5 h-5" />
           </div>
-          <p className="text-xs sm:text-sm text-slate-400 mt-1">
-            {isSuperAdmin
-              ? 'Configure global vehicle categories and material specifications used across the platform.'
-              : 'Manage operational sites, fleet vehicles, C/O contractors, and automated rate matrices.'}
-          </p>
+          <h1 className="text-xl sm:text-2xl font-extrabold text-white">
+            {isSuperAdmin ? 'Global Master Configuration' : 'Master Data Configuration'}
+          </h1>
         </div>
 
         <div className="flex items-center gap-2">
-          <button
-            onClick={() => void loadAllData()}
-            disabled={loading}
-            className="p-2.5 rounded-xl bg-slate-900 border border-slate-800 text-slate-300 hover:text-white hover:border-slate-700 transition-all cursor-pointer"
-            title="Refresh Data"
-          >
-            <RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} />
-          </button>
-
           {!isSuperAdmin && (
             <>
               {customerTab === 'sites' && (
                 <button
                   onClick={() => openSiteModal()}
-                  className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl bg-amber-500 hover:bg-amber-400 text-slate-950 font-bold text-sm shadow-lg shadow-amber-500/20 transition-all cursor-pointer"
+                  className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl bg-amber-500 hover:bg-amber-400 text-slate-950 font-bold text-sm shadow-lg shadow-amber-500/20 transition-all cursor-pointer select-none touch-manipulation"
                 >
                   <Plus className="w-4 h-4" /> Add Site
                 </button>
@@ -540,7 +741,7 @@ export const MasterDataPage: React.FC = () => {
               {customerTab === 'vehicles' && (
                 <button
                   onClick={() => openVehicleModal()}
-                  className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl bg-amber-500 hover:bg-amber-400 text-slate-950 font-bold text-sm shadow-lg shadow-amber-500/20 transition-all cursor-pointer"
+                  className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl bg-amber-500 hover:bg-amber-400 text-slate-950 font-bold text-sm shadow-lg shadow-amber-500/20 transition-all cursor-pointer select-none touch-manipulation"
                 >
                   <Plus className="w-4 h-4" /> Add Vehicle
                 </button>
@@ -548,7 +749,7 @@ export const MasterDataPage: React.FC = () => {
               {customerTab === 'contractors' && (
                 <button
                   onClick={() => openContractorModal()}
-                  className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl bg-amber-500 hover:bg-amber-400 text-slate-950 font-bold text-sm shadow-lg shadow-amber-500/20 transition-all cursor-pointer"
+                  className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl bg-amber-500 hover:bg-amber-400 text-slate-950 font-bold text-sm shadow-lg shadow-amber-500/20 transition-all cursor-pointer select-none touch-manipulation"
                 >
                   <Plus className="w-4 h-4" /> Add Contractor
                 </button>
@@ -557,7 +758,7 @@ export const MasterDataPage: React.FC = () => {
                 <button
                   onClick={() => openRateModal()}
                   disabled={sites.length === 0 || vehicleTypes.length === 0 || materialTypes.length === 0}
-                  className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl bg-amber-500 hover:bg-amber-400 disabled:opacity-50 text-slate-950 font-bold text-sm shadow-lg shadow-amber-500/20 transition-all cursor-pointer"
+                  className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl bg-amber-500 hover:bg-amber-400 disabled:opacity-50 text-slate-950 font-bold text-sm shadow-lg shadow-amber-500/20 transition-all cursor-pointer select-none touch-manipulation"
                 >
                   <Plus className="w-4 h-4" /> Configure Rate
                 </button>
@@ -570,7 +771,7 @@ export const MasterDataPage: React.FC = () => {
               {adminTab === 'vehicle-types' && (
                 <button
                   onClick={() => openVTypeModal()}
-                  className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl bg-amber-500 hover:bg-amber-400 text-slate-950 font-bold text-sm shadow-lg shadow-amber-500/20 transition-all cursor-pointer"
+                  className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl bg-amber-500 hover:bg-amber-400 text-slate-950 font-bold text-sm shadow-lg shadow-amber-500/20 transition-all cursor-pointer select-none touch-manipulation"
                 >
                   <Plus className="w-4 h-4" /> Add Vehicle Type
                 </button>
@@ -578,7 +779,7 @@ export const MasterDataPage: React.FC = () => {
               {adminTab === 'material-types' && (
                 <button
                   onClick={() => openMTypeModal()}
-                  className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl bg-amber-500 hover:bg-amber-400 text-slate-950 font-bold text-sm shadow-lg shadow-amber-500/20 transition-all cursor-pointer"
+                  className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl bg-amber-500 hover:bg-amber-400 text-slate-950 font-bold text-sm shadow-lg shadow-amber-500/20 transition-all cursor-pointer select-none touch-manipulation"
                 >
                   <Plus className="w-4 h-4" /> Add Material Type
                 </button>
@@ -611,11 +812,8 @@ export const MasterDataPage: React.FC = () => {
         {!isSuperAdmin ? (
           <>
             <button
-              onClick={() => {
-                setCustomerTab('sites');
-                setSearch('');
-              }}
-              className={`flex items-center gap-2 px-4 py-2 rounded-xl text-xs sm:text-sm font-bold transition-all whitespace-nowrap cursor-pointer ${
+              onClick={() => handleCustomerTabChange('sites')}
+              className={`flex items-center gap-2 px-4 py-2 rounded-xl text-xs sm:text-sm font-bold transition-all whitespace-nowrap cursor-pointer select-none touch-manipulation ${
                 customerTab === 'sites'
                   ? 'bg-amber-500 text-slate-950 shadow-md shadow-amber-500/20'
                   : 'text-slate-400 hover:text-slate-200'
@@ -624,11 +822,8 @@ export const MasterDataPage: React.FC = () => {
               <MapPin className="w-4 h-4" /> Sites ({sites.length})
             </button>
             <button
-              onClick={() => {
-                setCustomerTab('vehicles');
-                setSearch('');
-              }}
-              className={`flex items-center gap-2 px-4 py-2 rounded-xl text-xs sm:text-sm font-bold transition-all whitespace-nowrap cursor-pointer ${
+              onClick={() => handleCustomerTabChange('vehicles')}
+              className={`flex items-center gap-2 px-4 py-2 rounded-xl text-xs sm:text-sm font-bold transition-all whitespace-nowrap cursor-pointer select-none touch-manipulation ${
                 customerTab === 'vehicles'
                   ? 'bg-amber-500 text-slate-950 shadow-md shadow-amber-500/20'
                   : 'text-slate-400 hover:text-slate-200'
@@ -637,11 +832,8 @@ export const MasterDataPage: React.FC = () => {
               <Truck className="w-4 h-4" /> Fleet Vehicles ({vehicles.length})
             </button>
             <button
-              onClick={() => {
-                setCustomerTab('contractors');
-                setSearch('');
-              }}
-              className={`flex items-center gap-2 px-4 py-2 rounded-xl text-xs sm:text-sm font-bold transition-all whitespace-nowrap cursor-pointer ${
+              onClick={() => handleCustomerTabChange('contractors')}
+              className={`flex items-center gap-2 px-4 py-2 rounded-xl text-xs sm:text-sm font-bold transition-all whitespace-nowrap cursor-pointer select-none touch-manipulation ${
                 customerTab === 'contractors'
                   ? 'bg-amber-500 text-slate-950 shadow-md shadow-amber-500/20'
                   : 'text-slate-400 hover:text-slate-200'
@@ -650,11 +842,8 @@ export const MasterDataPage: React.FC = () => {
               <UserCheck className="w-4 h-4" /> Contractors / C/Os ({contractors.length})
             </button>
             <button
-              onClick={() => {
-                setCustomerTab('rates');
-                setSearch('');
-              }}
-              className={`flex items-center gap-2 px-4 py-2 rounded-xl text-xs sm:text-sm font-bold transition-all whitespace-nowrap cursor-pointer ${
+              onClick={() => handleCustomerTabChange('rates')}
+              className={`flex items-center gap-2 px-4 py-2 rounded-xl text-xs sm:text-sm font-bold transition-all whitespace-nowrap cursor-pointer select-none touch-manipulation ${
                 customerTab === 'rates'
                   ? 'bg-amber-500 text-slate-950 shadow-md shadow-amber-500/20'
                   : 'text-slate-400 hover:text-slate-200'
@@ -1050,52 +1239,67 @@ export const MasterDataPage: React.FC = () => {
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/80 backdrop-blur-sm p-4">
           <Card variant="highlight" className="w-full max-w-md p-6 space-y-4 relative">
             <button
-              onClick={() => setModalMode(null)}
-              className="absolute right-4 top-4 text-slate-400 hover:text-white"
+              onClick={() => { setModalMode(null); setFormError(null); }}
+              className="absolute right-4 top-4 text-slate-400 hover:text-white cursor-pointer"
             >
               <X className="w-5 h-5" />
             </button>
             <h2 className="text-lg font-bold text-white">
-              {modalMode === 'site-add' ? 'Add New Site' : 'Edit Site'}
+              {modalMode === 'site-add' ? 'Add New Quarry / Yard Site' : 'Edit Site Details'}
             </h2>
+
+            {formError && (
+              <div className="p-3.5 rounded-xl bg-rose-500/15 border border-rose-500/40 text-rose-200 text-xs font-semibold flex items-center gap-2.5 animate-fade-in">
+                <AlertTriangle className="w-4 h-4 text-rose-400 shrink-0" />
+                <span className="leading-snug">{formError}</span>
+              </div>
+            )}
+
             <form onSubmit={handleSiteSubmit} className="space-y-4">
               <div>
-                <label className="block text-xs font-semibold text-slate-300 mb-1">Site Name</label>
+                <label className="block text-xs font-semibold text-slate-300 mb-1">
+                  Site Name <span className="text-amber-400">*</span>
+                </label>
                 <input
                   type="text"
                   required
-                  placeholder="e.g. Quarry Site Alpha"
+                  placeholder="e.g. Kolenchery Crusher Unit"
                   value={siteForm.siteName}
-                  onChange={(e) => setSiteForm({ ...siteForm, siteName: e.target.value })}
+                  onChange={(e) => { setSiteForm({ ...siteForm, siteName: e.target.value }); setFormError(null); }}
                   className="w-full px-3.5 py-2.5 rounded-xl bg-slate-900 border border-slate-800 text-sm text-slate-100 focus:outline-none focus:border-amber-500"
                 />
               </div>
               <div>
-                <label className="block text-xs font-semibold text-slate-300 mb-1">Location</label>
+                <label className="block text-xs font-semibold text-slate-300 mb-1">
+                  Location / Area <span className="text-amber-400">*</span>
+                </label>
                 <input
                   type="text"
                   required
-                  placeholder="e.g. Bangalore North"
+                  placeholder="e.g. Kolenchery, Ernakulam"
                   value={siteForm.location}
-                  onChange={(e) => setSiteForm({ ...siteForm, location: e.target.value })}
+                  onChange={(e) => { setSiteForm({ ...siteForm, location: e.target.value }); setFormError(null); }}
                   className="w-full px-3.5 py-2.5 rounded-xl bg-slate-900 border border-slate-800 text-sm text-slate-100 focus:outline-none focus:border-amber-500"
                 />
               </div>
               <div>
-                <label className="block text-xs font-semibold text-slate-300 mb-1">Pincode</label>
+                <label className="block text-xs font-semibold text-slate-300 mb-1">
+                  6-Digit Postal Pincode <span className="text-amber-400">*</span>
+                </label>
                 <input
                   type="text"
                   required
-                  placeholder="e.g. 560064"
+                  maxLength={6}
+                  placeholder="e.g. 682311"
                   value={siteForm.pincode}
-                  onChange={(e) => setSiteForm({ ...siteForm, pincode: e.target.value })}
-                  className="w-full px-3.5 py-2.5 rounded-xl bg-slate-900 border border-slate-800 text-sm text-slate-100 focus:outline-none focus:border-amber-500"
+                  onChange={(e) => { setSiteForm({ ...siteForm, pincode: e.target.value.replace(/\D/g, '').slice(0, 6) }); setFormError(null); }}
+                  className="w-full px-3.5 py-2.5 rounded-xl bg-slate-900 border border-slate-800 text-sm text-slate-100 focus:outline-none focus:border-amber-500 font-mono"
                 />
               </div>
               <div className="flex justify-end gap-2 pt-2">
                 <button
                   type="button"
-                  onClick={() => setModalMode(null)}
+                  onClick={() => { setModalMode(null); setFormError(null); }}
                   className="px-4 py-2 rounded-xl bg-slate-800 text-slate-300 text-sm font-semibold hover:bg-slate-700 cursor-pointer"
                 >
                   Cancel
@@ -1103,7 +1307,7 @@ export const MasterDataPage: React.FC = () => {
                 <button
                   type="submit"
                   disabled={submitting}
-                  className="px-5 py-2 rounded-xl bg-amber-500 hover:bg-amber-400 text-slate-950 font-bold text-sm cursor-pointer"
+                  className="px-5 py-2 rounded-xl bg-amber-500 hover:bg-amber-400 text-slate-950 font-bold text-sm cursor-pointer disabled:opacity-50"
                 >
                   {submitting ? 'Saving...' : 'Save Site'}
                 </button>
@@ -1118,29 +1322,43 @@ export const MasterDataPage: React.FC = () => {
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/80 backdrop-blur-sm p-4">
           <Card variant="highlight" className="w-full max-w-md p-6 space-y-4 relative">
             <button
-              onClick={() => setModalMode(null)}
-              className="absolute right-4 top-4 text-slate-400 hover:text-white"
+              onClick={() => { setModalMode(null); setFormError(null); }}
+              className="absolute right-4 top-4 text-slate-400 hover:text-white cursor-pointer"
             >
               <X className="w-5 h-5" />
             </button>
             <h2 className="text-lg font-bold text-white">
-              {modalMode === 'vehicle-add' ? 'Register New Fleet Vehicle' : 'Edit Vehicle'}
+              {modalMode === 'vehicle-add' ? 'Register Fleet Vehicle' : 'Edit Vehicle'}
             </h2>
+
+            {formError && (
+              <div className="p-3.5 rounded-xl bg-rose-500/15 border border-rose-500/40 text-rose-200 text-xs font-semibold flex items-center gap-2.5 animate-fade-in">
+                <AlertTriangle className="w-4 h-4 text-rose-400 shrink-0" />
+                <span className="leading-snug">{formError}</span>
+              </div>
+            )}
+
             <form onSubmit={handleVehicleSubmit} className="space-y-4">
               <div>
                 <label className="block text-xs font-semibold text-slate-300 mb-1">
-                  Vehicle Number
+                  Vehicle Registration Number <span className="text-amber-400">*</span>
                 </label>
                 <input
                   type="text"
                   required
-                  placeholder="e.g. KA-01-EQ-1234"
+                  maxLength={15}
+                  placeholder="e.g. KL41A5621"
                   value={vehicleForm.vehicleNumber}
-                  onChange={(e) =>
-                    setVehicleForm({ ...vehicleForm, vehicleNumber: e.target.value.toUpperCase() })
-                  }
-                  className="w-full px-3.5 py-2.5 rounded-xl bg-slate-900 border border-slate-800 text-sm text-slate-100 focus:outline-none focus:border-amber-500 font-mono uppercase"
+                  onChange={(e) => {
+                    const val = e.target.value.replace(/[^a-zA-Z0-9]/g, '').toUpperCase();
+                    setVehicleForm({ ...vehicleForm, vehicleNumber: val });
+                    setFormError(null);
+                  }}
+                  className="w-full px-3.5 py-2.5 rounded-xl bg-slate-900 border border-slate-800 text-sm text-slate-100 focus:outline-none focus:border-amber-500 font-mono uppercase tracking-wider"
                 />
+                <p className="text-[11px] text-slate-400 mt-1">
+                  Letters & numbers only (e.g. <span className="text-amber-400 font-mono">KL41A5621</span>). Spaces and symbols are automatically stripped.
+                </p>
               </div>
               <CustomSelect
                 label="Vehicle Category / Type"
@@ -1151,13 +1369,16 @@ export const MasterDataPage: React.FC = () => {
                   icon: <Truck className="w-4 h-4" />,
                 }))}
                 value={vehicleForm.vehicleTypeId}
-                onChange={(val) => setVehicleForm({ ...vehicleForm, vehicleTypeId: val })}
+                onChange={(val) => {
+                  setVehicleForm({ ...vehicleForm, vehicleTypeId: val });
+                  setFormError(null);
+                }}
                 placeholder="Select Vehicle Category"
               />
               <div className="flex justify-end gap-2 pt-2">
                 <button
                   type="button"
-                  onClick={() => setModalMode(null)}
+                  onClick={() => { setModalMode(null); setFormError(null); }}
                   className="px-4 py-2 rounded-xl bg-slate-800 text-slate-300 text-sm font-semibold hover:bg-slate-700 cursor-pointer"
                 >
                   Cancel
@@ -1165,7 +1386,7 @@ export const MasterDataPage: React.FC = () => {
                 <button
                   type="submit"
                   disabled={submitting}
-                  className="px-5 py-2 rounded-xl bg-amber-500 hover:bg-amber-400 text-slate-950 font-bold text-sm cursor-pointer"
+                  className="px-5 py-2 rounded-xl bg-amber-500 hover:bg-amber-400 text-slate-950 font-bold text-sm cursor-pointer disabled:opacity-50"
                 >
                   {submitting ? 'Saving...' : 'Save Vehicle'}
                 </button>
@@ -1180,31 +1401,42 @@ export const MasterDataPage: React.FC = () => {
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/80 backdrop-blur-sm p-4">
           <Card variant="highlight" className="w-full max-w-md p-6 space-y-4 relative">
             <button
-              onClick={() => setModalMode(null)}
-              className="absolute right-4 top-4 text-slate-400 hover:text-white"
+              onClick={() => { setModalMode(null); setFormError(null); }}
+              className="absolute right-4 top-4 text-slate-400 hover:text-white cursor-pointer"
             >
               <X className="w-5 h-5" />
             </button>
             <h2 className="text-lg font-bold text-white">
               {modalMode === 'contractor-add' ? 'Add C/O Contractor' : 'Edit Contractor'}
             </h2>
+
+            {formError && (
+              <div className="p-3.5 rounded-xl bg-rose-500/15 border border-rose-500/40 text-rose-200 text-xs font-semibold flex items-center gap-2.5 animate-fade-in">
+                <AlertTriangle className="w-4 h-4 text-rose-400 shrink-0" />
+                <span className="leading-snug">{formError}</span>
+              </div>
+            )}
+
             <form onSubmit={handleContractorSubmit} className="space-y-4">
               <div>
                 <label className="block text-xs font-semibold text-slate-300 mb-1">
-                  Contractor Name
+                  Contractor Name <span className="text-amber-400">*</span>
                 </label>
                 <input
                   type="text"
                   required
-                  placeholder="e.g. Kaveri Transports"
+                  placeholder="e.g. Sathar Pattimattom"
                   value={contractorForm.name}
-                  onChange={(e) => setContractorForm({ ...contractorForm, name: e.target.value })}
+                  onChange={(e) => {
+                    setContractorForm({ ...contractorForm, name: e.target.value });
+                    setFormError(null);
+                  }}
                   className="w-full px-3.5 py-2.5 rounded-xl bg-slate-900 border border-slate-800 text-sm text-slate-100 focus:outline-none focus:border-amber-500"
                 />
               </div>
               <div>
                 <label className="block text-xs font-semibold text-slate-300 mb-1">
-                  10-Digit Mobile Number
+                  10-Digit Mobile Number <span className="text-amber-400">*</span>
                 </label>
                 <input
                   type="tel"
@@ -1212,16 +1444,20 @@ export const MasterDataPage: React.FC = () => {
                   maxLength={10}
                   placeholder="e.g. 9845012345"
                   value={contractorForm.mobile}
-                  onChange={(e) =>
-                    setContractorForm({ ...contractorForm, mobile: e.target.value.replace(/\D/g, '') })
-                  }
-                  className="w-full px-3.5 py-2.5 rounded-xl bg-slate-900 border border-slate-800 text-sm text-slate-100 focus:outline-none focus:border-amber-500"
+                  onChange={(e) => {
+                    setContractorForm({ ...contractorForm, mobile: e.target.value.replace(/\D/g, '').slice(0, 10) });
+                    setFormError(null);
+                  }}
+                  className="w-full px-3.5 py-2.5 rounded-xl bg-slate-900 border border-slate-800 text-sm text-slate-100 focus:outline-none focus:border-amber-500 font-mono"
                 />
+                <p className="text-[11px] text-slate-400 mt-1">
+                  Unique 10-digit mobile number for dispatch matching and statements.
+                </p>
               </div>
               <div className="flex justify-end gap-2 pt-2">
                 <button
                   type="button"
-                  onClick={() => setModalMode(null)}
+                  onClick={() => { setModalMode(null); setFormError(null); }}
                   className="px-4 py-2 rounded-xl bg-slate-800 text-slate-300 text-sm font-semibold hover:bg-slate-700 cursor-pointer"
                 >
                   Cancel
@@ -1229,7 +1465,7 @@ export const MasterDataPage: React.FC = () => {
                 <button
                   type="submit"
                   disabled={submitting}
-                  className="px-5 py-2 rounded-xl bg-amber-500 hover:bg-amber-400 text-slate-950 font-bold text-sm cursor-pointer"
+                  className="px-5 py-2 rounded-xl bg-amber-500 hover:bg-amber-400 text-slate-950 font-bold text-sm cursor-pointer disabled:opacity-50"
                 >
                   {submitting ? 'Saving...' : 'Save Contractor'}
                 </button>
@@ -1244,14 +1480,22 @@ export const MasterDataPage: React.FC = () => {
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/80 backdrop-blur-sm p-4">
           <Card variant="highlight" className="w-full max-w-md p-6 space-y-4 relative">
             <button
-              onClick={() => setModalMode(null)}
-              className="absolute right-4 top-4 text-slate-400 hover:text-white"
+              onClick={() => { setModalMode(null); setFormError(null); }}
+              className="absolute right-4 top-4 text-slate-400 hover:text-white cursor-pointer"
             >
               <X className="w-5 h-5" />
             </button>
             <h2 className="text-lg font-bold text-white">
               {modalMode === 'rate-add' ? 'Configure Rate Matrix' : 'Update Rate Price'}
             </h2>
+
+            {formError && (
+              <div className="p-3.5 rounded-xl bg-rose-500/15 border border-rose-500/40 text-rose-200 text-xs font-semibold flex items-center gap-2.5 animate-fade-in">
+                <AlertTriangle className="w-4 h-4 text-rose-400 shrink-0" />
+                <span className="leading-snug">{formError}</span>
+              </div>
+            )}
+
             <form onSubmit={handleRateSubmit} className="space-y-4">
               {modalMode === 'rate-add' ? (
                 <>
@@ -1265,7 +1509,7 @@ export const MasterDataPage: React.FC = () => {
                       icon: <MapPin className="w-4 h-4" />,
                     }))}
                     value={rateForm.siteId}
-                    onChange={(val) => setRateForm({ ...rateForm, siteId: val })}
+                    onChange={(val) => { setRateForm({ ...rateForm, siteId: val }); setFormError(null); }}
                     placeholder="Select Operational Site"
                   />
 
@@ -1278,7 +1522,7 @@ export const MasterDataPage: React.FC = () => {
                       icon: <Truck className="w-4 h-4" />,
                     }))}
                     value={rateForm.vehicleTypeId}
-                    onChange={(val) => setRateForm({ ...rateForm, vehicleTypeId: val })}
+                    onChange={(val) => { setRateForm({ ...rateForm, vehicleTypeId: val }); setFormError(null); }}
                     placeholder="Select Vehicle Category"
                   />
 
@@ -1291,7 +1535,7 @@ export const MasterDataPage: React.FC = () => {
                       icon: <Layers className="w-4 h-4" />,
                     }))}
                     value={rateForm.materialTypeId}
-                    onChange={(val) => setRateForm({ ...rateForm, materialTypeId: val })}
+                    onChange={(val) => { setRateForm({ ...rateForm, materialTypeId: val }); setFormError(null); }}
                     placeholder="Select Material Type"
                   />
                 </>
@@ -1305,19 +1549,20 @@ export const MasterDataPage: React.FC = () => {
 
               <div>
                 <label className="block text-xs font-semibold text-slate-300 mb-1">
-                  Rate Amount (₹ per load)
+                  Rate Amount (₹ per load) <span className="text-amber-400">*</span>
                 </label>
                 <div className="relative">
                   <span className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-500 font-bold">₹</span>
                   <input
                     type="number"
-                    step="0.01"
+                    inputMode="numeric"
+                    step="any"
                     min="1"
                     required
                     placeholder="3500.00"
                     value={rateForm.amount}
-                    onChange={(e) => setRateForm({ ...rateForm, amount: e.target.value })}
-                    className="w-full pl-8 pr-4 py-2.5 rounded-xl bg-slate-900 border border-slate-800 text-sm text-slate-100 focus:outline-none focus:border-amber-500"
+                    onChange={(e) => { setRateForm({ ...rateForm, amount: e.target.value }); setFormError(null); }}
+                    className="w-full pl-8 pr-4 py-2.5 rounded-xl bg-slate-900 border border-slate-800 text-sm text-slate-100 focus:outline-none focus:border-amber-500 font-mono font-bold"
                   />
                 </div>
               </div>
@@ -1325,7 +1570,7 @@ export const MasterDataPage: React.FC = () => {
               <div className="flex justify-end gap-2 pt-2">
                 <button
                   type="button"
-                  onClick={() => setModalMode(null)}
+                  onClick={() => { setModalMode(null); setFormError(null); }}
                   className="px-4 py-2 rounded-xl bg-slate-800 text-slate-300 text-sm font-semibold hover:bg-slate-700 cursor-pointer"
                 >
                   Cancel
@@ -1333,7 +1578,7 @@ export const MasterDataPage: React.FC = () => {
                 <button
                   type="submit"
                   disabled={submitting}
-                  className="px-5 py-2 rounded-xl bg-amber-500 hover:bg-amber-400 text-slate-950 font-bold text-sm cursor-pointer"
+                  className="px-5 py-2 rounded-xl bg-amber-500 hover:bg-amber-400 text-slate-950 font-bold text-sm cursor-pointer disabled:opacity-50"
                 >
                   {submitting ? 'Saving...' : 'Save Rate'}
                 </button>
@@ -1348,30 +1593,40 @@ export const MasterDataPage: React.FC = () => {
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/80 backdrop-blur-sm p-4">
           <Card variant="highlight" className="w-full max-w-md p-6 space-y-4 relative">
             <button
-              onClick={() => setModalMode(null)}
-              className="absolute right-4 top-4 text-slate-400 hover:text-white"
+              onClick={() => { setModalMode(null); setFormError(null); }}
+              className="absolute right-4 top-4 text-slate-400 hover:text-white cursor-pointer"
             >
               <X className="w-5 h-5" />
             </button>
             <h2 className="text-lg font-bold text-white">
               {modalMode === 'vtype-add' ? 'Add Global Vehicle Category' : 'Edit Vehicle Category'}
             </h2>
+
+            {formError && (
+              <div className="p-3.5 rounded-xl bg-rose-500/15 border border-rose-500/40 text-rose-200 text-xs font-semibold flex items-center gap-2.5 animate-fade-in">
+                <AlertTriangle className="w-4 h-4 text-rose-400 shrink-0" />
+                <span className="leading-snug">{formError}</span>
+              </div>
+            )}
+
             <form onSubmit={handleVTypeSubmit} className="space-y-4">
               <div>
-                <label className="block text-xs font-semibold text-slate-300 mb-1">Category Name</label>
+                <label className="block text-xs font-semibold text-slate-300 mb-1">
+                  Category Name <span className="text-amber-400">*</span>
+                </label>
                 <input
                   type="text"
                   required
                   placeholder="e.g. Dumper 10-Wheeler"
                   value={vtypeForm.name}
-                  onChange={(e) => setVtypeForm({ name: e.target.value })}
+                  onChange={(e) => { setVtypeForm({ name: e.target.value }); setFormError(null); }}
                   className="w-full px-3.5 py-2.5 rounded-xl bg-slate-900 border border-slate-800 text-sm text-slate-100 focus:outline-none focus:border-amber-500"
                 />
               </div>
               <div className="flex justify-end gap-2 pt-2">
                 <button
                   type="button"
-                  onClick={() => setModalMode(null)}
+                  onClick={() => { setModalMode(null); setFormError(null); }}
                   className="px-4 py-2 rounded-xl bg-slate-800 text-slate-300 text-sm font-semibold hover:bg-slate-700 cursor-pointer"
                 >
                   Cancel
@@ -1379,7 +1634,7 @@ export const MasterDataPage: React.FC = () => {
                 <button
                   type="submit"
                   disabled={submitting}
-                  className="px-5 py-2 rounded-xl bg-amber-500 hover:bg-amber-400 text-slate-950 font-bold text-sm cursor-pointer"
+                  className="px-5 py-2 rounded-xl bg-amber-500 hover:bg-amber-400 text-slate-950 font-bold text-sm cursor-pointer disabled:opacity-50"
                 >
                   {submitting ? 'Saving...' : 'Save Category'}
                 </button>
@@ -1394,30 +1649,40 @@ export const MasterDataPage: React.FC = () => {
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/80 backdrop-blur-sm p-4">
           <Card variant="highlight" className="w-full max-w-md p-6 space-y-4 relative">
             <button
-              onClick={() => setModalMode(null)}
-              className="absolute right-4 top-4 text-slate-400 hover:text-white"
+              onClick={() => { setModalMode(null); setFormError(null); }}
+              className="absolute right-4 top-4 text-slate-400 hover:text-white cursor-pointer"
             >
               <X className="w-5 h-5" />
             </button>
             <h2 className="text-lg font-bold text-white">
               {modalMode === 'mtype-add' ? 'Add Global Material Type' : 'Edit Material Type'}
             </h2>
+
+            {formError && (
+              <div className="p-3.5 rounded-xl bg-rose-500/15 border border-rose-500/40 text-rose-200 text-xs font-semibold flex items-center gap-2.5 animate-fade-in">
+                <AlertTriangle className="w-4 h-4 text-rose-400 shrink-0" />
+                <span className="leading-snug">{formError}</span>
+              </div>
+            )}
+
             <form onSubmit={handleMTypeSubmit} className="space-y-4">
               <div>
-                <label className="block text-xs font-semibold text-slate-300 mb-1">Material Name</label>
+                <label className="block text-xs font-semibold text-slate-300 mb-1">
+                  Material Name <span className="text-amber-400">*</span>
+                </label>
                 <input
                   type="text"
                   required
                   placeholder="e.g. Aggregates 20mm"
                   value={mtypeForm.name}
-                  onChange={(e) => setMtypeForm({ name: e.target.value })}
+                  onChange={(e) => { setMtypeForm({ name: e.target.value }); setFormError(null); }}
                   className="w-full px-3.5 py-2.5 rounded-xl bg-slate-900 border border-slate-800 text-sm text-slate-100 focus:outline-none focus:border-amber-500"
                 />
               </div>
               <div className="flex justify-end gap-2 pt-2">
                 <button
                   type="button"
-                  onClick={() => setModalMode(null)}
+                  onClick={() => { setModalMode(null); setFormError(null); }}
                   className="px-4 py-2 rounded-xl bg-slate-800 text-slate-300 text-sm font-semibold hover:bg-slate-700 cursor-pointer"
                 >
                   Cancel
@@ -1425,7 +1690,7 @@ export const MasterDataPage: React.FC = () => {
                 <button
                   type="submit"
                   disabled={submitting}
-                  className="px-5 py-2 rounded-xl bg-amber-500 hover:bg-amber-400 text-slate-950 font-bold text-sm cursor-pointer"
+                  className="px-5 py-2 rounded-xl bg-amber-500 hover:bg-amber-400 text-slate-950 font-bold text-sm cursor-pointer disabled:opacity-50"
                 >
                   {submitting ? 'Saving...' : 'Save Material'}
                 </button>

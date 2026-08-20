@@ -18,7 +18,7 @@ export class QueryLoadsDto {
   @IsOptional()
   vehicleId?: string;
 
-  @IsUUID('4')
+  @IsString()
   @IsOptional()
   contractorId?: string;
 
