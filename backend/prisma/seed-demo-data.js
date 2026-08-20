@@ -225,9 +225,9 @@ async function seedProductionSpace() {
   let tenant = await prisma.user.findFirst({
     where: {
       OR: [
+        { mobile: '9999999999' },
         { businessName: { contains: 'Prod Test', mode: 'insensitive' } },
         { businessName: { contains: 'Test Space', mode: 'insensitive' } },
-        { mobile: '9633415164' },
       ],
       role: 'CUSTOMER',
     },
@@ -236,12 +236,12 @@ async function seedProductionSpace() {
   if (!tenant) {
     console.log('  Creating new Prod Test Space customer...');
     const salt = await bcrypt.genSalt(10);
-    const passwordHash = await bcrypt.hash('ajmalka84', salt);
+    const passwordHash = await bcrypt.hash('test@prod', salt);
     tenant = await prisma.user.create({
       data: {
         businessName: 'Prod Test Space',
         contactPerson: 'Ajmal K A',
-        mobile: '9633415164',
+        mobile: '9999999999',
         passwordHash,
         role: 'CUSTOMER',
         isActive: true,
