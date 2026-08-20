@@ -112,12 +112,12 @@ export class ContractorsService {
     const contractor = await this.findOne(userId, id);
 
     const linkedLoadsCount = await this.prisma.load.count({
-      where: { contractorId: id, deletedAt: null },
+      where: { contractorId: id },
     });
 
     if (linkedLoadsCount > 0) {
       throw new BadRequestException(
-        `Cannot delete contractor "${contractor.name}" because they have ${linkedLoadsCount} active dispatch load(s) recorded. Reassign or delete those load entries first.`,
+        `Cannot delete contractor "${contractor.name}" because they have ${linkedLoadsCount} dispatch load(s) on record. Reassign or delete those load entries first.`,
       );
     }
 

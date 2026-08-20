@@ -2,6 +2,8 @@ import {
   Body,
   Controller,
   Get,
+  HttpCode,
+  HttpStatus,
   Param,
   Patch,
   Post,
@@ -56,6 +58,7 @@ export class AdminUsersController {
   }
 
   @Post(':id/reset-password')
+  @HttpCode(HttpStatus.OK)
   async resetPassword(
     @Param('id') id: string,
     @Body() dto: ResetPasswordDto,

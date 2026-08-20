@@ -145,12 +145,12 @@ export class VehiclesService {
     const vehicle = await this.findOne(userId, id);
 
     const linkedLoadsCount = await this.prisma.load.count({
-      where: { vehicleId: id, deletedAt: null },
+      where: { vehicleId: id },
     });
 
     if (linkedLoadsCount > 0) {
       throw new BadRequestException(
-        `Cannot delete vehicle "${vehicle.vehicleNumber}" because it is linked to ${linkedLoadsCount} active dispatch load(s). Delete or reassign those load entries first.`,
+        `Cannot delete vehicle "${vehicle.vehicleNumber}" because it is linked to ${linkedLoadsCount} dispatch load(s) on record. Delete or reassign those load entries first.`,
       );
     }
 

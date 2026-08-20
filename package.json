@@ -2,6 +2,7 @@
   "name": "vlms",
   "version": "0.1.0",
   "private": true,
+  "type": "module",
   "engines": {
     "node": ">=24 <25"
   },
@@ -11,6 +12,9 @@
   ],
   "scripts": {
     "build": "npm run build --workspaces",
+    "test": "node --test tests/*.test.js",
+    "test:unit": "node --test tests/unit-suite.test.js",
+    "test:e2e": "node --test tests/e2e-system.test.js",
     "dev:backend": "npm run start:dev --workspace=backend",
     "dev:frontend": "npm run dev --workspace=frontend",
     "docker:up": "docker compose up --build",

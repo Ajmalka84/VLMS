@@ -31,7 +31,7 @@ export function groupTrips(
   for (const t of trips) {
     const dStr = new Date(t.date).toISOString().split('T')[0];
     const vClean = t.vehicleNumber.trim().toUpperCase();
-    const rate = Math.round(Number(t.amount));
+    const rate = Number(t.amount);
     const key = `${dStr}__${vClean}__${t.materialName.trim()}__${t.siteName.trim()}__${t.paymentType}__${rate}`;
 
     const existing = groups.get(key);

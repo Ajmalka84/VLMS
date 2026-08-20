@@ -172,11 +172,11 @@ export class RatesService {
     await this.findOne(userId, id);
 
     const linkedLoadsCount = await this.prisma.load.count({
-      where: { rateId: id, deletedAt: null },
+      where: { rateId: id },
     });
     if (linkedLoadsCount > 0) {
       throw new BadRequestException(
-        `Cannot delete this rate rule because ${linkedLoadsCount} active dispatch load(s) are linked to it.`,
+        `Cannot delete this rate rule because ${linkedLoadsCount} dispatch load(s) on record are linked to it.`,
       );
     }
 

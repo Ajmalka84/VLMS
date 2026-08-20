@@ -113,12 +113,12 @@ export class SitesService {
     const site = await this.findOne(userId, id);
 
     const linkedLoadsCount = await this.prisma.load.count({
-      where: { siteId: id, deletedAt: null },
+      where: { siteId: id },
     });
 
     if (linkedLoadsCount > 0) {
       throw new BadRequestException(
-        `Cannot delete quarry site "${site.siteName}" because it has ${linkedLoadsCount} active dispatch load(s) recorded against it.`,
+        `Cannot delete quarry site "${site.siteName}" because it has ${linkedLoadsCount} dispatch load(s) recorded against it.`,
       );
     }
 

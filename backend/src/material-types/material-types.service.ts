@@ -88,11 +88,11 @@ export class MaterialTypesService {
     const materialType = await this.findOne(id);
 
     const linkedLoadsCount = await this.prisma.load.count({
-      where: { materialTypeId: id, deletedAt: null },
+      where: { materialTypeId: id },
     });
     if (linkedLoadsCount > 0) {
       throw new BadRequestException(
-        `Cannot delete material type "${materialType.name}" because ${linkedLoadsCount} active dispatch load(s) are recorded with it.`,
+        `Cannot delete material type "${materialType.name}" because ${linkedLoadsCount} dispatch load(s) on record are recorded with it.`,
       );
     }
 
