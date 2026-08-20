@@ -26,21 +26,18 @@ WORKDIR /app
 
 ENV NODE_ENV=production
 
-# Copy package definitions and install only production dependencies
+# Copy package definitions and install dependencies including prisma CLI
 COPY package*.json ./
 COPY prisma ./prisma/
 COPY prisma.config.ts ./
 
-RUN npm ci --only=production --prefer-offline || npm install --omit=dev
+RUN npm ci --prefer-offline || npm install
 
 # Copy generated Prisma engine/client and compiled JavaScript from builder
 COPY --from=builder /app/node_modules/@prisma ./node_modules/@prisma
 COPY --from=builder /app/node_modules/.prisma ./node_modules/.prisma
 COPY --from=builder /app/dist ./dist
 
-# Security: Run as non-root node user
-USER node
-
 EXPOSE 3000
 
-CMD ["node", "dist/main.js"]
+CMD ["sh", "-c", "npx prisma migrate deploy && node dist/main.js"]
