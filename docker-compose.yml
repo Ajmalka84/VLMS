@@ -1,10 +1,8 @@
 services:
   postgres:
     image: postgres:16-alpine
-    environment:
-      POSTGRES_DB: ${POSTGRES_DB:-vlms}
-      POSTGRES_USER: ${POSTGRES_USER:-vlms}
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-vlms_dev_password}
+    env_file:
+      - .env
     ports:
       - "${POSTGRES_PORT:-5432}:5432"
     volumes:
@@ -19,14 +17,8 @@ services:
     build:
       context: ./backend
       target: development
-    environment:
-      PORT: 3000
-      FRONTEND_ORIGIN: ${FRONTEND_ORIGIN:-http://localhost:5173}
-      DATABASE_URL: postgresql://${POSTGRES_USER:-vlms}:${POSTGRES_PASSWORD:-vlms_dev_password}@postgres:5432/${POSTGRES_DB:-vlms}?schema=public
-      JWT_SECRET: ${JWT_SECRET:-vlms_super_secret_jwt_key_2026}
-      JWT_EXPIRES_IN: ${JWT_EXPIRES_IN:-7d}
-      SUPER_ADMIN_MOBILE: ${SUPER_ADMIN_MOBILE:-ajmalka84@gmail.com}
-      SUPER_ADMIN_PASSWORD: ${SUPER_ADMIN_PASSWORD:-05thDec1995}
+    env_file:
+      - .env
     ports:
       - "${BACKEND_PORT:-3000}:3000"
     volumes:
@@ -40,8 +32,8 @@ services:
     build:
       context: ./frontend
       target: development
-    environment:
-      VITE_BACKEND_URL: http://localhost:${BACKEND_PORT:-3000}
+    env_file:
+      - .env
     ports:
       - "${FRONTEND_PORT:-5173}:5173"
     volumes:

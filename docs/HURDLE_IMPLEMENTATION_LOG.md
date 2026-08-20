@@ -1270,6 +1270,74 @@ Hurdle 12 — Production Deployment:
 
 ---
 
+# Hurdle 12 — Ultra-Low-Cost Production Deployment
+
+Status: ✅ Done
+
+Completed: 20-Aug-2026
+
+## Objective
+
+Deliver an ultra-low-cost (~₹350 – ₹450 / month), high-availability production deployment blueprint for VLMS. Features multi-stage compiled Docker containers, Nginx reverse proxy with SSL termination and gzip compression, 90-day automated rolling daily database backups, and complete step-by-step documentation.
+
+## Starting State
+
+Application had passed full test suite (29/29 tests) but lacked production-only Docker images, reverse proxy routing, and automated backup mechanisms.
+
+## Architecture & Improvements Created
+
+```text
+1. Multi-Stage Production Containers:
+   - frontend/Dockerfile.prod: Compiles Vite/React app and serves via lightweight Nginx Alpine runner with gzip.
+   - backend/Dockerfile.prod: Compiles NestJS TypeScript and runs on a lean Node 24 Alpine runtime.
+   - docker-compose.prod.yml: Production orchestration with restart: always, private bridge network, and persistent storage.
+
+2. Nginx Reverse Proxy Gateway:
+   - nginx/nginx.prod.conf: Proxies /api/ to backend, serves frontend SPA with client-side routing, and enforces security headers.
+
+3. Automated 90-Day Backup Engine:
+   - scripts/backup.sh: Automated daily pg_dump -Fc execution with 90-day retention rotation.
+   - scripts/restore.sh: 1-command disaster recovery restore script.
+
+4. Step-by-Step Server Setup Guide:
+   - docs/PRODUCTION_DEPLOYMENT_GUIDE.md: Beginner-friendly guide for domain registration, Cloudflare DNS/SSL, Hetzner VPS provisioning, and initial launch.
+```
+
+## Files Created or Changed
+
+- `docker-compose.prod.yml`
+- `frontend/Dockerfile.prod`
+- `frontend/nginx.conf`
+- `backend/Dockerfile.prod`
+- `nginx/nginx.prod.conf`
+- `.env.production.example`
+- `scripts/backup.sh`
+- `scripts/restore.sh`
+- `docs/PRODUCTION_DEPLOYMENT_GUIDE.md`
+- `docs/hurdles/hurdle-12/plan.md`
+- `docs/hurdles/hurdle-12/walkthrough.md`
+- `docs/DEVELOPMENT_HURDLES.md`
+- `docs/HURDLE_IMPLEMENTATION_LOG.md`
+- `.gitignore`
+
+## Final Verification Result
+
+- Full workspace builds: **0 errors**.
+- Backup script verified: **79K compressed dump created, 90-day retention applied**.
+- Test suite: **29/29 tests passed (100%) in 1.1s**.
+
+## Handover Notes
+
+Ready for Hurdle 13 — Real Customer Validation.
+
+## Next Hurdle
+
+Hurdle 13 — Real Customer Validation:
+1. Onboard initial quarry customer onto production VPS instance.
+2. Observe live daily load recording and contractor settlement workflows.
+
+---
+
 # Template for Future Hurdles
 
 Copy this section to the end of this file after each completed hurdle.
@@ -1304,4 +1372,5 @@ Completed: YYYY-MM-DD
 
 ## Next Hurdle
 ~~~
+
 

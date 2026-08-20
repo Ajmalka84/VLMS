@@ -5,11 +5,11 @@ import { PrismaPg } from '@prisma/adapter-pg';
 @Injectable()
 export class PrismaService extends PrismaClient implements OnModuleInit, OnModuleDestroy {
   constructor() {
-    const adapter = new PrismaPg({
-      connectionString:
-        process.env.DATABASE_URL ||
-        'postgresql://vlms:vlms_dev_password@localhost:5432/vlms?schema=public',
-    });
+    const connectionString = process.env.DATABASE_URL;
+    if (!connectionString) {
+      throw new Error('DATABASE_URL environment variable is not defined.');
+    }
+    const adapter = new PrismaPg({ connectionString });
     super({ adapter });
   }
 

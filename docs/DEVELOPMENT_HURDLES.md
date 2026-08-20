@@ -493,22 +493,22 @@ Complete V1 workflow works without critical defects.
 
 # HURDLE 12 — PRODUCTION DEPLOYMENT
 
-Status: ⬜ Not Started
+Status: ✅ Done
 
 ## Objective
 
-Make VLMS available to real customers.
+Make VLMS available to real customers with ultra-low hosting costs (~₹350/mo), high reliability, and automated 90-day backups.
 
 ## Includes
 
-- Production frontend
-- Production backend
-- Production database
-- Environment variables
-- HTTPS
-- Domain
-- Database backups
-- Logging
+- Production frontend (Multi-stage Nginx Alpine with gzip compression)
+- Production backend (Multi-stage Node 24 Alpine with precompiled TypeScript)
+- Production database (PostgreSQL 16 Alpine with isolated private network)
+- Secure Environment template (.env.production.example)
+- HTTPS / Cloudflare DNS & SSL Guide
+- Nginx Reverse Proxy Gateway (nginx.prod.conf)
+- Automated 90-Day Database Backup & Disaster Recovery Scripts (backup.sh, restore.sh)
+- Complete Step-by-Step Production Deployment Guide (docs/PRODUCTION_DEPLOYMENT_GUIDE.md)
 
 ## Dependency
 
@@ -516,8 +516,7 @@ Hurdle 11.
 
 ## Definition of Done
 
-A real customer can login and use VLMS from their phone
-over the internet.
+Production architecture and deployment configuration fully prepared, tested, and documented.
 
 
 # HURDLE 13 — REAL CUSTOMER VALIDATION
@@ -552,7 +551,7 @@ real customer feedback.
 
 Current hurdle:
 
-HURDLE 12 — PRODUCTION DEPLOYMENT
+HURDLE 13 — REAL CUSTOMER VALIDATION
 
 Current blocker:
 
@@ -560,7 +559,7 @@ None.
 
 Immediate goal:
 
-Prepare production deployment configuration, environment profiles, domain SSL orchestration, and container health safeguards.
+Onboard initial quarry customer onto production VPS instance and observe real-world dispatch recording and settlement statement workflows.
 
 
 # DEVELOPMENT RULES

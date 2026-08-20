@@ -1,0 +1,46 @@
+# Stage 1: Build TypeScript backend & generate Prisma Client
+FROM node:24-alpine AS builder
+
+WORKDIR /app
+
+# Copy dependency definitions and Prisma schema
+COPY package*.json ./
+COPY prisma ./prisma/
+COPY prisma.config.ts ./
+COPY tsconfig*.json ./
+
+# Install all dependencies (including devDependencies needed for build)
+RUN npm ci --prefer-offline || npm install
+
+# Copy source code
+COPY . .
+
+# Generate Prisma Client & Compile TypeScript
+RUN npx prisma generate
+RUN npm run build
+
+# Stage 2: Minimal, production-only Node Alpine runtime
+FROM node:24-alpine AS runner
+
+WORKDIR /app
+
+ENV NODE_ENV=production
+
+# Copy package definitions and install only production dependencies
+COPY package*.json ./
+COPY prisma ./prisma/
+COPY prisma.config.ts ./
+
+RUN npm ci --only=production --prefer-offline || npm install --omit=dev
+
+# Copy generated Prisma engine/client and compiled JavaScript from builder
+COPY --from=builder /app/node_modules/@prisma ./node_modules/@prisma
+COPY --from=builder /app/node_modules/.prisma ./node_modules/.prisma
+COPY --from=builder /app/dist ./dist
+
+# Security: Run as non-root node user
+USER node
+
+EXPOSE 3000
+
+CMD ["node", "dist/main.js"]

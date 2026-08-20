@@ -28,12 +28,12 @@ export class AuthService {
   ) { }
 
   async validateUser(dto: LoginDto): Promise<UserAuthProfile> {
-    const superAdminMobile = process.env.SUPER_ADMIN_MOBILE || 'ajmalka84@gmail.com';
-    const superAdminPassword = process.env.SUPER_ADMIN_PASSWORD || '05thDec1995';
+    const superAdminMobile = process.env.SUPER_ADMIN_MOBILE;
+    const superAdminPassword = process.env.SUPER_ADMIN_PASSWORD;
 
     // 1. Check Super Admin Credentials
-    if (dto.mobile === superAdminMobile) {
-      if (dto.password === superAdminPassword) {
+    if (superAdminMobile && dto.mobile.toLowerCase() === superAdminMobile.toLowerCase()) {
+      if (superAdminPassword && dto.password === superAdminPassword) {
         return {
           id: '00000000-0000-0000-0000-000000000001',
           mobile: superAdminMobile,
@@ -96,7 +96,7 @@ export class AuthService {
     if (role === 'SUPER_ADMIN') {
       return {
         id: userId,
-        mobile: process.env.SUPER_ADMIN_MOBILE || 'ajmalka84@gmail.com',
+        mobile: process.env.SUPER_ADMIN_MOBILE ?? 'admin',
         role: 'SUPER_ADMIN',
         businessName: 'VLMS SaaS Admin',
         isActive: true,
