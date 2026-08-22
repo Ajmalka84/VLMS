@@ -30,9 +30,16 @@ function formatVehicleNo(vNo: string): string {
   return vNo.toUpperCase();
 }
 
+export interface PdfCustomHeaderOptions {
+  customBusinessName?: string;
+  customContact?: string;
+  customGstin?: string;
+}
+
 export function exportSettlementPdf(
   data: SettlementReportResponse,
-  fallbackBusinessName: string = 'VLMS Quarry Management'
+  fallbackBusinessName: string = 'VLMS Quarry Management',
+  customOptions?: PdfCustomHeaderOptions
 ) {
   const doc = new jsPDF({
     orientation: 'portrait',
@@ -47,12 +54,21 @@ export function exportSettlementPdf(
     data.contractor.name.toLowerCase().includes('spot cash');
 
   const businessName = (
+    customOptions?.customBusinessName?.trim() ||
     data.business?.businessName ||
     fallbackBusinessName ||
     'VLMS OPERATIONAL QUARRY'
   ).toUpperCase();
-  const businessContact = data.business?.mobile ? `+91 ${data.business.mobile}` : 'N/A';
-  const businessGstin = data.business?.gstin ? `GSTIN: ${data.business.gstin}` : null;
+
+  const businessContact =
+    customOptions?.customContact?.trim() ||
+    (data.business?.mobile ? `+91 ${data.business.mobile}` : 'N/A');
+
+  const rawGstin =
+    customOptions?.customGstin !== undefined
+      ? customOptions.customGstin.trim()
+      : data.business?.gstin || '';
+  const businessGstin = rawGstin ? (rawGstin.toUpperCase().startsWith('GSTIN:') ? rawGstin.toUpperCase() : `GSTIN: ${rawGstin.toUpperCase()}`) : null;
 
   const contractorName = (
     isDirectSale ? 'DIRECT / SPOT CASH SALES (WALK-IN)' : data.contractor.name
@@ -88,7 +104,7 @@ export function exportSettlementPdf(
   doc.setFont('helvetica', 'bold');
   doc.setFontSize(15);
   doc.setTextColor(15, 23, 42); // slate-900
-  doc.text(businessName, 14, currentY);
+  doc.text(businessName, 14, currentY, { maxWidth: pageWidth - 14 - 70 });
 
   // Document Badge on Right
   doc.setFont('helvetica', 'bold');
@@ -103,7 +119,8 @@ export function exportSettlementPdf(
   doc.text(
     `Contact: ${businessContact}${businessGstin ? `  •  ${businessGstin}` : ''}`,
     14,
-    currentY
+    currentY,
+    { maxWidth: pageWidth - 14 - 65 }
   );
   doc.text(`Statement Ref: ${stmtRef}`, pageWidth - 14, currentY, { align: 'right' });
 
@@ -382,7 +399,7 @@ export function exportSettlementPdf(
   doc.line(14, currentY + 10, 68, currentY + 10);
   doc.text('Authorized Signatory', 14, currentY + 14);
   doc.setFontSize(6.5);
-  doc.text(businessName, 14, currentY + 17.5);
+  doc.text(businessName, 14, currentY + 17.5, { maxWidth: 54 });
   doc.setTextColor(148, 163, 184);
   doc.text('Date: ________________', 14, currentY + 21);
 
@@ -403,7 +420,7 @@ export function exportSettlementPdf(
     currentY + 14
   );
   doc.setFontSize(6.5);
-  doc.text(contractorName, pageWidth - 68, currentY + 17.5);
+  doc.text(contractorName, pageWidth - 68, currentY + 17.5, { maxWidth: 54 });
   doc.setTextColor(148, 163, 184);
   doc.text('Date: ________________', pageWidth - 68, currentY + 21);
 
