@@ -37,6 +37,8 @@ import { useDebounce } from '../hooks/useDebounce';
 import { exportToCsv } from '../utils/csvExporter';
 import { numberToWordsINR } from '../utils/numberToWords';
 import { groupTrips } from '../utils/tripGrouper';
+import { PdfCustomHeaderOptions } from '../utils/pdfGenerator';
+import { PdfCustomHeaderModal } from '../components/reports/PdfCustomHeaderModal';
 
 export const ReportsPage: React.FC = () => {
   const { user } = useAuth();
@@ -56,6 +58,7 @@ export const ReportsPage: React.FC = () => {
   const [summaryData, setSummaryData] = useState<ContractorsSummaryResponse | null>(null);
   const [settlementData, setSettlementData] = useState<SettlementReportResponse | null>(null);
   const [loading, setLoading] = useState(false);
+  const [isPdfModalOpen, setIsPdfModalOpen] = useState(false);
 
   // Filter State
   const [search, setSearch] = useState('');
@@ -331,15 +334,25 @@ export const ReportsPage: React.FC = () => {
     toast.success('Contractor ledger summary exported successfully!');
   };
 
-  // PDF Export Handler (Dynamic on-demand chunk import)
-  const handleDownloadPDF = async () => {
+  // PDF Export Trigger (Opens custom header configuration modal)
+  const handleOpenPdfModal = () => {
+    if (!settlementData || settlementData.trips.length === 0) {
+      toast.warning('No trip data to export');
+      return;
+    }
+    setIsPdfModalOpen(true);
+  };
+
+  // PDF Export Execution with Custom Options
+  const handleExportPdfWithOptions = async (options: PdfCustomHeaderOptions) => {
     if (!settlementData || settlementData.trips.length === 0) {
       toast.warning('No trip data to export');
       return;
     }
     try {
       const { exportSettlementPdf } = await import('../utils/pdfGenerator');
-      exportSettlementPdf(settlementData, user?.businessName);
+      exportSettlementPdf(settlementData, user?.businessName, options);
+      setIsPdfModalOpen(false);
       toast.success(
         language === 'ml'
           ? 'PDF വിജയകരമായി ഡൗൺലോഡ് ചെയ്തു!'
@@ -688,8 +701,8 @@ export const ReportsPage: React.FC = () => {
                   {t('export_csv')}
                 </button>
                 <button
-                  onClick={handleDownloadPDF}
-                  className="flex items-center gap-1.5 px-4 py-2 rounded-xl bg-amber-500 hover:bg-amber-400 text-slate-950 text-xs font-extrabold transition-all shadow-md shadow-amber-500/20 cursor-pointer"
+                  onClick={handleOpenPdfModal}
+                  className="flex items-center gap-1.5 px-4 py-2 rounded-xl bg-amber-500 hover:bg-amber-400 text-slate-950 text-xs font-extrabold transition-all shadow-md shadow-amber-500/20 active:scale-95 cursor-pointer"
                 >
                   <FileText className="w-4 h-4" />
                   {t('download_pdf')}
@@ -991,6 +1004,30 @@ export const ReportsPage: React.FC = () => {
             </div>
           </div>
         </div>
+      )}
+
+      {/* PDF Custom Header / Collaboration Modal */}
+      {selectedContractorId && settlementData && (
+        <PdfCustomHeaderModal
+          isOpen={isPdfModalOpen}
+          onClose={() => setIsPdfModalOpen(false)}
+          onConfirm={handleExportPdfWithOptions}
+          defaultBusinessName={
+            settlementData.business?.businessName ||
+            user?.businessName ||
+            'VLMS Quarry Management'
+          }
+          defaultMobile={
+            settlementData.business?.mobile ||
+            user?.mobile ||
+            ''
+          }
+          defaultGstin={
+            settlementData.business?.gstin ||
+            user?.gstin ||
+            ''
+          }
+        />
       )}
     </div>
   );

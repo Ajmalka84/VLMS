@@ -191,4 +191,71 @@ describe('Frontend Utilities Unit Tests', () => {
       assert.equal(grouped.length, 3);
     });
   });
+
+  describe('PDF Header & Collaboration Options Resolution', () => {
+    function resolvePdfHeader(data, fallbackName, customOptions) {
+      const businessName = (
+        customOptions?.customBusinessName?.trim() ||
+        data.business?.businessName ||
+        fallbackName ||
+        'VLMS OPERATIONAL QUARRY'
+      ).toUpperCase();
+
+      const businessContact =
+        customOptions?.customContact?.trim() ||
+        (data.business?.mobile ? `+91 ${data.business.mobile}` : 'N/A');
+
+      const rawGstin =
+        customOptions?.customGstin !== undefined
+          ? customOptions.customGstin.trim()
+          : data.business?.gstin || '';
+      const businessGstin = rawGstin
+        ? rawGstin.toUpperCase().startsWith('GSTIN:')
+          ? rawGstin.toUpperCase()
+          : `GSTIN: ${rawGstin.toUpperCase()}`
+        : null;
+
+      return { businessName, businessContact, businessGstin };
+    }
+
+    it('resolves default business profile when no custom options are provided', () => {
+      const data = {
+        business: {
+          id: 'b1',
+          businessName: 'Royal Granites',
+          mobile: '9847012345',
+          gstin: '32ABCDE1234F1Z5',
+        },
+      };
+
+      const result = resolvePdfHeader(data, 'Default Fallback');
+      assert.equal(result.businessName, 'ROYAL GRANITES');
+      assert.equal(result.businessContact, '+91 9847012345');
+      assert.equal(result.businessGstin, 'GSTIN: 32ABCDE1234F1Z5');
+    });
+
+    it('overrides business name and allows multiple phone numbers for joint ventures', () => {
+      const data = {
+        business: {
+          id: 'b1',
+          businessName: 'Royal Granites',
+          mobile: '9847012345',
+          gstin: '32ABCDE1234F1Z5',
+        },
+      };
+
+      const customOptions = {
+        customBusinessName: 'Royal & Bethlehem Joint Earthworks',
+        customContact: '+91 98470 12345 / +91 94470 67890 (Site Office)',
+        customGstin: 'JV-PROJ-NH66',
+      };
+
+      const result = resolvePdfHeader(data, 'Default Fallback', customOptions);
+      assert.equal(result.businessName, 'ROYAL & BETHLEHEM JOINT EARTHWORKS');
+      assert.equal(result.businessContact, '+91 98470 12345 / +91 94470 67890 (Site Office)');
+      assert.equal(result.businessGstin, 'GSTIN: JV-PROJ-NH66');
+    });
+  });
 });
+
+
