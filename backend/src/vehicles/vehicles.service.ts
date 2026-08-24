@@ -145,7 +145,7 @@ export class VehiclesService {
     const vehicle = await this.findOne(userId, id);
 
     const linkedLoadsCount = await this.prisma.load.count({
-      where: { vehicleId: id },
+      where: { vehicleId: id, deletedAt: null },
     });
 
     if (linkedLoadsCount > 0) {

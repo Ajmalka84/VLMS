@@ -6,6 +6,7 @@ export interface Site {
   siteName: string;
   location: string;
   pincode: string;
+  isActive?: boolean;
   createdAt: string;
   updatedAt: string;
   _count?: {
@@ -92,16 +93,12 @@ export async function createSiteApi(dto: {
 
 export async function updateSiteApi(
   id: string,
-  dto: { siteName?: string; location?: string; pincode?: string },
+  dto: { siteName?: string; location?: string; pincode?: string; isActive?: boolean },
 ): Promise<Site> {
   return apiClient<Site>(`/sites/${id}`, {
     method: 'PATCH',
     body: JSON.stringify(dto),
   });
-}
-
-export async function deleteSiteApi(id: string): Promise<Site> {
-  return apiClient<Site>(`/sites/${id}`, { method: 'DELETE' });
 }
 
 // ----------------- VEHICLE TYPES API -----------------

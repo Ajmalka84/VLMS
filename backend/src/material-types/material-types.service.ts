@@ -88,7 +88,7 @@ export class MaterialTypesService {
     const materialType = await this.findOne(id);
 
     const linkedLoadsCount = await this.prisma.load.count({
-      where: { materialTypeId: id },
+      where: { materialTypeId: id, deletedAt: null },
     });
     if (linkedLoadsCount > 0) {
       throw new BadRequestException(

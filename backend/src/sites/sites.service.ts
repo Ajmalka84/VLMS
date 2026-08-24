@@ -102,6 +102,7 @@ export class SitesService {
     }
     if (dto.location !== undefined) updateData.location = dto.location.trim();
     if (dto.pincode !== undefined) updateData.pincode = dto.pincode.trim();
+    if (dto.isActive !== undefined) updateData.isActive = dto.isActive;
 
     return this.prisma.site.update({
       where: { id },
@@ -113,7 +114,7 @@ export class SitesService {
     const site = await this.findOne(userId, id);
 
     const linkedLoadsCount = await this.prisma.load.count({
-      where: { siteId: id },
+      where: { siteId: id, deletedAt: null },
     });
 
     if (linkedLoadsCount > 0) {

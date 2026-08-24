@@ -628,10 +628,10 @@ export const CustomersPage: React.FC = () => {
 
       {/* CREATE CUSTOMER MODAL */}
       {showCreateModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-sm animate-fade-in">
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-slate-950/80 backdrop-blur-sm animate-fade-in">
           <Card
             variant="glass"
-            className="max-w-md w-full p-6 space-y-4 border border-slate-700 shadow-2xl"
+            className="max-w-md w-full p-4 sm:p-6 space-y-4 border border-slate-700 shadow-2xl max-h-[90vh] overflow-y-auto min-w-0"
           >
             <div className="flex items-center justify-between pb-3 border-b border-slate-800">
               <div className="flex items-center gap-2.5">
@@ -710,7 +710,7 @@ export const CustomersPage: React.FC = () => {
               />
 
               {createForm.subscriptionPlan === 'CUSTOM' && (
-                <div className="space-y-1">
+                <div className="space-y-1 w-full min-w-0">
                   <label className="text-xs font-semibold text-slate-300">
                     Custom Expiration Date
                   </label>
@@ -723,7 +723,7 @@ export const CustomersPage: React.FC = () => {
                         subscriptionExpiresAt: e.target.value,
                       })
                     }
-                    className="w-full px-3.5 py-2.5 rounded-xl bg-slate-900 border border-slate-700 text-sm text-white focus:border-amber-400 outline-none"
+                    className="w-full min-w-0 max-w-full box-border px-3.5 py-2.5 rounded-xl bg-slate-900 border border-slate-700 text-sm text-white focus:border-amber-400 outline-none block appearance-none"
                     required
                   />
                 </div>
@@ -803,10 +803,10 @@ export const CustomersPage: React.FC = () => {
 
       {/* MANAGE SUBSCRIPTION MODAL */}
       {showSubModal && selectedCustomer && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-sm animate-fade-in">
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-slate-950/80 backdrop-blur-sm animate-fade-in">
           <Card
             variant="glass"
-            className="max-w-md w-full p-6 space-y-4 border border-slate-700 shadow-2xl"
+            className="max-w-md w-full p-4 sm:p-6 space-y-4 border border-slate-700 shadow-2xl max-h-[90vh] overflow-y-auto min-w-0"
           >
             <div className="flex items-center justify-between pb-3 border-b border-slate-800">
               <div className="flex items-center gap-2.5">
@@ -848,7 +848,7 @@ export const CustomersPage: React.FC = () => {
                 required
               />
 
-              <div className="space-y-1">
+              <div className="space-y-1 w-full min-w-0">
                 <label className="text-xs font-semibold text-slate-300">
                   Validity Expiration Date *
                 </label>
@@ -861,7 +861,7 @@ export const CustomersPage: React.FC = () => {
                       subscriptionExpiresAt: e.target.value,
                     })
                   }
-                  className="w-full px-3.5 py-2.5 rounded-xl bg-slate-900 border border-slate-700 text-sm text-white focus:border-amber-400 outline-none"
+                  className="w-full min-w-0 max-w-full box-border px-3.5 py-2.5 rounded-xl bg-slate-900 border border-slate-700 text-sm text-white focus:border-amber-400 outline-none block appearance-none"
                   required
                 />
               </div>
