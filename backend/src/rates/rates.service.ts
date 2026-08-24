@@ -172,7 +172,7 @@ export class RatesService {
     await this.findOne(userId, id);
 
     const linkedLoadsCount = await this.prisma.load.count({
-      where: { rateId: id },
+      where: { rateId: id, deletedAt: null },
     });
     if (linkedLoadsCount > 0) {
       throw new BadRequestException(

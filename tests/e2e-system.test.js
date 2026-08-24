@@ -504,16 +504,36 @@ test('6.2 Generates detailed Contractor Settlement Statement with multi-dimensio
   assert.ok(res.data.data.materialBreakdown.length >= 1);
 });
 
-test('7. Relational Deletion Safeguards block deletion when loads exist (HTTP 400 Bad Request)', async () => {
-  // Attempt to delete quarry site with recorded loads
-  const siteDelRes = await req(`/sites/${siteAId}`, {
-    method: 'DELETE',
+test('7.1 Active / Inactive Quarry Site Toggle Lifecycle without data loss', async () => {
+  // 1. Deactivate site
+  const deactRes = await req(`/sites/${siteAId}`, {
+    method: 'PATCH',
+    headers: { Authorization: `Bearer ${tenantAToken}` },
+    body: JSON.stringify({ isActive: false }),
+  });
+  assert.equal(deactRes.status, 200);
+  assert.equal(deactRes.data.success, true);
+  assert.equal(deactRes.data.data.isActive, false);
+
+  // 2. Query site details - verify isActive is false
+  const getRes = await req(`/sites/${siteAId}`, {
     headers: { Authorization: `Bearer ${tenantAToken}` },
   });
-  assert.equal(siteDelRes.status, 400);
-  assert.equal(siteDelRes.data.success, false);
-  assert.ok(siteDelRes.data.message.includes('dispatch load'));
+  assert.equal(getRes.status, 200);
+  assert.equal(getRes.data.data.isActive, false);
 
+  // 3. Reactivate site
+  const reactRes = await req(`/sites/${siteAId}`, {
+    method: 'PATCH',
+    headers: { Authorization: `Bearer ${tenantAToken}` },
+    body: JSON.stringify({ isActive: true }),
+  });
+  assert.equal(reactRes.status, 200);
+  assert.equal(reactRes.data.success, true);
+  assert.equal(reactRes.data.data.isActive, true);
+});
+
+test('7.2 Relational Deletion Safeguards block vehicle and contractor deletion when loads exist', async () => {
   // Attempt to delete vehicle with recorded loads
   const vehDelRes = await req(`/vehicles/${vehicleAId}`, {
     method: 'DELETE',

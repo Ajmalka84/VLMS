@@ -174,16 +174,17 @@ export const LoadsPage: React.FC = () => {
 
   // Smart Defaults Setup from Cache
   useEffect(() => {
-    if (!isInitialized || sites.length === 0) return;
+    const activeSites = sites.filter((s) => s.isActive !== false);
+    if (!isInitialized || activeSites.length === 0) return;
 
     // 1. Site: Auto-select if 1 site, else restore sticky
     const savedSite = localStorage.getItem(STORAGE_KEY_SITE);
-    if (sites.length === 1) {
-      setSiteId(sites[0].id);
-    } else if (savedSite && sites.some((s) => s.id === savedSite)) {
+    if (activeSites.length === 1) {
+      setSiteId(activeSites[0].id);
+    } else if (savedSite && activeSites.some((s) => s.id === savedSite)) {
       setSiteId(savedSite);
-    } else if (!siteId && sites.length > 0) {
-      setSiteId(sites[0].id);
+    } else if (!siteId && activeSites.length > 0) {
+      setSiteId(activeSites[0].id);
     }
 
     // 2. Material: Auto-select if 1 material, else restore sticky
@@ -245,8 +246,8 @@ export const LoadsPage: React.FC = () => {
     return [
       {
         value: '',
-        label: language === 'ml' ? 'നേരിട്ടുള്ള വില്പന (Direct / Walk-in Sale)' : 'Direct / Walk-in Sale (No Contractor)',
-        subLabel: language === 'ml' ? 'സ്പോട്ട് ക്യാഷ് / റീട്ടെയിൽ ലോഡ്' : 'Spot Cash / Retail Sale',
+        label: language === 'ml' ? 'നേരിട്ടുള്ള വില്പന (Direct / Spot Cash)' : 'Direct / Spot Cash Sale (Walk-in)',
+        subLabel: language === 'ml' ? 'കരാറുകാരനില്ലാത്ത നേരിട്ടുള്ള കച്ചവടം' : 'Unregistered Cash Buyer',
         icon: <UserCheck className="w-4 h-4 text-emerald-400" />,
       },
       ...contractors.map((c) => ({
@@ -258,14 +259,16 @@ export const LoadsPage: React.FC = () => {
     ];
   }, [contractors, language]);
 
-  // Site options for CustomSelect
+  // Site options for CustomSelect (only active sites for new loads)
   const siteOptions: CustomSelectOption[] = useMemo(() => {
-    return sites.map((s) => ({
-      value: s.id,
-      label: s.siteName,
-      subLabel: s.location,
-      icon: <MapPin className="w-4 h-4 text-amber-400" />,
-    }));
+    return sites
+      .filter((s) => s.isActive !== false)
+      .map((s) => ({
+        value: s.id,
+        label: s.siteName,
+        subLabel: s.location,
+        icon: <MapPin className="w-4 h-4 text-amber-400" />,
+      }));
   }, [sites]);
 
   // Material options for CustomSelect

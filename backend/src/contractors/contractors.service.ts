@@ -112,7 +112,7 @@ export class ContractorsService {
     const contractor = await this.findOne(userId, id);
 
     const linkedLoadsCount = await this.prisma.load.count({
-      where: { contractorId: id },
+      where: { contractorId: id, deletedAt: null },
     });
 
     if (linkedLoadsCount > 0) {

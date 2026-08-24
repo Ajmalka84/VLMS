@@ -40,6 +40,7 @@ model Site {
   siteName  String   @map("site_name") @db.VarChar
   location  String   @map("location") @db.VarChar
   pincode   String   @map("pincode") @db.VarChar
+  isActive  Boolean  @default(true) @map("is_active")
   createdAt DateTime @default(now()) @map("created_at") @db.Timestamp
   updatedAt DateTime @updatedAt @map("updated_at") @db.Timestamp
 

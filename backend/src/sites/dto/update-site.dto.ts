@@ -1,4 +1,4 @@
-import { IsOptional, IsString, MinLength, MaxLength, Matches } from 'class-validator';
+import { IsBoolean, IsOptional, IsString, MinLength, MaxLength, Matches } from 'class-validator';
 
 export class UpdateSiteDto {
   @IsString()
@@ -19,4 +19,8 @@ export class UpdateSiteDto {
     message: 'Pincode must be a valid 6-digit Indian postal code',
   })
   pincode?: string;
+
+  @IsBoolean()
+  @IsOptional()
+  isActive?: boolean;
 }

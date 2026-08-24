@@ -19,6 +19,7 @@ import {
   ChevronRight,
   Shield,
   Zap,
+  Power,
 } from 'lucide-react';
 import { Card } from '../components/common/Card';
 import { ConfirmModal } from '../components/common/ConfirmModal';
@@ -34,7 +35,6 @@ import {
   getSitesApi,
   createSiteApi,
   updateSiteApi,
-  deleteSiteApi,
   getVehiclesApi,
   createVehicleApi,
   updateVehicleApi,
@@ -348,23 +348,18 @@ export const MasterDataPage: React.FC = () => {
     onConfirm: () => void;
   } | null>(null);
 
-  const handleDeleteSite = (id: string, name: string) => {
-    setConfirmState({
-      isOpen: true,
-      title: `Delete Site "${name}"?`,
-      message: `Deleting this site will also remove all rate configurations associated with it. Are you sure you want to proceed?`,
-      confirmText: 'Delete Site',
-      onConfirm: async () => {
-        try {
-          setConfirmState(null);
-          await deleteSiteApi(id);
-          showNotify('success', `Site "${name}" deleted`);
-          void loadAllData();
-        } catch (err: any) {
-          showNotify('error', err.message || 'Delete failed');
-        }
-      },
-    });
+  const handleToggleSiteStatus = async (site: Site) => {
+    const nextStatus = site.isActive === false ? true : false;
+    try {
+      await updateSiteApi(site.id, { isActive: nextStatus });
+      showNotify(
+        'success',
+        `Quarry Site "${site.siteName}" is now ${nextStatus ? 'Active' : 'Inactive (Archived)'}`,
+      );
+      void loadAllData();
+    } catch (err: any) {
+      showNotify('error', err.message || 'Failed to update site status');
+    }
   };
 
   const handleVehicleSubmit = async (e: React.FormEvent) => {
@@ -919,24 +914,44 @@ export const MasterDataPage: React.FC = () => {
                       <MapPin className="w-5 h-5" />
                     </div>
                     <div>
-                      <h3 className="font-bold text-white text-base">{site.siteName}</h3>
+                      <div className="flex items-center gap-2">
+                        <h3 className="font-bold text-white text-base">{site.siteName}</h3>
+                        <span
+                          className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-extrabold uppercase tracking-wider border ${
+                            site.isActive !== false
+                              ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/30'
+                              : 'bg-amber-500/10 text-amber-400 border-amber-500/30'
+                          }`}
+                        >
+                          <span
+                            className={`w-1.5 h-1.5 rounded-full ${
+                              site.isActive !== false ? 'bg-emerald-400' : 'bg-amber-400'
+                            }`}
+                          />
+                          {site.isActive !== false ? 'Active' : 'Inactive'}
+                        </span>
+                      </div>
                       <p className="text-xs text-slate-400">{site.location} • {site.pincode}</p>
                     </div>
                   </div>
                   <div className="flex items-center gap-1">
+                    <button
+                      onClick={() => handleToggleSiteStatus(site)}
+                      className={`p-1.5 rounded-lg transition-colors cursor-pointer ${
+                        site.isActive !== false
+                          ? 'text-slate-400 hover:text-amber-400 hover:bg-amber-500/10'
+                          : 'text-amber-400 hover:text-emerald-400 hover:bg-emerald-500/10'
+                      }`}
+                      title={site.isActive !== false ? 'Deactivate Site (Hides from Dispatch Picker)' : 'Reactivate Site'}
+                    >
+                      <Power className="w-4 h-4" />
+                    </button>
                     <button
                       onClick={() => openSiteModal(site)}
                       className="p-1.5 rounded-lg text-slate-400 hover:text-amber-400 hover:bg-amber-500/10 transition-colors cursor-pointer"
                       title="Edit Site"
                     >
                       <Edit2 className="w-4 h-4" />
-                    </button>
-                    <button
-                      onClick={() => handleDeleteSite(site.id, site.siteName)}
-                      className="p-1.5 rounded-lg text-slate-400 hover:text-rose-400 hover:bg-rose-500/10 transition-colors cursor-pointer"
-                      title="Delete Site"
-                    >
-                      <Trash2 className="w-4 h-4" />
                     </button>
                   </div>
                 </div>
