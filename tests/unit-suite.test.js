@@ -256,6 +256,190 @@ describe('Frontend Utilities Unit Tests', () => {
       assert.equal(result.businessGstin, 'GSTIN: JV-PROJ-NH66');
     });
   });
+
+  describe('4. Subscription Status Calculation & Renewal Logic', () => {
+    function computeStatus(user) {
+      const plan = user.subscriptionPlan || 'ANNUAL';
+      const startsAt = user.subscriptionStartsAt || new Date();
+      const graceDays = user.gracePeriodDays ?? 7;
+
+      if (!user.isActive) {
+        return {
+          subscriptionPlan: plan,
+          subscriptionStatus: 'INACTIVE',
+          daysRemaining: null,
+          isGraceActive: false,
+          isExpired: true,
+        };
+      }
+
+      if (!user.subscriptionExpiresAt) {
+        return {
+          subscriptionPlan: plan,
+          subscriptionStatus: 'ACTIVE_PAID',
+          daysRemaining: null,
+          isGraceActive: false,
+          isExpired: false,
+        };
+      }
+
+      const now = new Date();
+      const expiresAt = new Date(user.subscriptionExpiresAt);
+      const diffTime = expiresAt.getTime() - now.getTime();
+      const daysRemaining = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+
+      let subscriptionStatus;
+      let isGraceActive = false;
+      let isExpired = false;
+
+      if (daysRemaining < 0) {
+        const overdueDays = Math.abs(daysRemaining);
+        if (overdueDays <= graceDays) {
+          subscriptionStatus = 'IN_GRACE_PERIOD';
+          isGraceActive = true;
+        } else if (plan === 'TRIAL') {
+          subscriptionStatus = 'TRIAL_EXPIRED';
+          isExpired = true;
+        } else {
+          subscriptionStatus = 'EXPIRED';
+          isExpired = true;
+        }
+      } else {
+        if (plan === 'TRIAL') {
+          subscriptionStatus = 'TRIAL_ACTIVE';
+        } else if (daysRemaining <= 30) {
+          subscriptionStatus = 'EXPIRING_SOON';
+        } else {
+          subscriptionStatus = 'ACTIVE_PAID';
+        }
+      }
+
+      return {
+        subscriptionPlan: plan,
+        subscriptionStatus,
+        daysRemaining,
+        isGraceActive,
+        isExpired,
+      };
+    }
+
+    it('identifies active paid annual subscription with > 30 days remaining', () => {
+      const futureDate = new Date(Date.now() + 180 * 86400000);
+      const res = computeStatus({
+        isActive: true,
+        subscriptionPlan: 'ANNUAL',
+        subscriptionExpiresAt: futureDate,
+        gracePeriodDays: 7,
+      });
+
+      assert.equal(res.subscriptionStatus, 'ACTIVE_PAID');
+      assert.equal(res.isExpired, false);
+      assert.ok(res.daysRemaining > 30);
+    });
+
+    it('identifies expiring annual subscription when <= 30 days remaining', () => {
+      const futureDate = new Date(Date.now() + 12 * 86400000);
+      const res = computeStatus({
+        isActive: true,
+        subscriptionPlan: 'ANNUAL',
+        subscriptionExpiresAt: futureDate,
+        gracePeriodDays: 7,
+      });
+
+      assert.equal(res.subscriptionStatus, 'EXPIRING_SOON');
+      assert.equal(res.isExpired, false);
+      assert.ok(res.daysRemaining <= 30 && res.daysRemaining > 0);
+    });
+
+    it('identifies 7-day trial active account', () => {
+      const futureDate = new Date(Date.now() + 4 * 86400000);
+      const res = computeStatus({
+        isActive: true,
+        subscriptionPlan: 'TRIAL',
+        subscriptionExpiresAt: futureDate,
+        gracePeriodDays: 7,
+      });
+
+      assert.equal(res.subscriptionStatus, 'TRIAL_ACTIVE');
+      assert.equal(res.isExpired, false);
+      assert.ok(res.daysRemaining > 0);
+    });
+
+    it('triggers grace period when account is overdue by <= gracePeriodDays', () => {
+      const pastDate = new Date(Date.now() - 3 * 86400000);
+      const res = computeStatus({
+        isActive: true,
+        subscriptionPlan: 'ANNUAL',
+        subscriptionExpiresAt: pastDate,
+        gracePeriodDays: 7,
+      });
+
+      assert.equal(res.subscriptionStatus, 'IN_GRACE_PERIOD');
+      assert.equal(res.isGraceActive, true);
+      assert.equal(res.isExpired, false);
+    });
+
+    it('marks as EXPIRED when account is overdue by > gracePeriodDays', () => {
+      const pastDate = new Date(Date.now() - 14 * 86400000);
+      const res = computeStatus({
+        isActive: true,
+        subscriptionPlan: 'ANNUAL',
+        subscriptionExpiresAt: pastDate,
+        gracePeriodDays: 7,
+      });
+
+      assert.equal(res.subscriptionStatus, 'EXPIRED');
+      assert.equal(res.isExpired, true);
+    });
+
+    it('safely handles legacy accounts with null subscriptionExpiresAt without locking them out', () => {
+      const res = computeStatus({
+        isActive: true,
+        subscriptionPlan: 'ANNUAL',
+        subscriptionExpiresAt: null,
+      });
+
+      assert.equal(res.subscriptionStatus, 'ACTIVE_PAID');
+      assert.equal(res.isExpired, false);
+      assert.equal(res.daysRemaining, null);
+    });
+  });
+
+  describe('5. Loads Ledger Custom Date Range & CSV Row Exporter', () => {
+    function filterLoadsByDate(loads, startDate, endDate) {
+      return loads.filter((l) => {
+        const loadDate = new Date(l.date).getTime();
+        if (startDate && loadDate < new Date(startDate).getTime()) return false;
+        if (endDate && loadDate > new Date(endDate + 'T23:59:59.999Z').getTime()) return false;
+        return true;
+      });
+    }
+
+    it('filters loads accurately within custom start and end date boundaries', () => {
+      const sampleLoads = [
+        { id: '1', date: '2026-08-01', amount: 1500 },
+        { id: '2', date: '2026-08-15', amount: 1400 },
+        { id: '3', date: '2026-08-20', amount: 1600 },
+        { id: '4', date: '2026-08-30', amount: 1500 },
+      ];
+
+      const filtered = filterLoadsByDate(sampleLoads, '2026-08-10', '2026-08-25');
+      assert.equal(filtered.length, 2);
+      assert.equal(filtered[0].id, '2');
+      assert.equal(filtered[1].id, '3');
+    });
+
+    it('returns all loads when no custom date boundaries are specified (All Time)', () => {
+      const sampleLoads = [
+        { id: '1', date: '2026-08-01', amount: 1500 },
+        { id: '2', date: '2026-08-15', amount: 1400 },
+      ];
+
+      const filtered = filterLoadsByDate(sampleLoads, '', '');
+      assert.equal(filtered.length, 2);
+    });
+  });
 });
+
 
 

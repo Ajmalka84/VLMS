@@ -33,7 +33,7 @@ export const ProtectedRoute: React.FC<ProtectedRouteProps> = ({
   }
 
   if (allowedRoles && !allowedRoles.includes(user.role)) {
-    const fallbackPath = user.role === 'SUPER_ADMIN' ? '/' : '/loads';
+    const fallbackPath = user.role === 'SUPER_ADMIN' ? '/admin/users' : '/loads';
     return <Navigate to={fallbackPath} replace />;
   }
 

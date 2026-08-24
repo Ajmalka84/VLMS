@@ -19,9 +19,13 @@ model User {
   mobile       String   @unique @map("mobile") @db.VarChar
   passwordHash String   @map("password_hash") @db.VarChar
   gstin        String?  @map("gstin") @db.VarChar
-  isActive     Boolean  @default(true) @map("is_active")
-  createdAt    DateTime @default(now()) @map("created_at") @db.Timestamp
-  updatedAt    DateTime @updatedAt @map("updated_at") @db.Timestamp
+  isActive               Boolean   @default(true) @map("is_active")
+  subscriptionPlan       String    @default("ANNUAL") @map("subscription_plan") @db.VarChar(50)
+  subscriptionStartsAt   DateTime  @default(now()) @map("subscription_starts_at") @db.Timestamp
+  subscriptionExpiresAt  DateTime? @map("subscription_expires_at") @db.Timestamp
+  gracePeriodDays        Int       @default(7) @map("grace_period_days")
+  createdAt              DateTime  @default(now()) @map("created_at") @db.Timestamp
+  updatedAt              DateTime  @updatedAt @map("updated_at") @db.Timestamp
 
   sites       Site[]
   vehicles    Vehicle[]

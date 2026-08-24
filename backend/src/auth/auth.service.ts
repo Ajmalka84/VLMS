@@ -10,6 +10,7 @@ import * as bcrypt from 'bcryptjs';
 import { PrismaService } from '../prisma/prisma.service';
 import { LoginDto } from './dto/login.dto';
 import { UserRole } from './decorators/roles.decorator';
+import { computeSubscriptionStatus, SubscriptionStatusInfo } from '../admin/admin-users.service';
 
 export interface UserAuthProfile {
   id: string;
@@ -18,6 +19,14 @@ export interface UserAuthProfile {
   businessName?: string;
   gstin?: string | null;
   isActive?: boolean;
+  subscriptionPlan?: string;
+  subscriptionStartsAt?: Date;
+  subscriptionExpiresAt?: Date | null;
+  gracePeriodDays?: number;
+  subscriptionStatus?: SubscriptionStatusInfo['subscriptionStatus'];
+  daysRemaining?: number | null;
+  isGraceActive?: boolean;
+  isExpired?: boolean;
 }
 
 @Injectable()
@@ -40,6 +49,11 @@ export class AuthService {
           role: 'SUPER_ADMIN',
           businessName: 'VLMS SaaS Admin',
           isActive: true,
+          subscriptionPlan: 'SUPER_ADMIN',
+          subscriptionStatus: 'ACTIVE_PAID',
+          daysRemaining: null,
+          isGraceActive: false,
+          isExpired: false,
         };
       }
       throw new UnauthorizedException('Invalid mobile number or password');
@@ -66,6 +80,8 @@ export class AuthService {
       throw new UnauthorizedException('Invalid mobile number or password');
     }
 
+    const subInfo = computeSubscriptionStatus(user);
+
     return {
       id: user.id,
       mobile: user.mobile,
@@ -73,6 +89,7 @@ export class AuthService {
       businessName: user.businessName,
       gstin: user.gstin,
       isActive: user.isActive,
+      ...subInfo,
     };
   }
 
@@ -100,6 +117,11 @@ export class AuthService {
         role: 'SUPER_ADMIN',
         businessName: 'VLMS SaaS Admin',
         isActive: true,
+        subscriptionPlan: 'SUPER_ADMIN',
+        subscriptionStatus: 'ACTIVE_PAID',
+        daysRemaining: null,
+        isGraceActive: false,
+        isExpired: false,
       };
     }
 
@@ -111,6 +133,10 @@ export class AuthService {
         mobile: true,
         gstin: true,
         isActive: true,
+        subscriptionPlan: true,
+        subscriptionStartsAt: true,
+        subscriptionExpiresAt: true,
+        gracePeriodDays: true,
         createdAt: true,
         updatedAt: true,
       },
@@ -124,8 +150,11 @@ export class AuthService {
       throw new ForbiddenException('Account is inactive.');
     }
 
+    const subInfo = computeSubscriptionStatus(user);
+
     return {
       ...user,
+      ...subInfo,
       role: 'USER' as UserRole,
     };
   }

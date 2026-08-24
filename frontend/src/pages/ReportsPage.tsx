@@ -129,6 +129,7 @@ export const ReportsPage: React.FC = () => {
 
   // Fetch Contractors Overview
   const fetchContractorsOverview = useCallback(async () => {
+    if (isSuperAdmin && !selectedCustomerId) return;
     if (overviewFetchingRef.current) return;
     overviewFetchingRef.current = true;
     setLoading(true);
@@ -152,6 +153,7 @@ export const ReportsPage: React.FC = () => {
   // Fetch Detailed Statement
   const fetchSettlementStatement = useCallback(
     async (contractorId: string) => {
+      if (isSuperAdmin && !selectedCustomerId) return;
       if (settlementFetchingRef.current) return;
       settlementFetchingRef.current = true;
       setLoading(true);
@@ -176,13 +178,14 @@ export const ReportsPage: React.FC = () => {
   );
 
   useEffect(() => {
+    if (isSuperAdmin && !selectedCustomerId) return;
     if (!customersLoaded) return;
     if (selectedContractorId) {
       void fetchSettlementStatement(selectedContractorId);
     } else {
       void fetchContractorsOverview();
     }
-  }, [customersLoaded, selectedContractorId, fetchSettlementStatement, fetchContractorsOverview]);
+  }, [customersLoaded, isSuperAdmin, selectedCustomerId, selectedContractorId, fetchSettlementStatement, fetchContractorsOverview]);
 
   // Print Handler
   const handlePrint = () => {

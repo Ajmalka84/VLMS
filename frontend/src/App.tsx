@@ -34,7 +34,7 @@ const RouteLoadingFallback: React.FC = () => (
 const RootIndex: React.FC = () => {
   const { user } = useAuth();
   if (user?.role === 'SUPER_ADMIN') {
-    return <DashboardPage />;
+    return <Navigate to="/admin/users" replace />;
   }
   return <Navigate to="/loads" replace />;
 };

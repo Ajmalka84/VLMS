@@ -47,14 +47,10 @@ export const LoginPage: React.FC = () => {
       const authUser = await login({ mobile: mobile.trim(), password });
 
       // Role-based landing:
-      // Super Admin -> Dashboard ('/') or requested admin route
+      // Super Admin -> Always Customers Console ('/admin/users')
       // Customer User -> Always Loads Cockpit ('/loads')
       if (authUser.role === 'SUPER_ADMIN') {
-        if (from && from.startsWith('/admin')) {
-          navigate(from, { replace: true });
-        } else {
-          navigate('/', { replace: true });
-        }
+        navigate('/admin/users', { replace: true });
       } else {
         navigate('/loads', { replace: true });
       }
