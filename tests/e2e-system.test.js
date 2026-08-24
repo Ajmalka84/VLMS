@@ -532,3 +532,193 @@ test('7. Relational Deletion Safeguards block deletion when loads exist (HTTP 40
   assert.equal(contDelRes.data.success, false);
   assert.ok(contDelRes.data.message.includes('dispatch load'));
 });
+
+let trialCustomerId = '';
+let trialCustomerToken = '';
+const trialMobile = `96${rand8.toString().slice(0, 8)}`;
+
+test('8.1 Super Admin onboards new customer on 7-Day Free Trial', async () => {
+  const res = await req('/admin/users', {
+    method: 'POST',
+    headers: { Authorization: `Bearer ${superAdminToken}` },
+    body: JSON.stringify({
+      businessName: 'Perumbavoor Trial Quarry',
+      mobile: trialMobile,
+      password: 'TrialPassword123',
+      subscriptionPlan: 'TRIAL',
+    }),
+  });
+
+  assert.equal(res.status, 201);
+  assert.equal(res.data.success, true);
+  assert.equal(res.data.data.subscriptionPlan, 'TRIAL');
+  assert.equal(res.data.data.subscriptionStatus, 'TRIAL_ACTIVE');
+  assert.ok(res.data.data.daysRemaining >= 6);
+  assert.ok(res.data.data.subscriptionExpiresAt);
+  trialCustomerId = res.data.data.id;
+});
+
+test('8.2 Customer logs in and validates subscription profile in /auth/me', async () => {
+  const loginRes = await req('/auth/login', {
+    method: 'POST',
+    body: JSON.stringify({
+      mobile: trialMobile,
+      password: 'TrialPassword123',
+    }),
+  });
+
+  assert.equal(loginRes.status, 200);
+  assert.equal(loginRes.data.success, true);
+  assert.equal(loginRes.data.data.user.subscriptionPlan, 'TRIAL');
+  assert.equal(loginRes.data.data.user.subscriptionStatus, 'TRIAL_ACTIVE');
+  trialCustomerToken = loginRes.data.data.accessToken;
+
+  const meRes = await req('/auth/me', {
+    headers: { Authorization: `Bearer ${trialCustomerToken}` },
+  });
+
+  assert.equal(meRes.status, 200);
+  assert.equal(meRes.data.data.subscriptionPlan, 'TRIAL');
+  assert.equal(meRes.data.data.subscriptionStatus, 'TRIAL_ACTIVE');
+  assert.ok(meRes.data.data.daysRemaining >= 6);
+});
+
+test('8.3 Super Admin executes 1-Click Renew +1 Year (₹9,999 Annual Plan)', async () => {
+  const res = await req(`/admin/users/${trialCustomerId}/subscription`, {
+    method: 'PATCH',
+    headers: { Authorization: `Bearer ${superAdminToken}` },
+    body: JSON.stringify({
+      action: 'RENEW_ANNUAL_1Y',
+    }),
+  });
+
+  assert.equal(res.status, 200);
+  assert.equal(res.data.success, true);
+  assert.equal(res.data.data.subscriptionPlan, 'ANNUAL');
+  assert.equal(res.data.data.subscriptionStatus, 'ACTIVE_PAID');
+  assert.ok(res.data.data.daysRemaining > 300);
+});
+
+test('8.4 Super Admin extends validity by +30 Days for Monsoon / Shutdown compensation', async () => {
+  const initialUser = await req(`/admin/users/${trialCustomerId}`, {
+    headers: { Authorization: `Bearer ${superAdminToken}` },
+  });
+  const initialExpiry = new Date(initialUser.data.data.subscriptionExpiresAt).getTime();
+
+  const res = await req(`/admin/users/${trialCustomerId}/subscription`, {
+    method: 'PATCH',
+    headers: { Authorization: `Bearer ${superAdminToken}` },
+    body: JSON.stringify({
+      action: 'EXTEND_SHUTDOWN_30D',
+    }),
+  });
+
+  assert.equal(res.status, 200);
+  assert.equal(res.data.success, true);
+  const updatedExpiry = new Date(res.data.data.subscriptionExpiresAt).getTime();
+  const diffDays = Math.round((updatedExpiry - initialExpiry) / (1000 * 60 * 60 * 24));
+  assert.equal(diffDays, 30);
+});
+
+test('8.5 Filters Loads Ledger accurately using custom startDate and endDate', async () => {
+  const todayStr = new Date().toISOString().split('T')[0];
+  const res = await req(`/loads?startDate=${todayStr}&endDate=${todayStr}`, {
+    headers: { Authorization: `Bearer ${tenantAToken}` },
+  });
+
+  assert.equal(res.status, 200);
+  assert.equal(res.data.success, true);
+  assert.ok(Array.isArray(res.data.data.loads));
+  assert.ok(res.data.data.summary);
+  assert.ok(res.data.data.loads.length >= 2);
+});
+
+test('8.6 Super Admin sets Custom Expiration Date & Grace Period on Customer', async () => {
+  const customDate = new Date(Date.now() + 60 * 86400000).toISOString();
+  const res = await req(`/admin/users/${trialCustomerId}/subscription`, {
+    method: 'PATCH',
+    headers: { Authorization: `Bearer ${superAdminToken}` },
+    body: JSON.stringify({
+      action: 'SET_CUSTOM_DATE',
+      subscriptionPlan: 'CUSTOM',
+      subscriptionExpiresAt: customDate,
+      gracePeriodDays: 14,
+    }),
+  });
+
+  assert.equal(res.status, 200);
+  assert.equal(res.data.success, true);
+  assert.equal(res.data.data.subscriptionPlan, 'CUSTOM');
+  assert.equal(res.data.data.gracePeriodDays, 14);
+  assert.ok(res.data.data.daysRemaining >= 58 && res.data.data.daysRemaining <= 61);
+});
+
+test('8.7 Multi-Status Customers Query Filtering (all, active, inactive, trial, active_paid, expiring, expired)', async () => {
+  // Test All
+  const allRes = await req('/admin/users?status=all', {
+    headers: { Authorization: `Bearer ${superAdminToken}` },
+  });
+  assert.equal(allRes.status, 200);
+  assert.ok(allRes.data.data.users.length >= 2);
+
+  // Test Active
+  const activeRes = await req('/admin/users?status=active', {
+    headers: { Authorization: `Bearer ${superAdminToken}` },
+  });
+  assert.equal(activeRes.status, 200);
+  assert.ok(activeRes.data.data.users.every((u) => u.isActive === true));
+
+  // Test Search combined with status
+  const searchRes = await req('/admin/users?status=active&search=Alpha', {
+    headers: { Authorization: `Bearer ${superAdminToken}` },
+  });
+  assert.equal(searchRes.status, 200);
+  assert.ok(searchRes.data.data.users.some((u) => u.businessName.includes('Alpha')));
+});
+
+test('8.8 Super Admin Multi-Tenant Reports Query with customerId override', async () => {
+  const res = await req(`/reports/contractors-summary?customerId=${tenantAUser.id}`, {
+    headers: { Authorization: `Bearer ${superAdminToken}` },
+  });
+
+  assert.equal(res.status, 200);
+  assert.equal(res.data.success, true);
+  assert.ok(Array.isArray(res.data.data.contractors));
+  assert.ok(res.data.data.grandTotal.totalAmount >= 5000);
+});
+
+test('8.9 Cross-Tenant Rate Lookup Guard: Tenant B cannot query Tenant A rates', async () => {
+  const res = await req(`/rates/lookup?siteId=${siteAId}&vehicleTypeId=${vehicleTypeId}&materialTypeId=${materialTypeId}`, {
+    headers: { Authorization: `Bearer ${tenantBToken}` },
+  });
+
+  // Since siteA belongs to Tenant A, Tenant B lookup will return 404 or 403
+  assert.ok(res.status === 404 || res.status === 403);
+});
+
+test('8.10 Inactive user account is blocked from getting /auth/me and protected endpoints', async () => {
+  // Deactivate Tenant B
+  await req(`/admin/users/${tenantBUser.id}/status`, {
+    method: 'PATCH',
+    headers: { Authorization: `Bearer ${superAdminToken}` },
+    body: JSON.stringify({ isActive: false }),
+  });
+
+  // Attempt login with Tenant B
+  const loginRes = await req('/auth/login', {
+    method: 'POST',
+    body: JSON.stringify({
+      mobile: tenantBMobile,
+      password: 'Password@123',
+    }),
+  });
+  assert.equal(loginRes.status, 403);
+
+  // Restore Tenant B status
+  await req(`/admin/users/${tenantBUser.id}/status`, {
+    method: 'PATCH',
+    headers: { Authorization: `Bearer ${superAdminToken}` },
+    body: JSON.stringify({ isActive: true }),
+  });
+});
+

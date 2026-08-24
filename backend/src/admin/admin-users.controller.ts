@@ -16,6 +16,7 @@ import { UpdateUserDto } from './dto/update-user.dto';
 import { UpdateUserStatusDto } from './dto/update-user-status.dto';
 import { ResetPasswordDto } from './dto/reset-password.dto';
 import { QueryUsersDto } from './dto/query-users.dto';
+import { UpdateSubscriptionDto } from './dto/update-subscription.dto';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { RolesGuard } from '../auth/guards/roles.guard';
 import { Roles } from '../auth/decorators/roles.decorator';
@@ -47,6 +48,14 @@ export class AdminUsersController {
     @Body() dto: UpdateUserDto,
   ) {
     return this.adminUsersService.updateUser(id, dto);
+  }
+
+  @Patch(':id/subscription')
+  async updateSubscription(
+    @Param('id') id: string,
+    @Body() dto: UpdateSubscriptionDto,
+  ) {
+    return this.adminUsersService.updateSubscription(id, dto);
   }
 
   @Patch(':id/status')

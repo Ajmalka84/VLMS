@@ -8,6 +8,9 @@ import {
   LogOut,
   Users,
   Layers,
+  Clock,
+  CheckCircle2,
+  AlertTriangle,
 } from 'lucide-react';
 import { fetchHealth, HealthData } from '../../api/health';
 import { useAuth } from '../../context/AuthContext';
@@ -46,11 +49,11 @@ export const AppLayout: React.FC = () => {
 
   const isSuperAdmin = user?.role === 'SUPER_ADMIN';
 
-  // Navigation Items: Dashboard only for Super Admin; Customer starts directly with Loads!
+  // Navigation Items: Super Admin starts directly with Customers; Customer starts directly with Loads!
   const navItems = isSuperAdmin
     ? [
-        { to: '/', label: t('dashboard'), icon: LayoutDashboard },
         { to: '/admin/users', label: t('customers'), icon: Users },
+        { to: '/reports', label: t('reports'), icon: FileSpreadsheet },
         { to: '/settings', label: t('global_master'), icon: Layers },
       ]
     : [
@@ -59,23 +62,82 @@ export const AppLayout: React.FC = () => {
         { to: '/settings', label: t('master_data'), icon: Settings },
       ];
 
+  // Helper for customer subscription badge in header (visible on mobile & desktop)
+  const renderSubscriptionHeaderPill = () => {
+    if (isSuperAdmin || !user) return null;
+
+    if (user.subscriptionPlan === 'TRIAL' || user.subscriptionStatus === 'TRIAL_ACTIVE') {
+      const days = user.daysRemaining ?? 7;
+      return (
+        <div
+          title={`7-Day Free Pilot Active (${days} days remaining)`}
+          className="inline-flex items-center gap-1 sm:gap-1.5 px-2 sm:px-2.5 py-0.5 sm:py-1 rounded-full bg-cyan-950/90 border border-cyan-700/70 text-cyan-300 text-[10px] sm:text-[11px] font-bold shadow-sm shrink-0 whitespace-nowrap"
+        >
+          <Clock className="w-3 h-3 sm:w-3.5 sm:h-3.5 text-cyan-400 shrink-0" />
+          <span>7-Day Trial ({days}d)</span>
+        </div>
+      );
+    }
+
+    if (user.subscriptionStatus === 'EXPIRING_SOON') {
+      return (
+        <div
+          title={`Annual Package expiring in ${user.daysRemaining ?? 0} days`}
+          className="inline-flex items-center gap-1 sm:gap-1.5 px-2 sm:px-2.5 py-0.5 sm:py-1 rounded-full bg-amber-950/90 border border-amber-600/80 text-amber-300 text-[10px] sm:text-[11px] font-bold shadow-sm animate-pulse shrink-0 whitespace-nowrap"
+        >
+          <AlertTriangle className="w-3 h-3 sm:w-3.5 sm:h-3.5 text-amber-400 shrink-0" />
+          <span>Expiring in {user.daysRemaining ?? 0}d</span>
+        </div>
+      );
+    }
+
+    if (user.subscriptionStatus === 'IN_GRACE_PERIOD') {
+      return (
+        <div
+          title="Subscription Grace Period Active"
+          className="inline-flex items-center gap-1 sm:gap-1.5 px-2 sm:px-2.5 py-0.5 sm:py-1 rounded-full bg-orange-950/90 border border-orange-600 text-orange-300 text-[10px] sm:text-[11px] font-bold shadow-sm animate-pulse shrink-0 whitespace-nowrap"
+        >
+          <AlertTriangle className="w-3 h-3 sm:w-3.5 sm:h-3.5 text-orange-400 shrink-0" />
+          <span>Grace Period</span>
+        </div>
+      );
+    }
+
+    if (user.subscriptionStatus === 'ACTIVE_PAID') {
+      return (
+        <div
+          title={`Annual Package Active (${user.daysRemaining !== null ? `${user.daysRemaining} days left` : 'Lifetime'})`}
+          className="inline-flex items-center gap-1 sm:gap-1.5 px-2 sm:px-2.5 py-0.5 sm:py-1 rounded-full bg-emerald-950/90 border border-emerald-700/70 text-emerald-300 text-[10px] sm:text-[11px] font-bold shadow-sm shrink-0 whitespace-nowrap"
+        >
+          <CheckCircle2 className="w-3 h-3 sm:w-3.5 sm:h-3.5 text-emerald-400 shrink-0" />
+          <span>Annual Plan {user.daysRemaining !== null ? `(${user.daysRemaining}d)` : ''}</span>
+        </div>
+      );
+    }
+
+    return null;
+  };
+
   return (
     <div className="min-h-screen flex flex-col bg-slate-950 text-slate-100 selection:bg-amber-500 selection:text-slate-950">
       {/* Top Header */}
       <header className="sticky top-0 z-40 glass-panel border-b border-slate-800/80 px-3 py-2.5 sm:px-6">
-        <div className="max-w-7xl mx-auto flex items-center justify-between gap-3 sm:gap-4">
+        <div className="max-w-7xl mx-auto flex items-center justify-between gap-2 sm:gap-4">
           {/* Brand Logo & Client Name below */}
-          <NavLink
-            to={isSuperAdmin ? '/' : '/loads'}
-            className="flex flex-col items-start cursor-pointer select-none group shrink-0 min-w-0"
-          >
-            <span className="font-black text-xl sm:text-2xl tracking-tight text-white leading-none">
-              VLMS
-            </span>
-            <span className="text-[11px] text-slate-400 font-medium truncate max-w-[150px] sm:max-w-[260px] leading-tight mt-0.5 group-hover:text-slate-300 transition-colors">
-              {user?.businessName || 'Quarry Management'}
-            </span>
-          </NavLink>
+          <div className="flex items-center gap-2 sm:gap-3 shrink-0 min-w-0">
+            <NavLink
+              to={isSuperAdmin ? '/admin/users' : '/loads'}
+              className="flex flex-col items-start cursor-pointer select-none group shrink-0 min-w-0"
+            >
+              <span className="font-black text-lg sm:text-2xl tracking-tight text-white leading-none">
+                VLMS
+              </span>
+              <span className="text-[10px] sm:text-[11px] text-slate-400 font-medium truncate max-w-[100px] sm:max-w-[220px] leading-tight mt-0.5 group-hover:text-slate-300 transition-colors">
+                {user?.businessName || 'Quarry Management'}
+              </span>
+            </NavLink>
+            {renderSubscriptionHeaderPill()}
+          </div>
 
           {/* Desktop Navigation Menu */}
           <nav className="hidden md:flex items-center gap-1.5 p-1 rounded-2xl bg-slate-900/80 border border-slate-800/90 shadow-sm">
@@ -85,7 +147,7 @@ export const AppLayout: React.FC = () => {
                 <NavLink
                   key={item.to}
                   to={item.to}
-                  end={item.to === '/' || item.to === '/loads'}
+                  end={item.to === '/admin/users' || item.to === '/loads'}
                   id={`desktop-nav-${item.label.toLowerCase().replace(/\s+/g, '-')}`}
                   className={({ isActive }) =>
                     `flex items-center gap-2 px-3.5 py-2 rounded-xl text-xs font-bold transition-all cursor-pointer select-none touch-manipulation active:scale-[0.98] ${
@@ -166,7 +228,7 @@ export const AppLayout: React.FC = () => {
               <NavLink
                 key={item.to}
                 to={item.to}
-                end={item.to === '/' || item.to === '/loads'}
+                end={item.to === '/admin/users' || item.to === '/loads'}
                 id={`mobile-nav-${item.label.toLowerCase().replace(/\s+/g, '-')}`}
                 className={({ isActive }) =>
                   `flex flex-col items-center justify-center py-2 px-1 rounded-xl text-[11px] font-bold transition-all select-none touch-manipulation active:scale-95 cursor-pointer ${

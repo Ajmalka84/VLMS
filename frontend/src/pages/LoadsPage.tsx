@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback, useMemo } from 'react';
+import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { Link } from 'react-router-dom';
 import {
   Truck,
@@ -120,7 +120,40 @@ export const LoadsPage: React.FC = () => {
   const debouncedFilterSearch = useDebounce(filterSearch, 200);
   const [filterStartDate, setFilterStartDate] = useState('');
   const [filterEndDate, setFilterEndDate] = useState('');
+  const [historyPresetRange, setHistoryPresetRange] = useState<
+    'all' | 'today' | 'yesterday' | 'week' | 'month' | 'custom'
+  >('all');
   const [page, setPage] = useState(1);
+
+  const applyHistoryPreset = (
+    preset: 'all' | 'today' | 'yesterday' | 'week' | 'month' | 'custom'
+  ) => {
+    setHistoryPresetRange(preset);
+    setPage(1);
+    const now = new Date();
+
+    if (preset === 'all') {
+      setFilterStartDate('');
+      setFilterEndDate('');
+    } else if (preset === 'today') {
+      const todayStr = now.toISOString().split('T')[0];
+      setFilterStartDate(todayStr);
+      setFilterEndDate(todayStr);
+    } else if (preset === 'yesterday') {
+      const yesterday = new Date(now.getTime() - 86400000);
+      const yestStr = yesterday.toISOString().split('T')[0];
+      setFilterStartDate(yestStr);
+      setFilterEndDate(yestStr);
+    } else if (preset === 'week') {
+      const sevenDaysAgo = new Date(now.getTime() - 6 * 86400000);
+      setFilterStartDate(sevenDaysAgo.toISOString().split('T')[0]);
+      setFilterEndDate(now.toISOString().split('T')[0]);
+    } else if (preset === 'month') {
+      const firstDay = new Date(now.getFullYear(), now.getMonth(), 1);
+      setFilterStartDate(firstDay.toISOString().split('T')[0]);
+      setFilterEndDate(now.toISOString().split('T')[0]);
+    }
+  };
 
   // Edit / Delete Modal State
   const [editLoad, setEditLoad] = useState<Load | null>(null);
@@ -317,8 +350,12 @@ export const LoadsPage: React.FC = () => {
     };
   }, [siteId, vehicleId, materialTypeId, vehicles, resolveRate, t]);
 
+  const historyFetchingRef = useRef(false);
+
   // Load History fetcher
   const fetchLoadsHistory = useCallback(async () => {
+    if (historyFetchingRef.current) return;
+    historyFetchingRef.current = true;
     setHistoryLoading(true);
     try {
       const res = await getLoadsApi({
@@ -337,6 +374,7 @@ export const LoadsPage: React.FC = () => {
       toast.error(err.message || 'Failed to fetch loads history');
     } finally {
       setHistoryLoading(false);
+      historyFetchingRef.current = false;
     }
   }, [
     filterSite,
@@ -355,10 +393,10 @@ export const LoadsPage: React.FC = () => {
     }
   }, [activeView, fetchLoadsHistory]);
 
-  // Export Loads History to Excel / CSV
+  // Export Loads History to Excel / CSV with Custom Dates
   const handleExportLoadsCSV = async () => {
     try {
-      toast.info('Fetching load register for export...');
+      toast.info(language === 'ml' ? 'ഡൗൺലോഡിനായി ലോഡുകൾ എടുക്കുന്നു...' : 'Fetching load ledger for export...');
       const res = await getLoadsApi({
         siteId: filterSite || undefined,
         contractorId: filterContractor || undefined,
@@ -372,7 +410,7 @@ export const LoadsPage: React.FC = () => {
       });
 
       if (res.loads.length === 0) {
-        toast.warning('No load records to export');
+        toast.warning(language === 'ml' ? 'എക്സ്പോർട്ട് ചെയ്യാൻ ലോഡുകളൊന്നുമില്ല' : 'No load records to export');
         return;
       }
 
@@ -404,12 +442,18 @@ export const LoadsPage: React.FC = () => {
         l.remarks || '',
       ]);
 
+      const dateSuffix = filterStartDate && filterEndDate
+        ? `${filterStartDate}_to_${filterEndDate}`
+        : filterStartDate
+        ? `from_${filterStartDate}`
+        : 'All_Time';
+
       exportToCsv(
-        `Load_Register_${new Date().toISOString().split('T')[0]}`,
+        `Loads_Ledger_${dateSuffix}_${new Date().toISOString().split('T')[0]}`,
         headers,
         rows
       );
-      toast.success('Load Register exported to CSV successfully!');
+      toast.success(language === 'ml' ? 'ലോഡ് ലെഡ്ജർ എക്സ്പോർട്ട് പൂർത്തിയായി!' : 'Loads Ledger exported to CSV/Excel successfully!');
     } catch (err: any) {
       toast.error(err.message || 'Failed to export load register');
     }
@@ -1143,7 +1187,7 @@ export const LoadsPage: React.FC = () => {
             </Card>
           </div>
 
-          {/* Filter Toolbar with CustomSelect Components */}
+          {/* Filter Toolbar with Date Presets, Custom Date Range & Select Components */}
           <div className="p-4 rounded-3xl bg-slate-900 border border-slate-800 space-y-3 relative z-40 overflow-visible shadow-xl">
             <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-2 border-b border-slate-800/80">
               <span className="text-xs font-bold text-slate-300 uppercase tracking-wider flex items-center gap-1.5">
@@ -1152,12 +1196,83 @@ export const LoadsPage: React.FC = () => {
               </span>
 
               <button
+                type="button"
                 onClick={handleExportLoadsCSV}
                 className="flex items-center justify-center gap-1.5 px-4 py-2 rounded-xl bg-slate-900 border border-slate-800 hover:border-slate-700 text-xs font-bold text-slate-200 hover:text-white transition-all cursor-pointer shadow-sm select-none touch-manipulation"
               >
                 <Download className="w-4 h-4 text-emerald-400" />
-                {language === 'ml' ? 'രജിസ്റ്റർ എക്സ്പോർട്ട് (CSV / Excel)' : 'Export Register (CSV / Excel)'}
+                {language === 'ml' ? 'ലെഡ്ജർ എക്സ്പോർട്ട് (CSV / Excel)' : 'Export Ledger (CSV / Excel)'}
               </button>
+            </div>
+
+            {/* Date Range Presets & Inline Custom Range */}
+            <div className="flex flex-wrap items-center gap-1.5 pb-2 border-b border-slate-800/80">
+              <span className="text-xs font-semibold text-slate-400 mr-2 flex items-center gap-1">
+                <Calendar className="w-3.5 h-3.5 text-amber-400" /> {t('period')}:
+              </span>
+              {[
+                { key: 'all', label: t('all_time') },
+                { key: 'today', label: t('today') },
+                { key: 'yesterday', label: t('yesterday') },
+                { key: 'week', label: t('last_7_days') },
+                { key: 'month', label: t('this_month') },
+                { key: 'custom', label: t('custom_range') },
+              ].map((p) => (
+                <button
+                  key={p.key}
+                  type="button"
+                  onClick={() => applyHistoryPreset(p.key as any)}
+                  className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer ${
+                    historyPresetRange === p.key
+                      ? 'bg-amber-500 text-slate-950 font-extrabold shadow-sm'
+                      : 'bg-slate-950 text-slate-400 hover:text-white border border-slate-800'
+                  }`}
+                >
+                  {p.label}
+                </button>
+              ))}
+
+              {historyPresetRange === 'custom' && (
+                <div className="flex flex-wrap items-center gap-2 ml-auto mt-2 sm:mt-0">
+                  <div className="flex items-center gap-1.5 text-xs text-slate-400">
+                    <span>{language === 'ml' ? 'മുതൽ:' : 'From:'}</span>
+                    <input
+                      type="date"
+                      value={filterStartDate}
+                      onChange={(e) => {
+                        setFilterStartDate(e.target.value);
+                        setPage(1);
+                      }}
+                      className="px-2.5 py-1 rounded-lg bg-slate-950 border border-slate-800 text-xs text-white focus:outline-none focus:border-amber-500"
+                    />
+                  </div>
+                  <div className="flex items-center gap-1.5 text-xs text-slate-400">
+                    <span>{language === 'ml' ? 'വരെ:' : 'To:'}</span>
+                    <input
+                      type="date"
+                      value={filterEndDate}
+                      onChange={(e) => {
+                        setFilterEndDate(e.target.value);
+                        setPage(1);
+                      }}
+                      className="px-2.5 py-1 rounded-lg bg-slate-950 border border-slate-800 text-xs text-white focus:outline-none focus:border-amber-500"
+                    />
+                  </div>
+                  {(filterStartDate || filterEndDate) && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setFilterStartDate('');
+                        setFilterEndDate('');
+                        setHistoryPresetRange('all');
+                      }}
+                      className="text-[11px] text-amber-400 hover:text-amber-300 font-semibold underline px-1 cursor-pointer"
+                    >
+                      {language === 'ml' ? 'മായ്ക്കുക' : 'Clear'}
+                    </button>
+                  )}
+                </div>
+              )}
             </div>
 
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-2.5">

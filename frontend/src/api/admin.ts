@@ -6,6 +6,21 @@ export interface CustomerUser {
   mobile: string;
   gstin: string | null;
   isActive: boolean;
+  subscriptionPlan?: string;
+  subscriptionStartsAt?: string;
+  subscriptionExpiresAt?: string | null;
+  gracePeriodDays?: number;
+  subscriptionStatus?:
+    | 'ACTIVE_PAID'
+    | 'EXPIRING_SOON'
+    | 'IN_GRACE_PERIOD'
+    | 'TRIAL_ACTIVE'
+    | 'TRIAL_EXPIRED'
+    | 'EXPIRED'
+    | 'INACTIVE';
+  daysRemaining?: number | null;
+  isGraceActive?: boolean;
+  isExpired?: boolean;
   createdAt: string;
   updatedAt: string;
   _count?: {
@@ -29,6 +44,9 @@ export interface CreateCustomerDto {
   mobile: string;
   password: string;
   gstin?: string;
+  subscriptionPlan?: 'TRIAL' | 'ANNUAL' | 'QUARTERLY' | 'CUSTOM';
+  subscriptionExpiresAt?: string;
+  gracePeriodDays?: number;
 }
 
 export interface UpdateCustomerDto {
@@ -36,9 +54,21 @@ export interface UpdateCustomerDto {
   gstin?: string;
 }
 
+export interface UpdateSubscriptionDto {
+  subscriptionPlan?: 'TRIAL' | 'ANNUAL' | 'QUARTERLY' | 'CUSTOM';
+  action?:
+    | 'RENEW_ANNUAL_1Y'
+    | 'RENEW_QUARTERLY_3M'
+    | 'EXTEND_SHUTDOWN_30D'
+    | 'EXTEND_TRIAL_7D'
+    | 'SET_CUSTOM_DATE';
+  subscriptionExpiresAt?: string;
+  gracePeriodDays?: number;
+}
+
 export async function getCustomersApi(params?: {
   search?: string;
-  status?: 'all' | 'active' | 'inactive';
+  status?: 'all' | 'active' | 'inactive' | 'trial' | 'active_paid' | 'expiring' | 'expired';
   page?: number;
   limit?: number;
 }): Promise<CustomerListResult> {
@@ -75,6 +105,19 @@ export async function updateCustomerApi(
     method: 'PATCH',
     body: JSON.stringify(dto),
   });
+}
+
+export async function updateCustomerSubscriptionApi(
+  id: string,
+  dto: UpdateSubscriptionDto,
+): Promise<CustomerUser & { message: string }> {
+  return apiClient<CustomerUser & { message: string }>(
+    `/admin/users/${id}/subscription`,
+    {
+      method: 'PATCH',
+      body: JSON.stringify(dto),
+    },
+  );
 }
 
 export async function updateCustomerStatusApi(

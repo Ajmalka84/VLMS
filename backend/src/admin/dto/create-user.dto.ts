@@ -26,4 +26,15 @@ export class CreateUserDto {
   @IsString()
   @IsOptional()
   gstin?: string;
+
+  @IsString()
+  @IsOptional()
+  subscriptionPlan?: 'TRIAL' | 'ANNUAL' | 'QUARTERLY' | 'CUSTOM';
+
+  @IsString()
+  @IsOptional()
+  subscriptionExpiresAt?: string;
+
+  @IsOptional()
+  gracePeriodDays?: number;
 }

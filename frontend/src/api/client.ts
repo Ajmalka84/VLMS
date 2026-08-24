@@ -43,13 +43,13 @@ const getBaseUrl = (): string => {
 
 export const API_BASE_URL = `${getBaseUrl()}/api/v1`;
 
-export async function apiClient<T>(
-  endpoint: string,
+// In-flight GET request deduplication cache (shares single promise for concurrent identical GETs)
+const inFlightGetRequests = new Map<string, Promise<any>>();
+
+async function executeFetch<T>(
+  url: string,
   options: RequestInit = {},
 ): Promise<T> {
-  const cleanEndpoint = endpoint.startsWith('/') ? endpoint : `/${endpoint}`;
-  const url = `${API_BASE_URL}${cleanEndpoint}`;
-
   const token = localStorage.getItem(AUTH_TOKEN_KEY);
 
   const defaultHeaders: Record<string, string> = {
@@ -79,8 +79,8 @@ export async function apiClient<T>(
   if (!response.ok) {
     if (response.status === 401) {
       const isAuthEndpoint =
-        endpoint.includes('/auth/login') ||
-        endpoint.includes('/auth/reset-password');
+        url.includes('/auth/login') ||
+        url.includes('/auth/reset-password');
       if (!isAuthEndpoint) {
         localStorage.removeItem(AUTH_TOKEN_KEY);
         if (typeof window !== 'undefined') {
@@ -105,4 +105,34 @@ export async function apiClient<T>(
   }
 
   return data as T;
+}
+
+export async function apiClient<T>(
+  endpoint: string,
+  options: RequestInit = {},
+): Promise<T> {
+  const cleanEndpoint = endpoint.startsWith('/') ? endpoint : `/${endpoint}`;
+  const url = `${API_BASE_URL}${cleanEndpoint}`;
+  const method = (options.method || 'GET').toUpperCase();
+
+  // In-flight deduplication for concurrent identical GET requests
+  if (method === 'GET' && !options.body) {
+    const existing = inFlightGetRequests.get(url);
+    if (existing) {
+      return existing as Promise<T>;
+    }
+
+    const requestPromise = (async () => {
+      try {
+        return await executeFetch<T>(url, options);
+      } finally {
+        inFlightGetRequests.delete(url);
+      }
+    })();
+
+    inFlightGetRequests.set(url, requestPromise);
+    return requestPromise;
+  }
+
+  return executeFetch<T>(url, options);
 }

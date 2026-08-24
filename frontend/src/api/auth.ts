@@ -9,6 +9,21 @@ export interface AuthUser {
   businessName?: string;
   gstin?: string | null;
   isActive?: boolean;
+  subscriptionPlan?: string;
+  subscriptionStartsAt?: string;
+  subscriptionExpiresAt?: string | null;
+  gracePeriodDays?: number;
+  subscriptionStatus?:
+    | 'ACTIVE_PAID'
+    | 'EXPIRING_SOON'
+    | 'IN_GRACE_PERIOD'
+    | 'TRIAL_ACTIVE'
+    | 'TRIAL_EXPIRED'
+    | 'EXPIRED'
+    | 'INACTIVE';
+  daysRemaining?: number | null;
+  isGraceActive?: boolean;
+  isExpired?: boolean;
 }
 
 export interface LoginCredentials {

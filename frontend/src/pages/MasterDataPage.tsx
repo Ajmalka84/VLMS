@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import {
   MapPin,
@@ -148,8 +148,12 @@ export const MasterDataPage: React.FC = () => {
     setTimeout(() => setNotification(null), 4000);
   };
 
+  const adminFetchingRef = useRef(false);
+
   const loadAllData = async (force = false) => {
     if (isSuperAdmin) {
+      if (adminFetchingRef.current && !force) return;
+      adminFetchingRef.current = true;
       setAdminLoading(true);
       try {
         const [vtypes, mtypes] = await Promise.all([
@@ -162,6 +166,7 @@ export const MasterDataPage: React.FC = () => {
         showNotify('error', err.message || 'Failed to load master data');
       } finally {
         setAdminLoading(false);
+        adminFetchingRef.current = false;
       }
     } else {
       try {
