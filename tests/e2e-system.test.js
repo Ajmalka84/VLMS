@@ -742,3 +742,76 @@ test('8.10 Inactive user account is blocked from getting /auth/me and protected 
   });
 });
 
+test('9.1 Public Digital Slip Access without Authentication', async () => {
+  // Query loadA1Id publicly (without any Authorization header)
+  const res = await req(`/loads/public/${loadA1Id}`, {
+    method: 'GET',
+  });
+
+  assert.equal(res.status, 200);
+  assert.equal(res.data.success, true);
+  assert.equal(res.data.data.id, loadA1Id);
+  assert.ok(res.data.data.vehicle.vehicleNumber.startsWith('KL07'));
+  assert.ok(res.data.data.materialType.name.startsWith('Granite_20mm_'));
+  assert.ok(res.data.data.site.siteName.startsWith('Chengara Unit 1'));
+  assert.ok(res.data.data.site.user.businessName.includes('Alpha Quarry'));
+  assert.equal(res.data.data.amount, '4800');
+  assert.equal(res.data.data.paymentType, 'CREDIT');
+});
+
+test('9.2 Public Digital Slip Non-Existent UUID returns HTTP 404', async () => {
+  const nonExistentUuid = '00000000-0000-0000-0000-000000000000';
+  const res = await req(`/loads/public/${nonExistentUuid}`, {
+    method: 'GET',
+  });
+
+  assert.equal(res.status, 404);
+  assert.equal(res.data.success, false);
+  assert.ok(res.data.message.includes('not found'));
+});
+
+test('9.3 Public Digital Slip Malformed / Non-UUID returns HTTP 404 (No 500 crash)', async () => {
+  const tempId = 'temp-1788259999';
+  const res = await req(`/loads/public/${tempId}`, {
+    method: 'GET',
+  });
+
+  assert.equal(res.status, 404);
+  assert.equal(res.data.success, false);
+});
+
+test('9.4 Public Digital Slip Soft-Deleted Load Protection', async () => {
+  // Create a temporary load to soft delete
+  const createRes = await req('/loads', {
+    method: 'POST',
+    headers: { Authorization: `Bearer ${tenantAToken}` },
+    body: JSON.stringify({
+      siteId: siteAId,
+      vehicleId: vehicleAId,
+      materialTypeId: materialTypeId,
+      contractorId: contractorAId,
+      date: '2026-09-01T00:00:00.000Z',
+      paymentType: 'CASH',
+      amount: 1999,
+    }),
+  });
+  assert.equal(createRes.status, 201);
+  const tempLoadId = createRes.data.data.id;
+
+  // Verify public access works before deletion
+  const pubBefore = await req(`/loads/public/${tempLoadId}`);
+  assert.equal(pubBefore.status, 200);
+
+  // Soft delete the load
+  const delRes = await req(`/loads/${tempLoadId}`, {
+    method: 'DELETE',
+    headers: { Authorization: `Bearer ${tenantAToken}` },
+  });
+  assert.equal(delRes.status, 200);
+
+  // Verify public access is blocked after deletion (404)
+  const pubAfter = await req(`/loads/public/${tempLoadId}`);
+  assert.equal(pubAfter.status, 404);
+  assert.equal(pubAfter.data.success, false);
+});
+

@@ -6,12 +6,15 @@ import { AppModule } from './app.module';
 async function bootstrap() {
   const app = await NestFactory.create(AppModule);
   
-  const rawOrigin = process.env.FRONTEND_ORIGIN ?? 'http://localhost:5173';
-  const origins = rawOrigin.includes(',')
-    ? rawOrigin.split(',').map((o) => o.trim())
-    : rawOrigin === '*'
-    ? true
-    : rawOrigin;
+  const rawOrigin = process.env.FRONTEND_ORIGIN;
+  const origins =
+    process.env.NODE_ENV === 'production' && rawOrigin
+      ? rawOrigin.includes(',')
+        ? rawOrigin.split(',').map((o) => o.trim())
+        : rawOrigin === '*'
+        ? true
+        : rawOrigin
+      : true; // Allow all origins in dev/local network mode so mobile phones on LAN can test
 
   app.enableCors({
     origin: origins,

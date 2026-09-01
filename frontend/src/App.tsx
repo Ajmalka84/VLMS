@@ -14,6 +14,7 @@ const LoadsPage = React.lazy(() => import('./pages/LoadsPage').then((m) => ({ de
 const ReportsPage = React.lazy(() => import('./pages/ReportsPage').then((m) => ({ default: m.ReportsPage })));
 const MasterDataPage = React.lazy(() => import('./pages/MasterDataPage').then((m) => ({ default: m.MasterDataPage })));
 const CustomersPage = React.lazy(() => import('./pages/admin/CustomersPage').then((m) => ({ default: m.CustomersPage })));
+const PublicSlipPage = React.lazy(() => import('./pages/PublicSlipPage').then((m) => ({ default: m.PublicSlipPage })));
 const NotFoundPage = React.lazy(() => import('./pages/NotFoundPage').then((m) => ({ default: m.NotFoundPage })));
 
 /**
@@ -49,6 +50,9 @@ export function App() {
               <Routes>
                 {/* Public Login Route */}
                 <Route path="/login" element={<LoginPage />} />
+
+                {/* Public Digital Gate Pass Route */}
+                <Route path="/slip/:id" element={<PublicSlipPage />} />
 
                 {/* Protected App Routes */}
                 <Route
