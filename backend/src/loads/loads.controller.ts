@@ -15,11 +15,18 @@ import { UpdateLoadDto } from './dto/update-load.dto';
 import { QueryLoadsDto } from './dto/query-loads.dto';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { CurrentUser, AuthUser } from '../auth/decorators/current-user.decorator';
+import { Public } from '../auth/decorators/public.decorator';
 
 @Controller('loads')
 @UseGuards(JwtAuthGuard)
 export class LoadsController {
   constructor(private readonly loadsService: LoadsService) {}
+
+  @Public()
+  @Get('public/:id')
+  async findPublicOne(@Param('id') id: string) {
+    return this.loadsService.findPublicOne(id);
+  }
 
   @Post()
   async create(

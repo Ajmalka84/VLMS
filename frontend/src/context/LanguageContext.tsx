@@ -138,6 +138,15 @@ export const translations = {
   contractor_signature: { en: 'Contractor Signature', ml: 'കോൺട്രാക്ടറുടെ ഒപ്പ്' },
   no_contractors_found: { en: 'No contractors registered yet.', ml: 'കോൺട്രാക്ടർമാർ ആരും രജിസ്റ്റർ ചെയ്തിട്ടില്ല.' },
   no_settlement_trips: { en: 'No trips recorded for this contractor in the selected period.', ml: 'തിരഞ്ഞെടുത്ത കാലയളവിൽ ഈ കോൺട്രാക്ടർക്ക് ട്രിപ്പുകൾ ഒന്നും രേഖപ്പെടുത്തിയിട്ടില്ല.' },
+  trip_slip: { en: 'Trip Slip / Gate Pass', ml: 'ലോഡ് സ്ലിപ്പ് / ഗേറ്റ് പാസ്' },
+  print_trip_slip: { en: 'Print Trip Slip', ml: 'സ്ലിപ്പ് പ്രിന്റ് ചെയ്യുക' },
+  share_whatsapp: { en: 'Share on WhatsApp', ml: 'വാട്സ്ആപ്പിൽ അയക്കുക' },
+  slip_no: { en: 'Slip No', ml: 'സ്ലിപ്പ് നമ്പർ' },
+  gate_pass: { en: 'Gate Dispatch Pass', ml: 'ഗേറ്റ് പാസ്' },
+  driver_copy: { en: 'Driver / Site Copy', ml: 'ഡ്രൈവർ / സൈറ്റ് കോപ്പി' },
+  paid_cash: { en: 'PAID CASH', ml: 'ക്യാഷ് നൽകി' },
+  credit_trip: { en: 'CREDIT (ACCOUNT)', ml: 'കടം (അക്കൗണ്ട്)' },
+  reprint_slip: { en: 'View / Print Slip', ml: 'സ്ലിപ്പ് കാണുക / പ്രിന്റ് ചെയ്യുക' },
 };
 
 export type TranslationKey = keyof typeof translations;

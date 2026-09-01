@@ -275,6 +275,42 @@ export class LoadsService {
     return load;
   }
 
+  async findPublicOne(id: string) {
+    const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id);
+    if (!isUuid) {
+      throw new NotFoundException(`Trip Slip with ID "${id}" not found`);
+    }
+
+    const load = await this.prisma.load.findFirst({
+      where: { id, deletedAt: null },
+      include: {
+        site: {
+          include: {
+            user: {
+              select: {
+                businessName: true,
+                mobile: true,
+              },
+            },
+          },
+        },
+        vehicle: {
+          include: {
+            vehicleType: true,
+          },
+        },
+        materialType: true,
+        contractor: true,
+      },
+    });
+
+    if (!load) {
+      throw new NotFoundException(`Trip Slip with ID "${id}" not found`);
+    }
+
+    return load;
+  }
+
   async update(userId: string, id: string, dto: UpdateLoadDto) {
     const current = await this.findOne(userId, id);
 

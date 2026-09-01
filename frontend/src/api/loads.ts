@@ -115,3 +115,7 @@ export async function updateLoadApi(id: string, dto: UpdateLoadDto): Promise<Loa
 export async function deleteLoadApi(id: string): Promise<Load> {
   return apiClient<Load>(`/loads/${id}`, { method: 'DELETE' });
 }
+
+export async function getPublicLoadApi(id: string): Promise<Load> {
+  return apiClient<Load>(`/loads/public/${id}`);
+}

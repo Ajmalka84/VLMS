@@ -439,7 +439,132 @@ describe('Frontend Utilities Unit Tests', () => {
       assert.equal(filtered.length, 2);
     });
   });
+
+  describe('6. Single Trip Slip & WhatsApp Dispatch Formatter', () => {
+    function formatSlipNumber(load) {
+      if (!load || !load.id) return '#L-0000';
+      if (load.id.startsWith('temp-')) {
+        return `#L-${load.id.replace('temp-', '').slice(-4)}`;
+      }
+      const dateStr = load.date ? load.date.split('T')[0].replace(/-/g, '') : '';
+      const hashPart = load.id.replace(/-/g, '').slice(0, 4).toUpperCase();
+      return dateStr ? `#L-${dateStr.slice(2)}-${hashPart}` : `#L-${hashPart}`;
+    }
+
+    function formatSlipDateTime(load) {
+      try {
+        const rawDate = load.createdAt || load.date;
+        const d = new Date(rawDate);
+        if (isNaN(d.getTime())) {
+          return { dateStr: load.date || '', timeStr: '' };
+        }
+        const dateStr = d.toLocaleDateString('en-IN', {
+          day: '2-digit',
+          month: '2-digit',
+          year: 'numeric',
+        });
+        const timeStr = d.toLocaleTimeString('en-IN', {
+          hour: '2-digit',
+          minute: '2-digit',
+          hour12: true,
+        });
+        return { dateStr, timeStr };
+      } catch {
+        return { dateStr: load.date || '', timeStr: '' };
+      }
+    }
+
+    function generateTripSlipWhatsAppText(load, businessName, contactMobile, publicUrl) {
+      const slipNo = formatSlipNumber(load);
+      const { dateStr, timeStr } = formatSlipDateTime(load);
+      const dateTimeDisplay = timeStr ? `${dateStr}, ${timeStr}` : dateStr;
+      const numAmount = Number(load.amount || 0);
+      const formattedAmount = numAmount.toLocaleString('en-IN', { minimumFractionDigits: 2 });
+      
+      const siteName = load.site?.siteName || 'Site Dispatch';
+      const siteLocation = load.site?.location ? ` (${load.site.location})` : '';
+      const vehicleNum = load.vehicle?.vehicleNumber || 'N/A';
+      const vehicleType = load.vehicle?.vehicleType?.name ? ` (${load.vehicle.vehicleType.name})` : '';
+      const materialName = load.materialType?.name || 'Material';
+      const contractorName = load.contractor?.name || 'Direct / Spot Sale';
+      const paymentMode = load.paymentType === 'CASH' ? '💵 CASH [PAID]' : '📝 CREDIT [A/C]';
+
+      const lines = [
+        `🚚 *TRIP DISPATCH SLIP*`,
+        `🏢 *${businessName || 'Quarry & Material Yard'}*`,
+        contactMobile ? `📞 ${contactMobile}` : '',
+        `📍 *Site:* ${siteName}${siteLocation}`,
+        `🔖 *Slip No:* ${slipNo}`,
+        `📅 *Date & Time:* ${dateTimeDisplay}`,
+        `───────────────────────────`,
+        `🚛 *Vehicle:* ${vehicleNum}${vehicleType}`,
+        `📦 *Material:* ${materialName}`,
+        `👤 *Contractor (C/O):* ${contractorName}`,
+        `💳 *Payment Mode:* ${paymentMode}`,
+        `💰 *Total Amount:* ₹${formattedAmount}`,
+      ];
+
+      if (load.remarks && load.remarks.trim()) {
+        lines.push(`📝 *Remarks:* ${load.remarks.trim()}`);
+      }
+
+      if (publicUrl) {
+        lines.push(`🔗 *Digital Slip & PDF:* ${publicUrl}`);
+      }
+
+      lines.push(`───────────────────────────`);
+      lines.push(`_Generated via VLMS Gate System_`);
+
+      return lines.filter((l) => l !== '').join('\n');
+    }
+
+    it('formats slip numbers consistently for UUID and date stamps', () => {
+      const load = { id: '5a3c663b-dd40-4b3b-b0c0-1f6a0af24136', date: '2026-09-01T00:00:00.000Z' };
+      const slipNo = formatSlipNumber(load);
+      assert.equal(slipNo, '#L-260901-5A3C');
+    });
+
+    it('handles temporary optimistic IDs gracefully', () => {
+      const load = { id: 'temp-1788259999', date: '2026-09-01T00:00:00.000Z' };
+      const slipNo = formatSlipNumber(load);
+      assert.equal(slipNo, '#L-9999');
+    });
+
+    it('generates structured WhatsApp text with Indian currency and line items', () => {
+      const load = {
+        id: '5a3c663b-dd40-4b3b-b0c0-1f6a0af24136',
+        date: '2026-09-01T00:00:00.000Z',
+        createdAt: '2026-09-01T14:30:00.000Z',
+        amount: '6000',
+        paymentType: 'CASH',
+        site: { siteName: 'Kuruppampady Quarry', location: 'Ernakulam' },
+        vehicle: { vehicleNumber: 'KL-40-Q-552', vehicleType: { name: '6-Wheeler' } },
+        materialType: { name: 'M-Sand' },
+        contractor: { name: 'Shaji Earthmovers' },
+        remarks: 'Direct gate delivery',
+      };
+
+      const text = generateTripSlipWhatsAppText(
+        load,
+        'Valiyaparambil Granites',
+        '9847012345',
+        'https://vlms.app/slip/5a3c663b-dd40-4b3b-b0c0-1f6a0af24136'
+      );
+
+      assert.match(text, /TRIP DISPATCH SLIP/);
+      assert.match(text, /Valiyaparambil Granites/);
+      assert.match(text, /9847012345/);
+      assert.match(text, /KL-40-Q-552 \(6-Wheeler\)/);
+      assert.match(text, /M-Sand/);
+      assert.match(text, /Shaji Earthmovers/);
+      assert.match(text, /💵 CASH \[PAID\]/);
+      assert.match(text, /₹6,000\.00/);
+      assert.match(text, /Direct gate delivery/);
+      assert.match(text, /https:\/\/vlms\.app\/slip\/5a3c663b-dd40-4b3b-b0c0-1f6a0af24136/);
+    });
+  });
 });
+
 
 
 

@@ -25,10 +25,14 @@ import {
   ChevronRight,
   UserCheck,
   Download,
+  Printer,
+  Share2,
+  FileText,
 } from 'lucide-react';
 import { Card } from '../components/common/Card';
 import { ConfirmModal } from '../components/common/ConfirmModal';
 import { CustomSelect, CustomSelectOption } from '../components/common/CustomSelect';
+import { TripSlipModal } from '../components/loads/TripSlipModal';
 import { useAuth } from '../context/AuthContext';
 import { useLanguage } from '../context/LanguageContext';
 import { useToast } from '../context/ToastContext';
@@ -52,6 +56,8 @@ import {
   LoadsResponse,
 } from '../api/loads';
 import { exportToCsv } from '../utils/csvExporter';
+import { openWhatsAppTripSlip } from '../utils/tripSlipFormatter';
+import { shareTripSlipPdfOnWhatsApp } from '../utils/tripSlipPdfGenerator';
 
 const STORAGE_KEY_SITE = 'vlms_last_siteId';
 const STORAGE_KEY_MATERIAL = 'vlms_last_materialId';
@@ -108,6 +114,7 @@ export const LoadsPage: React.FC = () => {
   // Submission State
   const [submitting, setSubmitting] = useState(false);
   const [lastRecordedLoad, setLastRecordedLoad] = useState<Load | null>(null);
+  const [slipModalLoad, setSlipModalLoad] = useState<Load | null>(null);
 
   // History / Register State
   const [loadsData, setLoadsData] = useState<LoadsResponse | null>(null);
@@ -501,43 +508,6 @@ export const LoadsPage: React.FC = () => {
     const currentCont = contractorId ? contractors.find((c) => c.id === contractorId) : null;
     const finalAmount = finalAmountToSend ?? (resolvedRate ? Number(resolvedRate.amount) : 0);
 
-    // 1. Construct Optimistic Load Entry for Instant UI feedback (<10ms)
-    const optimisticLoad: Load = {
-      id: `temp-${Date.now()}`,
-      siteId,
-      vehicleId,
-      materialTypeId,
-      contractorId: contractorId || null,
-      date,
-      rateId: resolvedRate?.id || 'manual',
-      amount: finalAmount,
-      paymentType,
-      remarks: null,
-      createdAt: new Date().toISOString(),
-      updatedAt: new Date().toISOString(),
-      deletedAt: null,
-      site: currentSite as Site,
-      vehicle: currentVeh as Vehicle,
-      materialType: currentMat as MaterialType,
-      contractor: currentCont || null,
-      rate: (resolvedRate as Rate) || ({
-        id: 'manual',
-        siteId,
-        vehicleTypeId: currentVeh?.vehicleTypeId || '',
-        materialTypeId,
-        amount: finalAmount,
-        site: currentSite as Site,
-        vehicleType: currentVeh?.vehicleType as any,
-        materialType: currentMat as MaterialType,
-        createdAt: new Date().toISOString(),
-        updatedAt: new Date().toISOString(),
-      } as Rate),
-    };
-
-    // Instant Visual Confirmation
-    setLastRecordedLoad(optimisticLoad);
-    toast.success(`${t('load_saved_success')} ${currentVeh?.vehicleNumber || ''}!`);
-
     // Update Recent Vehicles immediately
     const updatedRecents = [vehicleId, ...recentVehicleIds.filter((id) => id !== vehicleId)].slice(0, 6);
     setRecentVehicleIds(updatedRecents);
@@ -563,8 +533,11 @@ export const LoadsPage: React.FC = () => {
         amount: finalAmountToSend,
       });
 
-      // Update real created entity
+      // Update real created entity with persistent UUID
       setLastRecordedLoad(created);
+      setSlipModalLoad((prev) => (prev ? created : null));
+      toast.success(`${t('load_saved_success')} ${currentVeh?.vehicleNumber || ''}!`);
+
       if (activeView === 'history') {
         void fetchLoadsHistory();
       }
@@ -1106,6 +1079,19 @@ export const LoadsPage: React.FC = () => {
                     ₹{Number(lastRecordedLoad.amount).toLocaleString('en-IN', { minimumFractionDigits: 2 })}
                   </div>
                 </div>
+
+                {/* 1-Click Single Trip Slip Modal (Print, PDF, WhatsApp) */}
+                <div className="pt-3 border-t border-slate-800/80">
+                  <button
+                    type="button"
+                    onClick={() => setSlipModalLoad(lastRecordedLoad)}
+                    className="w-full flex items-center justify-center gap-2 py-2.5 px-4 rounded-xl bg-amber-500 hover:bg-amber-400 active:scale-98 text-slate-950 text-xs font-black shadow-md shadow-amber-500/20 transition-all cursor-pointer select-none"
+                    id="last-load-print-slip-btn"
+                  >
+                    <Printer className="w-4 h-4" />
+                    <span>{t('print_trip_slip')}</span>
+                  </button>
+                </div>
               </Card>
             ) : (
               <Card variant="glass" className="p-5 text-center space-y-2">
@@ -1391,6 +1377,13 @@ export const LoadsPage: React.FC = () => {
 
                     <div className="flex items-center gap-1">
                       <button
+                        onClick={() => setSlipModalLoad(load)}
+                        className="p-2 rounded-xl text-slate-400 hover:text-amber-400 hover:bg-amber-500/10 transition-colors cursor-pointer"
+                        title={t('reprint_slip')}
+                      >
+                        <Printer className="w-4 h-4" />
+                      </button>
+                      <button
                         onClick={() => openEditModal(load)}
                         className="p-2 rounded-xl text-slate-400 hover:text-amber-400 hover:bg-amber-500/10 transition-colors cursor-pointer"
                         title={t('edit')}
@@ -1519,6 +1512,16 @@ export const LoadsPage: React.FC = () => {
           variant="danger"
           onConfirm={confirmState.onConfirm}
           onCancel={() => setConfirmState(null)}
+        />
+      )}
+
+      {/* Single Trip Slip Modal */}
+      {slipModalLoad && (
+        <TripSlipModal
+          isOpen={!!slipModalLoad}
+          load={slipModalLoad}
+          onClose={() => setSlipModalLoad(null)}
+          customBusinessName={user?.businessName}
         />
       )}
     </div>
