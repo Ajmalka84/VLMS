@@ -1493,6 +1493,126 @@ test('12.9 Hurdle 13 Part 4: Shifts - Query shift history with site and date fil
   assert.equal(Number(found.actualHandoverCash), 1150.0);
 });
 
+// ---------------------------------------------------------------------------------
+// HURDLE 13 PART 5: ADVANCED FINANCIAL REPORTS, CASHFLOW & SETTLEMENT STATEMENTS
+// ---------------------------------------------------------------------------------
+
+let coPartner1Token = '';
+
+test('13.1 Hurdle 13 Part 5: Site Cashflow Report aggregates cash loads inflows and cash drawer outflows accurately', async () => {
+  const res = await req(`/reports/cashflow?siteId=${siteAId}&startDate=2026-09-01&endDate=2026-09-30`, {
+    headers: { Authorization: `Bearer ${tenantAToken}` },
+  });
+
+  assert.equal(res.status, 200);
+  assert.equal(res.data.success, true);
+  assert.ok(res.data.data.summary.totalInflows > 0);
+  assert.ok(res.data.data.summary.totalOutflows > 0);
+  assert.equal(
+    res.data.data.summary.netCashflow,
+    res.data.data.summary.totalInflows - res.data.data.summary.totalOutflows
+  );
+  assert.ok(res.data.data.timeline.length > 0);
+  assert.ok(res.data.data.categoryBreakdown.length > 0);
+  assert.equal(res.data.data.business.id, tenantAUser.id);
+});
+
+test('13.2 Hurdle 13 Part 5: Co-Partner Temporal Profit-Sharing Settlement calculates multi-slice equity dividend', async () => {
+  const res = await req(`/reports/partner-settlement?partnerId=${coPartner1Id}&startDate=2026-01-01&endDate=2026-09-30`, {
+    headers: { Authorization: `Bearer ${tenantAToken}` },
+  });
+
+  assert.equal(res.status, 200);
+  assert.equal(res.data.success, true);
+  assert.equal(res.data.data.selectedPartner.id, coPartner1Id);
+  assert.equal(res.data.data.slices.length, 2);
+
+  // Slices: 25% historical slice and 35% active slice
+  const slice25 = res.data.data.slices.find((s) => s.sharePercentage === 25);
+  const slice35 = res.data.data.slices.find((s) => s.sharePercentage === 35);
+  assert.ok(slice25);
+  assert.ok(slice35);
+
+  assert.ok(res.data.data.summary.totalRevenue > 0);
+  assert.equal(
+    res.data.data.summary.netDividendPayable,
+    res.data.data.summary.grossDividendPayable - res.data.data.summary.advancesDeducted
+  );
+});
+
+test('13.3 Hurdle 13 Part 5: Co-Partner queries own settlement statement without specifying partnerId', async () => {
+  // 1. Authenticate Co-Partner 1
+  const loginRes = await req('/auth/login', {
+    method: 'POST',
+    body: JSON.stringify({
+      mobile: `981100${uniqueSuffix}`,
+      password: 'Password@123',
+    }),
+  });
+  assert.equal(loginRes.status, 200);
+  coPartner1Token = loginRes.data.data.accessToken;
+
+  // 2. Query own statement
+  const res = await req('/reports/partner-settlement', {
+    headers: { Authorization: `Bearer ${coPartner1Token}` },
+  });
+
+  assert.equal(res.status, 200);
+  assert.equal(res.data.success, true);
+  assert.equal(res.data.data.selectedPartner.id, coPartner1Id);
+});
+
+test('13.4 Hurdle 13 Part 5: Heavy Machinery Rental Logbook & Vendor Settlement computes hours, advances, and net balance', async () => {
+  const res = await req(`/reports/machinery-settlement?siteId=${siteAId}`, {
+    headers: { Authorization: `Bearer ${tenantAToken}` },
+  });
+
+  assert.equal(res.status, 200);
+  assert.equal(res.data.success, true);
+  assert.equal(res.data.data.grandTotal.totalHours, 16.0); // 9.5 (Day) + 6.5 (Night)
+  assert.equal(res.data.data.grandTotal.totalGrossRent, 43250.0); // 23750 + 19500
+  assert.equal(res.data.data.grandTotal.totalAdvancesPaid, 2000.0); // 2000 advance
+  assert.equal(res.data.data.grandTotal.balancePayable, 41250.0); // 43250 - 2000
+  assert.ok(res.data.data.machinesSummary.length >= 2);
+  assert.ok(res.data.data.logs.length >= 2);
+});
+
+test('13.5 Hurdle 13 Part 5: Site Boy accesses Cashflow report on assigned site, blocked from partner/machinery settlement', async () => {
+  // 1. Site Boy can access cashflow for assigned site
+  const cashflowRes = await req(`/reports/cashflow?siteId=${siteAId}`, {
+    headers: { Authorization: `Bearer ${siteBoy1Token}` },
+  });
+  assert.equal(cashflowRes.status, 200);
+  assert.equal(cashflowRes.data.success, true);
+
+  // 2. Site Boy is blocked from partner settlement -> 403 Forbidden
+  const partnerRes = await req('/reports/partner-settlement', {
+    headers: { Authorization: `Bearer ${siteBoy1Token}` },
+  });
+  assert.equal(partnerRes.status, 403);
+
+  // 3. Site Boy is blocked from machinery vendor settlement -> 403 Forbidden
+  const machRes = await req('/reports/machinery-settlement', {
+    headers: { Authorization: `Bearer ${siteBoy1Token}` },
+  });
+  assert.equal(machRes.status, 403);
+});
+
+test('13.6 Hurdle 13 Part 5: Super Admin queries reports with customerId parameter across all financial endpoints', async () => {
+  const resCashflow = await req(`/reports/cashflow?customerId=${tenantAUser.id}`, {
+    headers: { Authorization: `Bearer ${superAdminToken}` },
+  });
+  assert.equal(resCashflow.status, 200);
+  assert.equal(resCashflow.data.data.business.id, tenantAUser.id);
+
+  const resMachinery = await req(`/reports/machinery-settlement?customerId=${tenantAUser.id}`, {
+    headers: { Authorization: `Bearer ${superAdminToken}` },
+  });
+  assert.equal(resMachinery.status, 200);
+  assert.equal(resMachinery.data.data.business.id, tenantAUser.id);
+});
+
+
 
 
 
