@@ -26,6 +26,8 @@ import { Card } from '../components/common/Card';
 import { ConfirmModal } from '../components/common/ConfirmModal';
 import { CustomSelect } from '../components/common/CustomSelect';
 import { TeamManagement } from '../components/team/TeamManagement';
+import { ExpenseCategoriesManagement } from '../components/expenses/ExpenseCategoriesManagement';
+import { MachineryManagement } from '../components/expenses/MachineryManagement';
 import { useAuth } from '../context/AuthContext';
 import {
   Site,
@@ -60,7 +62,7 @@ import {
 } from '../api/masterData';
 import { useMasterCache } from '../context/MasterCacheContext';
 
-type CustomerTab = 'sites' | 'vehicles' | 'contractors' | 'rates' | 'team';
+type CustomerTab = 'sites' | 'vehicles' | 'contractors' | 'rates' | 'team' | 'expense-categories' | 'machinery';
 type AdminTab = 'vehicle-types' | 'material-types';
 
 export const MasterDataPage: React.FC = () => {
@@ -71,8 +73,10 @@ export const MasterDataPage: React.FC = () => {
   const [searchParams, setSearchParams] = useSearchParams();
   const tabFromUrl = searchParams.get('tab') as CustomerTab | null;
 
+  const validCustomerTabs = ['sites', 'vehicles', 'contractors', 'rates', 'team', 'expense-categories', 'machinery'];
+
   const [customerTab, setCustomerTab] = useState<CustomerTab>(
-    tabFromUrl && ['sites', 'vehicles', 'contractors', 'rates', 'team'].includes(tabFromUrl)
+    tabFromUrl && validCustomerTabs.includes(tabFromUrl)
       ? tabFromUrl
       : 'sites'
   );
@@ -80,7 +84,7 @@ export const MasterDataPage: React.FC = () => {
 
   useEffect(() => {
     const t = searchParams.get('tab') as CustomerTab | null;
-    if (t && ['sites', 'vehicles', 'contractors', 'rates', 'team'].includes(t)) {
+    if (t && validCustomerTabs.includes(t)) {
       setCustomerTab(t);
     }
   }, [searchParams]);
@@ -863,6 +867,26 @@ export const MasterDataPage: React.FC = () => {
             >
               <Users className="w-4 h-4" /> Team & Roles
             </button>
+            <button
+              onClick={() => handleCustomerTabChange('expense-categories')}
+              className={`flex items-center gap-2 px-4 py-2 rounded-xl text-xs sm:text-sm font-bold transition-all whitespace-nowrap cursor-pointer select-none touch-manipulation ${
+                customerTab === 'expense-categories'
+                  ? 'bg-amber-500 text-slate-950 shadow-md shadow-amber-500/20'
+                  : 'text-slate-400 hover:text-slate-200'
+              }`}
+            >
+              <Layers className="w-4 h-4" /> Expense Heads
+            </button>
+            <button
+              onClick={() => handleCustomerTabChange('machinery')}
+              className={`flex items-center gap-2 px-4 py-2 rounded-xl text-xs sm:text-sm font-bold transition-all whitespace-nowrap cursor-pointer select-none touch-manipulation ${
+                customerTab === 'machinery'
+                  ? 'bg-amber-500 text-slate-950 shadow-md shadow-amber-500/20'
+                  : 'text-slate-400 hover:text-slate-200'
+              }`}
+            >
+              <Truck className="w-4 h-4" /> Heavy Machinery
+            </button>
           </>
         ) : (
           <>
@@ -1179,6 +1203,16 @@ export const MasterDataPage: React.FC = () => {
       {/* ----------------- TAB 5: TEAM & SUB-ACCOUNTS (CUSTOMER) ----------------- */}
       {!isSuperAdmin && customerTab === 'team' && (
         <TeamManagement />
+      )}
+
+      {/* ----------------- TAB 6: EXPENSE CATEGORIES (CUSTOMER) ----------------- */}
+      {!isSuperAdmin && customerTab === 'expense-categories' && (
+        <ExpenseCategoriesManagement />
+      )}
+
+      {/* ----------------- TAB 7: HEAVY MACHINERY (CUSTOMER) ----------------- */}
+      {!isSuperAdmin && customerTab === 'machinery' && (
+        <MachineryManagement />
       )}
 
       {/* ----------------- SUPER ADMIN: VEHICLE TYPES ----------------- */}

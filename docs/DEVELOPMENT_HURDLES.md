@@ -565,7 +565,7 @@ First customer completes real-world operational workflows across Owner, Co-Partn
 
 Current hurdle:
 
-HURDLE 13 — MULTI-ROLE COLLABORATION, EXPENSES & FINANCIAL INTELLIGENCE (PART 3: EXPENSES, MACHINERY/HITACHI HOURS & ADVANCE ENGINE)
+HURDLE 13 — MULTI-ROLE COLLABORATION, EXPENSES & FINANCIAL INTELLIGENCE (PART 4: ROLE-BASED APP EXPERIENCE & SITE BOY FIELD WORKFLOW)
 
 Current blocker:
 
@@ -573,7 +573,7 @@ None.
 
 Immediate goal:
 
-Implement Part 3: Expenses, Machinery/Hitachi Hours & Advance Engine.
+Implement Part 4: Role-Based App Experience & Site Boy Field Workflow.
 
 
 # DEVELOPMENT RULES

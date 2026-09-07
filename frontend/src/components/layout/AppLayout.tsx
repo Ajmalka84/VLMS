@@ -11,6 +11,7 @@ import {
   Clock,
   CheckCircle2,
   AlertTriangle,
+  DollarSign,
 } from 'lucide-react';
 import { fetchHealth, HealthData } from '../../api/health';
 import { useAuth } from '../../context/AuthContext';
@@ -58,6 +59,7 @@ export const AppLayout: React.FC = () => {
       ]
     : [
         { to: '/loads', label: t('loads'), icon: Truck },
+        { to: '/expenses', label: 'Expenses', icon: DollarSign },
         { to: '/reports', label: t('reports'), icon: FileSpreadsheet },
         { to: '/settings', label: t('master_data'), icon: Settings },
       ];

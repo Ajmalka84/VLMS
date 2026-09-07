@@ -12,6 +12,7 @@ const LoginPage = React.lazy(() => import('./pages/LoginPage').then((m) => ({ de
 const DashboardPage = React.lazy(() => import('./pages/DashboardPage').then((m) => ({ default: m.DashboardPage })));
 const LoadsPage = React.lazy(() => import('./pages/LoadsPage').then((m) => ({ default: m.LoadsPage })));
 const ReportsPage = React.lazy(() => import('./pages/ReportsPage').then((m) => ({ default: m.ReportsPage })));
+const ExpensesPage = React.lazy(() => import('./pages/ExpensesPage').then((m) => ({ default: m.ExpensesPage })));
 const MasterDataPage = React.lazy(() => import('./pages/MasterDataPage').then((m) => ({ default: m.MasterDataPage })));
 const CustomersPage = React.lazy(() => import('./pages/admin/CustomersPage').then((m) => ({ default: m.CustomersPage })));
 const NotFoundPage = React.lazy(() => import('./pages/NotFoundPage').then((m) => ({ default: m.NotFoundPage })));
@@ -73,6 +74,7 @@ export function App() {
 
                   {/* Operational Customer Routes */}
                   <Route path="loads" element={<LoadsPage />} />
+                  <Route path="expenses" element={<ExpensesPage />} />
                   <Route path="reports" element={<ReportsPage />} />
                   <Route path="settings" element={<MasterDataPage />} />
                   <Route path="*" element={<NotFoundPage />} />

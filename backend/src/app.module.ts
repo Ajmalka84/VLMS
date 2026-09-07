@@ -15,6 +15,7 @@ import { VehicleTypesModule } from './vehicle-types/vehicle-types.module';
 import { VehiclesModule } from './vehicles/vehicles.module';
 import { MasterDataModule } from './master-data/master-data.module';
 import { SubAccountsModule } from './sub-accounts/sub-accounts.module';
+import { ExpensesModule } from './expenses/expenses.module';
 
 @Module({
   imports: [
@@ -33,6 +34,7 @@ import { SubAccountsModule } from './sub-accounts/sub-accounts.module';
     ReportsModule,
     MasterDataModule,
     SubAccountsModule,
+    ExpensesModule,
   ],
   controllers: [AppController],
 })

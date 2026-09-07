@@ -2,6 +2,8 @@ import { Injectable } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { AuthUser } from '../auth/decorators/current-user.decorator';
 
+import { DEFAULT_EXPENSE_CATEGORIES } from '../expenses/expense-categories.service';
+
 @Injectable()
 export class MasterDataService {
   constructor(private readonly prisma: PrismaService) {}
@@ -21,7 +23,7 @@ export class MasterDataService {
       ? { site: { userId: ownerId } }
       : { siteId: { in: user.assignedSiteIds || [] } };
 
-    const [sites, vehicles, vehicleTypes, materialTypes, contractors, rates, expenseCategories, machinery] =
+    let [sites, vehicles, vehicleTypes, materialTypes, contractors, rates, expenseCategories, machinery] =
       await Promise.all([
         this.prisma.site.findMany({
           where: siteWhere,
@@ -86,6 +88,21 @@ export class MasterDataService {
           orderBy: { name: 'asc' },
         }),
       ]);
+
+    if (expenseCategories.length === 0) {
+      await this.prisma.expenseCategory.createMany({
+        data: DEFAULT_EXPENSE_CATEGORIES.map((name) => ({
+          userId: ownerId,
+          name,
+          isDefault: true,
+        })),
+        skipDuplicates: true,
+      });
+      expenseCategories = await this.prisma.expenseCategory.findMany({
+        where: { userId: ownerId },
+        orderBy: { name: 'asc' },
+      });
+    }
 
     return {
       sites,

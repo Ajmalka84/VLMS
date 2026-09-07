@@ -1,6 +1,6 @@
 # Hurdle 13 — Part 3: Expenses, Machinery/Hitachi Hours & Advance Engine
 
-## Status: ⬜ Not Started
+## Status: ✅ Complete
 
 ---
 

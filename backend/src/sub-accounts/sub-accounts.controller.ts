@@ -21,13 +21,14 @@ import type { AuthUser } from '../auth/decorators/current-user.decorator';
 
 @Controller('sub-accounts')
 @UseGuards(JwtAuthGuard, RolesGuard)
-@Roles('OWNER')
+@Roles('OWNER', 'SUPER_ADMIN')
 export class SubAccountsController {
   constructor(private readonly subAccountsService: SubAccountsService) {}
 
   @Get()
   async listSubAccounts(@CurrentUser() user: AuthUser) {
-    return this.subAccountsService.listSubAccounts(user.ownerId);
+    const ownerId = user.ownerId || user.id;
+    return this.subAccountsService.listSubAccounts(ownerId);
   }
 
   @Post('co-partners')
@@ -35,7 +36,8 @@ export class SubAccountsController {
     @CurrentUser() user: AuthUser,
     @Body() dto: CreateCoPartnerDto,
   ) {
-    return this.subAccountsService.createCoPartner(user.ownerId, dto);
+    const ownerId = user.ownerId || user.id;
+    return this.subAccountsService.createCoPartner(ownerId, dto);
   }
 
   @Patch('co-partners/:id')
@@ -44,7 +46,8 @@ export class SubAccountsController {
     @Param('id') id: string,
     @Body() dto: UpdateCoPartnerDto,
   ) {
-    return this.subAccountsService.updateCoPartner(user.ownerId, id, dto);
+    const ownerId = user.ownerId || user.id;
+    return this.subAccountsService.updateCoPartner(ownerId, id, dto);
   }
 
   @Post('site-boys')
@@ -52,7 +55,8 @@ export class SubAccountsController {
     @CurrentUser() user: AuthUser,
     @Body() dto: CreateSiteBoyDto,
   ) {
-    return this.subAccountsService.createSiteBoy(user.ownerId, dto);
+    const ownerId = user.ownerId || user.id;
+    return this.subAccountsService.createSiteBoy(ownerId, dto);
   }
 
   @Patch('site-boys/:id')
@@ -61,7 +65,8 @@ export class SubAccountsController {
     @Param('id') id: string,
     @Body() dto: UpdateSiteBoyDto,
   ) {
-    return this.subAccountsService.updateSiteBoy(user.ownerId, id, dto);
+    const ownerId = user.ownerId || user.id;
+    return this.subAccountsService.updateSiteBoy(ownerId, id, dto);
   }
 
   @Delete(':id')
@@ -69,6 +74,7 @@ export class SubAccountsController {
     @CurrentUser() user: AuthUser,
     @Param('id') id: string,
   ) {
-    return this.subAccountsService.deleteSubAccount(user.ownerId, id);
+    const ownerId = user.ownerId || user.id;
+    return this.subAccountsService.deleteSubAccount(ownerId, id);
   }
 }

@@ -79,22 +79,22 @@ export interface Rate {
 
 export interface ExpenseCategory {
   id: string;
-  userId: string;
+  userId?: string;
   name: string;
-  isDefault?: boolean;
+  isDefault: boolean;
   createdAt: string;
   updatedAt: string;
 }
 
 export interface Machinery {
   id: string;
-  userId: string;
+  userId?: string;
   name: string;
   code?: string | null;
   defaultRentPerHour?: number | string | null;
   vendorName?: string | null;
   vendorMobile?: string | null;
-  isActive?: boolean;
+  isActive: boolean;
   createdAt: string;
   updatedAt: string;
 }

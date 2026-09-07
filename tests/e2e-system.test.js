@@ -1017,5 +1017,290 @@ test('10.7 Hurdle 13 Part 2: Removing all active site shares from Co-Partner tri
   assert.equal(loginRes.status, 403);
 });
 
+// ---------------------------------------------------------
+// HURDLE 13 PART 3: EXPENSES, MACHINERY & HOURLY CALCULATION
+// ---------------------------------------------------------
+
+let categoryDieselId = '';
+let categoryLabourId = '';
+let categoryCustomId = '';
+let machineryHitachiId = '';
+let machineryJcbId = '';
+let expenseGeneral1Id = '';
+let expenseGeneral2Id = '';
+let expenseMachDayId = '';
+let expenseMachNightId = '';
+let siteBoy1Token = '';
+
+test('11.1 Hurdle 13 Part 3: Owner fetches expense categories and default heads are auto-seeded', async () => {
+  const res = await req('/expense-categories', {
+    headers: { Authorization: `Bearer ${tenantAToken}` },
+  });
+
+  assert.equal(res.status, 200);
+  assert.equal(res.data.success, true);
+  assert.ok(Array.isArray(res.data.data));
+  assert.ok(res.data.data.length >= 7);
+
+  const dieselCat = res.data.data.find((c) => c.name.toLowerCase().includes('diesel'));
+  assert.ok(dieselCat);
+  categoryDieselId = dieselCat.id;
+
+  const labourCat = res.data.data.find((c) => c.name.toLowerCase().includes('labour'));
+  assert.ok(labourCat);
+  categoryLabourId = labourCat.id;
+});
+
+test('11.2 Hurdle 13 Part 3: Owner creates custom expense category and registers heavy machinery', async () => {
+  // 1. Create custom expense category
+  const catRes = await req('/expense-categories', {
+    method: 'POST',
+    headers: { Authorization: `Bearer ${tenantAToken}` },
+    body: JSON.stringify({
+      name: `Security & Night Watchman ${uniqueSuffix}`,
+    }),
+  });
+
+  assert.equal(catRes.status, 201);
+  assert.equal(catRes.data.success, true);
+  categoryCustomId = catRes.data.data.id;
+  assert.equal(catRes.data.data.isDefault, false);
+
+  // 2. Register Heavy Machinery 1: Hitachi EX 210 Excavator
+  const mach1Res = await req('/machinery', {
+    method: 'POST',
+    headers: { Authorization: `Bearer ${tenantAToken}` },
+    body: JSON.stringify({
+      name: 'Hitachi EX 210 Excavator',
+      code: 'HIT-01',
+      defaultRentPerHour: 2500.0,
+      vendorName: 'ABC Earthmovers Infra',
+      vendorMobile: '9847112233',
+    }),
+  });
+
+  assert.equal(mach1Res.status, 201);
+  assert.equal(mach1Res.data.success, true);
+  machineryHitachiId = mach1Res.data.data.id;
+  assert.equal(Number(mach1Res.data.data.defaultRentPerHour), 2500.0);
+
+  // 3. Register Heavy Machinery 2: JCB 3DX Backhoe
+  const mach2Res = await req('/machinery', {
+    method: 'POST',
+    headers: { Authorization: `Bearer ${tenantAToken}` },
+    body: JSON.stringify({
+      name: 'JCB 3DX Super Backhoe',
+      code: 'JCB-02',
+      defaultRentPerHour: 1800.0,
+      vendorName: 'Self Owned Machine',
+    }),
+  });
+
+  assert.equal(mach2Res.status, 201);
+  assert.equal(mach2Res.data.success, true);
+  machineryJcbId = mach2Res.data.data.id;
+});
+
+test('11.3 Hurdle 13 Part 3: Owner records general site expenses with various payment modes', async () => {
+  // 1. Cash Drawer Expense: Diesel 50L (₹4,500)
+  const exp1Res = await req('/expenses', {
+    method: 'POST',
+    headers: { Authorization: `Bearer ${tenantAToken}` },
+    body: JSON.stringify({
+      siteId: siteAId,
+      categoryId: categoryDieselId,
+      date: '2026-09-02',
+      amount: 4500.0,
+      paymentMode: 'CASH_DRAWER',
+      paidTo: 'IOCL Fuel Station',
+      remarks: '50 Litres Diesel for Genset',
+    }),
+  });
+
+  assert.equal(exp1Res.status, 201);
+  assert.equal(exp1Res.data.success, true);
+  assert.equal(Number(exp1Res.data.data.amount), 4500.0);
+  assert.equal(exp1Res.data.data.paymentMode, 'CASH_DRAWER');
+  expenseGeneral1Id = exp1Res.data.data.id;
+
+  // 2. Vendor Credit Expense: Blasting & Explosives (₹15,000)
+  const exp2Res = await req('/expenses', {
+    method: 'POST',
+    headers: { Authorization: `Bearer ${tenantAToken}` },
+    body: JSON.stringify({
+      siteId: siteAId,
+      categoryId: categoryCustomId,
+      date: '2026-09-02',
+      amount: 15000.0,
+      paymentMode: 'VENDOR_CREDIT',
+      paidTo: 'Apex Explosives Pvt Ltd',
+      remarks: 'Blasting cartridges & detonators (Credit invoice #889)',
+    }),
+  });
+
+  assert.equal(exp2Res.status, 201);
+  assert.equal(exp2Res.data.success, true);
+  assert.equal(Number(exp2Res.data.data.amount), 15000.0);
+  assert.equal(exp2Res.data.data.paymentMode, 'VENDOR_CREDIT');
+  expenseGeneral2Id = exp2Res.data.data.id;
+});
+
+test('11.4 Hurdle 13 Part 3: Heavy Machinery hourly rental engine calculates daytime working hours & cost accurately', async () => {
+  // Start 08:00 AM to Close 05:30 PM = 9.50 hours @ ₹2,500/hr = ₹23,750
+  const machExpRes = await req('/expenses', {
+    method: 'POST',
+    headers: { Authorization: `Bearer ${tenantAToken}` },
+    body: JSON.stringify({
+      siteId: siteAId,
+      categoryId: categoryLabourId,
+      machineryId: machineryHitachiId,
+      date: '2026-09-03',
+      startTime: '08:00 AM',
+      closingTime: '05:30 PM',
+      startMeterReading: 1200.0,
+      endMeterReading: 1209.5,
+      rentPerHour: 2500.0,
+      paymentMode: 'BANK_TRANSFER',
+      paidTo: 'Ramesh (Operator)',
+      remarks: 'Primary boulder excavation',
+    }),
+  });
+
+  assert.equal(machExpRes.status, 201);
+  assert.equal(machExpRes.data.success, true);
+  assert.equal(Number(machExpRes.data.data.totalHours), 9.5);
+  assert.equal(Number(machExpRes.data.data.rentPerHour), 2500.0);
+  assert.equal(Number(machExpRes.data.data.amount), 23750.0);
+  expenseMachDayId = machExpRes.data.data.id;
+});
+
+test('11.5 Hurdle 13 Part 3: Heavy Machinery hourly rental engine computes overnight (cross-midnight) rollover & operator advance', async () => {
+  // Overnight shift: Start 10:00 PM (22:00) to Close 04:30 AM (04:30) = 6.50 hours @ ₹3,000/hr = ₹19,500
+  // Operator Advance: ₹2,000 paid via CASH_DRAWER
+  const overnightRes = await req('/expenses', {
+    method: 'POST',
+    headers: { Authorization: `Bearer ${tenantAToken}` },
+    body: JSON.stringify({
+      siteId: siteAId,
+      categoryId: categoryLabourId,
+      machineryId: machineryHitachiId,
+      date: '2026-09-04',
+      startTime: '10:00 PM',
+      closingTime: '04:30 AM',
+      rentPerHour: 3000.0,
+      advanceAmount: 2000.0,
+      paymentMode: 'CASH_DRAWER',
+      paidTo: 'Suresh (Night Driver)',
+      remarks: 'Night shift quarry clearing & breaker operation',
+    }),
+  });
+
+  assert.equal(overnightRes.status, 201);
+  assert.equal(overnightRes.data.success, true);
+  assert.equal(Number(overnightRes.data.totalHours || overnightRes.data.data.totalHours), 6.5);
+  assert.equal(Number(overnightRes.data.data.amount), 19500.0);
+  assert.equal(Number(overnightRes.data.data.advanceAmount), 2000.0);
+  expenseMachNightId = overnightRes.data.data.id;
+});
+
+test('11.6 Hurdle 13 Part 3: Queries expenses ledger with multi-dimensional filtering & dynamic financial aggregates', async () => {
+  const ledgerRes = await req(`/expenses?siteId=${siteAId}`, {
+    headers: { Authorization: `Bearer ${tenantAToken}` },
+  });
+
+  assert.equal(ledgerRes.status, 200);
+  assert.equal(ledgerRes.data.success, true);
+  assert.ok(ledgerRes.data.data.expenses.length >= 4);
+
+  // Verify financial summary totals
+  // Expenses: 4500 (Diesel) + 15000 (Explosives) + 23750 (Machinery Day) + 19500 (Machinery Night) = 62750
+  const summary = ledgerRes.data.data.summary;
+  assert.equal(summary.totalExpenses, 62750.0);
+  assert.equal(summary.totalCashDrawerExpenses, 24000.0); // 4500 (Diesel) + 19500 (Overnight Cash Drawer)
+  assert.equal(summary.totalMachineRent, 43250.0); // 23750 + 19500
+  assert.equal(summary.totalAdvancesPaid, 2000.0);
+  assert.equal(summary.totalMachineHours, 16.0); // 9.5 + 6.5
+});
+
+test('11.7 Hurdle 13 Part 3: Site Boy records expense and enforces 2-hour update rule / restrictions', async () => {
+  // 1. Authenticate Site Boy 1
+  const loginRes = await req('/auth/login', {
+    method: 'POST',
+    body: JSON.stringify({
+      mobile: `982100${uniqueSuffix}`,
+      password: 'Password@123',
+    }),
+  });
+
+  assert.equal(loginRes.status, 200);
+  siteBoy1Token = loginRes.data.data.accessToken;
+
+  // 2. Site Boy records fresh expense (Tea / Food ₹350)
+  const sbExpRes = await req('/expenses', {
+    method: 'POST',
+    headers: { Authorization: `Bearer ${siteBoy1Token}` },
+    body: JSON.stringify({
+      siteId: siteAId,
+      categoryId: categoryLabourId,
+      date: '2026-09-05',
+      amount: 350.0,
+      paymentMode: 'CASH_DRAWER',
+      paidTo: 'Site Tea Stall',
+      remarks: 'Evening tea & snacks for loading crew',
+    }),
+  });
+
+  assert.equal(sbExpRes.status, 201);
+  const sbExpId = sbExpRes.data.data.id;
+
+  // 3. Site Boy edits newly created expense within 2 hours -> should succeed
+  const updateRes = await req(`/expenses/${sbExpId}`, {
+    method: 'PATCH',
+    headers: { Authorization: `Bearer ${siteBoy1Token}` },
+    body: JSON.stringify({
+      amount: 400.0,
+      remarks: 'Evening tea & snacks updated',
+    }),
+  });
+  assert.equal(updateRes.status, 200);
+  assert.equal(Number(updateRes.data.data.amount), 400.0);
+
+  // 4. Site Boy cannot DELETE expenses -> returns HTTP 403
+  const deleteRes = await req(`/expenses/${sbExpId}`, {
+    method: 'DELETE',
+    headers: { Authorization: `Bearer ${siteBoy1Token}` },
+  });
+  assert.equal(deleteRes.status, 403);
+});
+
+test('11.8 Hurdle 13 Part 3: Soft-deletes expense and verifies exclusion from ledger summaries and master data safeguards', async () => {
+  // 1. Owner soft-deletes General Expense 1 (Diesel ₹4,500)
+  const delRes = await req(`/expenses/${expenseGeneral1Id}`, {
+    method: 'DELETE',
+    headers: { Authorization: `Bearer ${tenantAToken}` },
+  });
+
+  assert.equal(delRes.status, 200);
+  assert.equal(delRes.data.success, true);
+
+  // 2. Verify ledger excludes deleted expense and aggregates update
+  const ledgerRes = await req(`/expenses?siteId=${siteAId}`, {
+    headers: { Authorization: `Bearer ${tenantAToken}` },
+  });
+
+  const remaining = ledgerRes.data.data.expenses.map((e) => e.id);
+  assert.ok(!remaining.includes(expenseGeneral1Id));
+
+  // 3. Relational Safeguard: Cannot delete Machinery with active expenses
+  const delMachRes = await req(`/machinery/${machineryHitachiId}`, {
+    method: 'DELETE',
+    headers: { Authorization: `Bearer ${tenantAToken}` },
+  });
+
+  assert.equal(delMachRes.status, 400);
+  assert.ok(delMachRes.data.message.includes('Cannot delete machinery'));
+});
+
+
 
 

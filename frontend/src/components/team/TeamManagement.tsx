@@ -3,20 +3,16 @@ import {
   Users,
   UserCheck,
   UserPlus,
-  Shield,
   MapPin,
-  Percent,
-  Plus,
   Edit2,
   Trash2,
   AlertTriangle,
   RefreshCw,
-  Phone,
   CheckCircle2,
   Calendar,
-  Lock,
-  ChevronRight,
   Sparkles,
+  Info,
+  X,
 } from 'lucide-react';
 import { Card } from '../common/Card';
 import { ConfirmModal } from '../common/ConfirmModal';
@@ -36,7 +32,7 @@ import {
 
 export const TeamManagement: React.FC = () => {
   const cache = useMasterCache();
-  const activeSites = cache.sites.filter((s) => s.isActive);
+  const activeSites = (cache.sites || []).filter((s) => s.isActive);
 
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -57,7 +53,9 @@ export const TeamManagement: React.FC = () => {
   const [cpName, setCpName] = useState('');
   const [cpMobile, setCpMobile] = useState('');
   const [cpPassword, setCpPassword] = useState('');
-  const [cpSiteShares, setCpSiteShares] = useState<{ siteId: string; sharePercentage: number; effectiveFrom: string; isActive: boolean }[]>([]);
+  const [cpSiteShares, setCpSiteShares] = useState<
+    { siteId: string; sharePercentage: number; effectiveFrom: string; isActive: boolean }[]
+  >([]);
   const [cpSubmitting, setCpSubmitting] = useState(false);
   const [cpError, setCpError] = useState<string | null>(null);
 
@@ -79,7 +77,14 @@ export const TeamManagement: React.FC = () => {
       setLoading(true);
       setError(null);
       const res = await getSubAccountsApi();
-      setData(res);
+      setData({
+        coPartners: res?.coPartners || [],
+        siteBoys: res?.siteBoys || [],
+        quotas: {
+          coPartner: res?.quotas?.coPartner || { active: 0, max: 3 },
+          siteBoy: res?.quotas?.siteBoy || { active: 0, max: 2 },
+        },
+      });
     } catch (err: any) {
       setError(err.message || 'Failed to load team data');
     } finally {
@@ -95,6 +100,9 @@ export const TeamManagement: React.FC = () => {
     setSuccessMsg(msg);
     setTimeout(() => setSuccessMsg(null), 4000);
   };
+
+  const cpQuota = data?.quotas?.coPartner || { active: 0, max: 3 };
+  const sbQuota = data?.quotas?.siteBoy || { active: 0, max: 2 };
 
   // Co-Partner Form Handlers
   const openCreateCoPartner = () => {
@@ -123,7 +131,7 @@ export const TeamManagement: React.FC = () => {
     const today = new Date().toISOString().split('T')[0];
 
     const currentSharesMap = new Map(
-      partner.partnerShares
+      (partner.partnerShares || [])
         .filter((ps) => ps.isActive && !ps.effectiveTo)
         .map((ps) => [ps.siteId, ps])
     );
@@ -149,7 +157,7 @@ export const TeamManagement: React.FC = () => {
 
     const selectedShares = cpSiteShares.filter((s) => s.isActive && s.sharePercentage > 0);
     if (selectedShares.length === 0) {
-      setCpError('Please assign at least one quarry site with a share percentage greater than 0%.');
+      setCpError('Please assign at least one active quarry site with an equity share greater than 0%.');
       return;
     }
 
@@ -166,7 +174,7 @@ export const TeamManagement: React.FC = () => {
             isActive: s.isActive,
           })),
         });
-        showNotification(`Co-Partner "${cpName}" updated successfully`);
+        showNotification(`Co-Partner "${cpName || cpMobile}" updated successfully`);
       } else {
         await createCoPartnerApi({
           name: cpName.trim(),
@@ -178,7 +186,7 @@ export const TeamManagement: React.FC = () => {
             effectiveFrom: s.effectiveFrom,
           })),
         });
-        showNotification(`Co-Partner "${cpName}" onboarded successfully`);
+        showNotification(`Co-Partner "${cpName || cpMobile}" onboarded successfully`);
       }
       setCoPartnerModalOpen(false);
       loadSubAccounts();
@@ -227,7 +235,7 @@ export const TeamManagement: React.FC = () => {
           password: sbPassword.trim() || undefined,
           assignedSiteId: sbSiteId,
         });
-        showNotification(`Site Supervisor "${sbName}" updated successfully`);
+        showNotification(`Site Supervisor "${sbName || sbMobile}" updated successfully`);
       } else {
         await createSiteBoyApi({
           name: sbName.trim(),
@@ -235,7 +243,7 @@ export const TeamManagement: React.FC = () => {
           password: sbPassword.trim(),
           assignedSiteId: sbSiteId,
         });
-        showNotification(`Site Supervisor "${sbName}" onboarded successfully`);
+        showNotification(`Site Supervisor "${sbName || sbMobile}" onboarded successfully`);
       }
       setSiteBoyModalOpen(false);
       loadSubAccounts();
@@ -269,113 +277,113 @@ export const TeamManagement: React.FC = () => {
 
   return (
     <div className="space-y-6">
-      {/* Notifications */}
+      {/* Toast Notifications */}
       {successMsg && (
-        <div className="flex items-center gap-2 p-3 bg-emerald-500/10 border border-emerald-500/30 rounded-xl text-emerald-400 text-sm animate-fade-in">
-          <CheckCircle2 className="w-4 h-4 shrink-0" />
-          <span>{successMsg}</span>
+        <div className="flex items-center gap-2.5 p-4 bg-emerald-500/10 border border-emerald-500/30 rounded-2xl text-emerald-400 text-sm animate-fade-in shadow-lg shadow-emerald-500/5">
+          <CheckCircle2 className="w-5 h-5 shrink-0" />
+          <span className="font-semibold">{successMsg}</span>
         </div>
       )}
       {error && (
-        <div className="flex items-center gap-2 p-3 bg-rose-500/10 border border-rose-500/30 rounded-xl text-rose-400 text-sm animate-fade-in">
-          <AlertTriangle className="w-4 h-4 shrink-0" />
-          <span>{error}</span>
+        <div className="flex items-center gap-2.5 p-4 bg-rose-500/10 border border-rose-500/30 rounded-2xl text-rose-400 text-sm animate-fade-in shadow-lg shadow-rose-500/5">
+          <AlertTriangle className="w-5 h-5 shrink-0" />
+          <span className="font-semibold">{error}</span>
         </div>
       )}
 
       {/* Quota Progress Overview Cards */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
         {/* Co-Partner Quota Card */}
-        <Card className="p-5 border border-slate-800/80 bg-gradient-to-br from-slate-900/90 via-slate-900/60 to-slate-950">
+        <Card variant="glass" className="p-5 border border-slate-800 bg-slate-900/80">
           <div className="flex items-start justify-between">
             <div className="flex items-center gap-3">
               <div className="w-10 h-10 rounded-xl bg-amber-500/10 border border-amber-500/20 flex items-center justify-center text-amber-400">
                 <Users className="w-5 h-5" />
               </div>
               <div>
-                <h3 className="font-semibold text-slate-100">Co-Partner Quota</h3>
+                <h3 className="font-bold text-white text-base">Co-Partner Quota</h3>
                 <p className="text-xs text-slate-400">Multi-site equity partners with report access</p>
               </div>
             </div>
             <span
-              className={`px-2.5 py-1 text-xs font-semibold rounded-full border ${
-                data.quotas.coPartner.active >= data.quotas.coPartner.max
+              className={`px-2.5 py-1 text-xs font-bold rounded-full border ${
+                cpQuota.active >= cpQuota.max
                   ? 'bg-rose-500/10 border-rose-500/30 text-rose-400'
                   : 'bg-emerald-500/10 border-emerald-500/30 text-emerald-400'
               }`}
             >
-              {data.quotas.coPartner.active} / {data.quotas.coPartner.max} Active
+              {cpQuota.active} / {cpQuota.max} Active
             </span>
           </div>
 
           <div className="mt-4">
-            <div className="w-full h-2 bg-slate-800 rounded-full overflow-hidden">
+            <div className="w-full h-2.5 bg-slate-950 rounded-full overflow-hidden border border-slate-800">
               <div
                 className={`h-full transition-all duration-500 rounded-full ${
-                  data.quotas.coPartner.active >= data.quotas.coPartner.max
+                  cpQuota.active >= cpQuota.max
                     ? 'bg-rose-500'
                     : 'bg-gradient-to-r from-amber-500 to-amber-400'
                 }`}
                 style={{
-                  width: `${Math.min(100, (data.quotas.coPartner.active / (data.quotas.coPartner.max || 1)) * 100)}%`,
+                  width: `${Math.min(100, (cpQuota.active / (cpQuota.max || 1)) * 100)}%`,
                 }}
               />
             </div>
           </div>
 
           <div className="mt-3 flex items-center justify-between text-xs">
-            <span className="text-slate-400">Default limit: 3 Active Partners</span>
-            {data.quotas.coPartner.active >= data.quotas.coPartner.max && (
-              <span className="text-amber-400 font-medium flex items-center gap-1">
-                <Sparkles className="w-3.5 h-3.5" /> Contact Admin for +₹2,000 upgrade
+            <span className="text-slate-400">Plan limit: {cpQuota.max} Active Partners</span>
+            {cpQuota.active >= cpQuota.max && (
+              <span className="text-amber-400 font-semibold flex items-center gap-1">
+                <Sparkles className="w-3.5 h-3.5" /> Quota reached (+₹2,000 / slot)
               </span>
             )}
           </div>
         </Card>
 
         {/* Site Boy Quota Card */}
-        <Card className="p-5 border border-slate-800/80 bg-gradient-to-br from-slate-900/90 via-slate-900/60 to-slate-950">
+        <Card variant="glass" className="p-5 border border-slate-800 bg-slate-900/80">
           <div className="flex items-start justify-between">
             <div className="flex items-center gap-3">
               <div className="w-10 h-10 rounded-xl bg-blue-500/10 border border-blue-500/20 flex items-center justify-center text-blue-400">
                 <UserCheck className="w-5 h-5" />
               </div>
               <div>
-                <h3 className="font-semibold text-slate-100">Site Supervisor Quota</h3>
+                <h3 className="font-bold text-white text-base">Site Supervisor Quota</h3>
                 <p className="text-xs text-slate-400">Gate & weighbridge operators locked to 1 site</p>
               </div>
             </div>
             <span
-              className={`px-2.5 py-1 text-xs font-semibold rounded-full border ${
-                data.quotas.siteBoy.active >= data.quotas.siteBoy.max
+              className={`px-2.5 py-1 text-xs font-bold rounded-full border ${
+                sbQuota.active >= sbQuota.max
                   ? 'bg-rose-500/10 border-rose-500/30 text-rose-400'
                   : 'bg-emerald-500/10 border-emerald-500/30 text-emerald-400'
               }`}
             >
-              {data.quotas.siteBoy.active} / {data.quotas.siteBoy.max} Active
+              {sbQuota.active} / {sbQuota.max} Active
             </span>
           </div>
 
           <div className="mt-4">
-            <div className="w-full h-2 bg-slate-800 rounded-full overflow-hidden">
+            <div className="w-full h-2.5 bg-slate-950 rounded-full overflow-hidden border border-slate-800">
               <div
                 className={`h-full transition-all duration-500 rounded-full ${
-                  data.quotas.siteBoy.active >= data.quotas.siteBoy.max
+                  sbQuota.active >= sbQuota.max
                     ? 'bg-rose-500'
                     : 'bg-gradient-to-r from-blue-500 to-blue-400'
                 }`}
                 style={{
-                  width: `${Math.min(100, (data.quotas.siteBoy.active / (data.quotas.siteBoy.max || 1)) * 100)}%`,
+                  width: `${Math.min(100, (sbQuota.active / (sbQuota.max || 1)) * 100)}%`,
                 }}
               />
             </div>
           </div>
 
           <div className="mt-3 flex items-center justify-between text-xs">
-            <span className="text-slate-400">Default limit: 2 Active Supervisors</span>
-            {data.quotas.siteBoy.active >= data.quotas.siteBoy.max && (
-              <span className="text-blue-400 font-medium flex items-center gap-1">
-                <Sparkles className="w-3.5 h-3.5" /> Contact Admin for +₹2,000 upgrade
+            <span className="text-slate-400">Plan limit: {sbQuota.max} Active Supervisors</span>
+            {sbQuota.active >= sbQuota.max && (
+              <span className="text-blue-400 font-semibold flex items-center gap-1">
+                <Sparkles className="w-3.5 h-3.5" /> Quota reached (+₹2,000 / slot)
               </span>
             )}
           </div>
@@ -384,9 +392,9 @@ export const TeamManagement: React.FC = () => {
 
       {/* Section 1: Co-Partners Table */}
       <div className="space-y-4">
-        <div className="flex items-center justify-between">
+        <div className="flex items-center justify-between gap-3">
           <div>
-            <h2 className="text-lg font-bold text-slate-100 flex items-center gap-2">
+            <h2 className="text-lg font-bold text-white flex items-center gap-2">
               <Users className="w-5 h-5 text-amber-400" />
               Co-Partners & Joint Venture Investors
             </h2>
@@ -396,11 +404,11 @@ export const TeamManagement: React.FC = () => {
           </div>
           <button
             onClick={openCreateCoPartner}
-            disabled={data.quotas.coPartner.active >= data.quotas.coPartner.max}
-            className={`flex items-center gap-2 px-3.5 py-2 rounded-xl text-sm font-semibold transition-all ${
-              data.quotas.coPartner.active >= data.quotas.coPartner.max
+            disabled={cpQuota.active >= cpQuota.max}
+            className={`flex items-center gap-2 px-4 py-2.5 rounded-2xl text-xs sm:text-sm font-bold transition-all ${
+              cpQuota.active >= cpQuota.max
                 ? 'bg-slate-800 text-slate-500 cursor-not-allowed border border-slate-700'
-                : 'bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-400 hover:to-amber-500 text-slate-950 shadow-lg shadow-amber-500/20'
+                : 'bg-amber-500 hover:bg-amber-400 text-slate-950 shadow-lg shadow-amber-500/20 active:scale-95'
             }`}
           >
             <UserPlus className="w-4 h-4" />
@@ -408,7 +416,7 @@ export const TeamManagement: React.FC = () => {
           </button>
         </div>
 
-        <Card className="overflow-hidden border border-slate-800 bg-slate-900/60">
+        <Card variant="glass" className="overflow-hidden border border-slate-800 bg-slate-900/60 p-0">
           {loading ? (
             <div className="p-8 text-center text-slate-400 flex items-center justify-center gap-2">
               <RefreshCw className="w-5 h-5 animate-spin text-amber-400" />
@@ -417,7 +425,7 @@ export const TeamManagement: React.FC = () => {
           ) : data.coPartners.length === 0 ? (
             <div className="p-8 text-center text-slate-400">
               <Users className="w-8 h-8 mx-auto mb-2 text-slate-600" />
-              <p className="font-medium text-slate-300">No Co-Partners Added Yet</p>
+              <p className="font-semibold text-slate-300">No Co-Partners Added Yet</p>
               <p className="text-xs text-slate-500 mt-1">
                 Add your quarry business partners to grant them site-specific report access and dividend shares.
               </p>
@@ -425,52 +433,59 @@ export const TeamManagement: React.FC = () => {
           ) : (
             <div className="overflow-x-auto">
               <table className="w-full text-left text-sm">
-                <thead className="bg-slate-950/60 text-slate-400 text-xs uppercase tracking-wider border-b border-slate-800">
+                <thead className="bg-slate-950/80 text-slate-400 text-xs uppercase tracking-wider border-b border-slate-800">
                   <tr>
-                    <th className="p-3.5 font-medium">Partner</th>
-                    <th className="p-3.5 font-medium">Mobile (Login)</th>
-                    <th className="p-3.5 font-medium">Assigned Sites & % Share</th>
-                    <th className="p-3.5 font-medium">Status</th>
-                    <th className="p-3.5 font-medium text-right">Actions</th>
+                    <th className="p-4 font-semibold">Partner</th>
+                    <th className="p-4 font-semibold">Mobile (Login)</th>
+                    <th className="p-4 font-semibold">Assigned Sites & Equity %</th>
+                    <th className="p-4 font-semibold">Status</th>
+                    <th className="p-4 font-semibold text-right">Actions</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-800/60">
                   {data.coPartners.map((partner) => {
-                    const activeShares = partner.partnerShares.filter((s) => s.isActive && !s.effectiveTo);
+                    const activeShares = (partner.partnerShares || []).filter(
+                      (s) => s.isActive && !s.effectiveTo
+                    );
+                    const displayName = partner.name || partner.mobile || 'Unnamed Partner';
+                    const avatarLetter = (partner.name || partner.mobile || 'P').charAt(0).toUpperCase();
+
                     return (
                       <tr key={partner.id} className="hover:bg-slate-800/30 transition-colors">
-                        <td className="p-3.5 font-medium text-slate-200">
-                          <div className="flex items-center gap-2">
-                            <div className="w-7 h-7 rounded-lg bg-amber-500/10 border border-amber-500/30 flex items-center justify-center text-xs font-bold text-amber-400">
-                              {partner.name.charAt(0).toUpperCase()}
+                        <td className="p-4 font-medium text-slate-200">
+                          <div className="flex items-center gap-3">
+                            <div className="w-8 h-8 rounded-xl bg-amber-500/10 border border-amber-500/30 flex items-center justify-center text-xs font-bold text-amber-400 shrink-0">
+                              {avatarLetter}
                             </div>
-                            <span>{partner.name}</span>
+                            <span className="font-bold text-white text-sm">{displayName}</span>
                           </div>
                         </td>
-                        <td className="p-3.5 text-slate-400 font-mono text-xs">
+                        <td className="p-4 text-slate-300 font-mono text-xs">
                           {partner.mobile}
                         </td>
-                        <td className="p-3.5">
+                        <td className="p-4">
                           <div className="flex flex-wrap gap-1.5">
                             {activeShares.length > 0 ? (
                               activeShares.map((share) => (
                                 <span
                                   key={share.id}
-                                  className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-amber-500/10 border border-amber-500/20 text-amber-300 text-xs font-medium"
+                                  className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-amber-500/10 border border-amber-500/20 text-amber-300 text-xs font-semibold"
                                 >
-                                  <MapPin className="w-3 h-3 text-amber-400" />
-                                  {share.site?.siteName || 'Site'}
-                                  <span className="font-bold text-amber-400">({Number(share.sharePercentage)}%)</span>
+                                  <MapPin className="w-3.5 h-3.5 text-amber-400 shrink-0" />
+                                  <span>{share.site?.siteName || 'Quarry Site'}</span>
+                                  <span className="font-bold text-amber-400 bg-amber-500/20 px-1.5 py-0.2 rounded text-[11px]">
+                                    {Number(share.sharePercentage)}%
+                                  </span>
                                 </span>
                               ))
                             ) : (
-                              <span className="text-xs text-rose-400 italic">No Active Sites</span>
+                              <span className="text-xs text-rose-400 italic font-medium">No Active Sites</span>
                             )}
                           </div>
                         </td>
-                        <td className="p-3.5">
+                        <td className="p-4">
                           <span
-                            className={`px-2 py-0.5 text-xs font-semibold rounded-full border ${
+                            className={`px-2.5 py-1 text-xs font-bold rounded-full border ${
                               partner.isActive
                                 ? 'bg-emerald-500/10 border-emerald-500/30 text-emerald-400'
                                 : 'bg-slate-800 border-slate-700 text-slate-500'
@@ -479,18 +494,20 @@ export const TeamManagement: React.FC = () => {
                             {partner.isActive ? 'Active' : 'Inactive'}
                           </span>
                         </td>
-                        <td className="p-3.5 text-right">
-                          <div className="flex items-center justify-end gap-1.5">
+                        <td className="p-4 text-right">
+                          <div className="flex items-center justify-end gap-2">
                             <button
                               onClick={() => openEditCoPartner(partner)}
-                              className="p-1.5 rounded-lg text-slate-400 hover:text-amber-400 hover:bg-slate-800 transition-colors"
+                              className="p-2 rounded-xl text-slate-400 hover:text-amber-400 hover:bg-slate-800/80 transition-colors"
                               title="Edit Shares & Details"
                             >
                               <Edit2 className="w-4 h-4" />
                             </button>
                             <button
-                              onClick={() => confirmDelete(partner.id, partner.name, 'Co-Partner')}
-                              className="p-1.5 rounded-lg text-slate-400 hover:text-rose-400 hover:bg-slate-800 transition-colors"
+                              onClick={() =>
+                                confirmDelete(partner.id, displayName, 'Co-Partner')
+                              }
+                              className="p-2 rounded-xl text-slate-400 hover:text-rose-400 hover:bg-slate-800/80 transition-colors"
                               title="Deactivate Account"
                             >
                               <Trash2 className="w-4 h-4" />
@@ -509,9 +526,9 @@ export const TeamManagement: React.FC = () => {
 
       {/* Section 2: Site Boys Table */}
       <div className="space-y-4">
-        <div className="flex items-center justify-between">
+        <div className="flex items-center justify-between gap-3">
           <div>
-            <h2 className="text-lg font-bold text-slate-100 flex items-center gap-2">
+            <h2 className="text-lg font-bold text-white flex items-center gap-2">
               <UserCheck className="w-5 h-5 text-blue-400" />
               Site Supervisors & Gate Boys
             </h2>
@@ -521,11 +538,11 @@ export const TeamManagement: React.FC = () => {
           </div>
           <button
             onClick={openCreateSiteBoy}
-            disabled={data.quotas.siteBoy.active >= data.quotas.siteBoy.max}
-            className={`flex items-center gap-2 px-3.5 py-2 rounded-xl text-sm font-semibold transition-all ${
-              data.quotas.siteBoy.active >= data.quotas.siteBoy.max
+            disabled={sbQuota.active >= sbQuota.max}
+            className={`flex items-center gap-2 px-4 py-2.5 rounded-2xl text-xs sm:text-sm font-bold transition-all ${
+              sbQuota.active >= sbQuota.max
                 ? 'bg-slate-800 text-slate-500 cursor-not-allowed border border-slate-700'
-                : 'bg-gradient-to-r from-blue-500 to-blue-600 hover:from-blue-400 hover:to-blue-500 text-slate-950 shadow-lg shadow-blue-500/20'
+                : 'bg-blue-600 hover:bg-blue-500 text-white shadow-lg shadow-blue-500/20 active:scale-95'
             }`}
           >
             <UserPlus className="w-4 h-4" />
@@ -533,7 +550,7 @@ export const TeamManagement: React.FC = () => {
           </button>
         </div>
 
-        <Card className="overflow-hidden border border-slate-800 bg-slate-900/60">
+        <Card variant="glass" className="overflow-hidden border border-slate-800 bg-slate-900/60 p-0">
           {loading ? (
             <div className="p-8 text-center text-slate-400 flex items-center justify-center gap-2">
               <RefreshCw className="w-5 h-5 animate-spin text-blue-400" />
@@ -542,7 +559,7 @@ export const TeamManagement: React.FC = () => {
           ) : data.siteBoys.length === 0 ? (
             <div className="p-8 text-center text-slate-400">
               <UserCheck className="w-8 h-8 mx-auto mb-2 text-slate-600" />
-              <p className="font-medium text-slate-300">No Site Supervisors Added Yet</p>
+              <p className="font-semibold text-slate-300">No Site Supervisors Added Yet</p>
               <p className="text-xs text-slate-500 mt-1">
                 Add gate boys to record trucks, manage daily cash drawers, and track machine hours on-site.
               </p>
@@ -550,71 +567,80 @@ export const TeamManagement: React.FC = () => {
           ) : (
             <div className="overflow-x-auto">
               <table className="w-full text-left text-sm">
-                <thead className="bg-slate-950/60 text-slate-400 text-xs uppercase tracking-wider border-b border-slate-800">
+                <thead className="bg-slate-950/80 text-slate-400 text-xs uppercase tracking-wider border-b border-slate-800">
                   <tr>
-                    <th className="p-3.5 font-medium">Supervisor</th>
-                    <th className="p-3.5 font-medium">Mobile (Login)</th>
-                    <th className="p-3.5 font-medium">Assigned Site</th>
-                    <th className="p-3.5 font-medium">Status</th>
-                    <th className="p-3.5 font-medium text-right">Actions</th>
+                    <th className="p-4 font-semibold">Supervisor</th>
+                    <th className="p-4 font-semibold">Mobile (Login)</th>
+                    <th className="p-4 font-semibold">Assigned Quarry Site</th>
+                    <th className="p-4 font-semibold">Status</th>
+                    <th className="p-4 font-semibold text-right">Actions</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-800/60">
-                  {data.siteBoys.map((sb) => (
-                    <tr key={sb.id} className="hover:bg-slate-800/30 transition-colors">
-                      <td className="p-3.5 font-medium text-slate-200">
-                        <div className="flex items-center gap-2">
-                          <div className="w-7 h-7 rounded-lg bg-blue-500/10 border border-blue-500/30 flex items-center justify-center text-xs font-bold text-blue-400">
-                            {sb.name.charAt(0).toUpperCase()}
+                  {data.siteBoys.map((sb) => {
+                    const displayName = sb.name || sb.mobile || 'Unnamed Supervisor';
+                    const avatarLetter = (sb.name || sb.mobile || 'S').charAt(0).toUpperCase();
+
+                    return (
+                      <tr key={sb.id} className="hover:bg-slate-800/30 transition-colors">
+                        <td className="p-4 font-medium text-slate-200">
+                          <div className="flex items-center gap-3">
+                            <div className="w-8 h-8 rounded-xl bg-blue-500/10 border border-blue-500/30 flex items-center justify-center text-xs font-bold text-blue-400 shrink-0">
+                              {avatarLetter}
+                            </div>
+                            <span className="font-bold text-white text-sm">{displayName}</span>
                           </div>
-                          <span>{sb.name}</span>
-                        </div>
-                      </td>
-                      <td className="p-3.5 text-slate-400 font-mono text-xs">
-                        {sb.mobile}
-                      </td>
-                      <td className="p-3.5">
-                        {sb.assignedSite ? (
-                          <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-md bg-blue-500/10 border border-blue-500/20 text-blue-300 text-xs font-medium">
-                            <MapPin className="w-3.5 h-3.5 text-blue-400" />
-                            {sb.assignedSite.siteName}
-                            <span className="text-slate-500 text-[10px]">({sb.assignedSite.location})</span>
+                        </td>
+                        <td className="p-4 text-slate-300 font-mono text-xs">
+                          {sb.mobile}
+                        </td>
+                        <td className="p-4">
+                          {sb.assignedSite ? (
+                            <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-blue-500/10 border border-blue-500/20 text-blue-300 text-xs font-semibold">
+                              <MapPin className="w-3.5 h-3.5 text-blue-400 shrink-0" />
+                              <span>{sb.assignedSite.siteName}</span>
+                              {sb.assignedSite.location && (
+                                <span className="text-slate-400 text-[11px]">({sb.assignedSite.location})</span>
+                              )}
+                            </span>
+                          ) : (
+                            <span className="text-xs text-rose-400 italic font-medium">No Assigned Site</span>
+                          )}
+                        </td>
+                        <td className="p-4">
+                          <span
+                            className={`px-2.5 py-1 text-xs font-bold rounded-full border ${
+                              sb.isActive
+                                ? 'bg-emerald-500/10 border-emerald-500/30 text-emerald-400'
+                                : 'bg-slate-800 border-slate-700 text-slate-500'
+                            }`}
+                          >
+                            {sb.isActive ? 'Active' : 'Inactive'}
                           </span>
-                        ) : (
-                          <span className="text-xs text-rose-400 italic">No Assigned Site</span>
-                        )}
-                      </td>
-                      <td className="p-3.5">
-                        <span
-                          className={`px-2 py-0.5 text-xs font-semibold rounded-full border ${
-                            sb.isActive
-                              ? 'bg-emerald-500/10 border-emerald-500/30 text-emerald-400'
-                              : 'bg-slate-800 border-slate-700 text-slate-500'
-                          }`}
-                        >
-                          {sb.isActive ? 'Active' : 'Inactive'}
-                        </span>
-                      </td>
-                      <td className="p-3.5 text-right">
-                        <div className="flex items-center justify-end gap-1.5">
-                          <button
-                            onClick={() => openEditSiteBoy(sb)}
-                            className="p-1.5 rounded-lg text-slate-400 hover:text-blue-400 hover:bg-slate-800 transition-colors"
-                            title="Edit Assignment & Details"
-                          >
-                            <Edit2 className="w-4 h-4" />
-                          </button>
-                          <button
-                            onClick={() => confirmDelete(sb.id, sb.name, 'Site Boy')}
-                            className="p-1.5 rounded-lg text-slate-400 hover:text-rose-400 hover:bg-slate-800 transition-colors"
-                            title="Deactivate Account"
-                          >
-                            <Trash2 className="w-4 h-4" />
-                          </button>
-                        </div>
-                      </td>
-                    </tr>
-                  ))}
+                        </td>
+                        <td className="p-4 text-right">
+                          <div className="flex items-center justify-end gap-2">
+                            <button
+                              onClick={() => openEditSiteBoy(sb)}
+                              className="p-2 rounded-xl text-slate-400 hover:text-blue-400 hover:bg-slate-800/80 transition-colors"
+                              title="Edit Assignment & Details"
+                            >
+                              <Edit2 className="w-4 h-4" />
+                            </button>
+                            <button
+                              onClick={() =>
+                                confirmDelete(sb.id, displayName, 'Site Boy')
+                              }
+                              className="p-2 rounded-xl text-slate-400 hover:text-rose-400 hover:bg-slate-800/80 transition-colors"
+                              title="Deactivate Account"
+                            >
+                              <Trash2 className="w-4 h-4" />
+                            </button>
+                          </div>
+                        </td>
+                      </tr>
+                    );
+                  })}
                 </tbody>
               </table>
             </div>
@@ -624,32 +650,39 @@ export const TeamManagement: React.FC = () => {
 
       {/* Co-Partner Modal */}
       {coPartnerModalOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-sm animate-fade-in">
-          <div className="w-full max-w-lg bg-slate-900 border border-slate-800 rounded-2xl shadow-2xl overflow-hidden">
-            <div className="px-6 py-4 border-b border-slate-800 flex items-center justify-between">
-              <h3 className="font-bold text-slate-100 flex items-center gap-2">
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-md animate-fade-in">
+          <div className="w-full max-w-lg bg-slate-900 border border-slate-800 rounded-3xl shadow-2xl overflow-hidden flex flex-col max-h-[90vh]">
+            <div className="px-6 py-4 border-b border-slate-800 flex items-center justify-between bg-slate-950/40">
+              <h3 className="font-bold text-white text-base flex items-center gap-2">
                 <Users className="w-5 h-5 text-amber-400" />
-                {editingCoPartner ? 'Edit Co-Partner Details & Shares' : 'Add New Co-Partner'}
+                {editingCoPartner ? 'Edit Co-Partner & Site Shares' : 'Onboard New Co-Partner'}
               </h3>
               <button
                 onClick={() => setCoPartnerModalOpen(false)}
-                className="text-slate-400 hover:text-slate-200 transition-colors"
+                className="p-1 rounded-lg text-slate-400 hover:text-white hover:bg-slate-800 transition-colors"
               >
-                ✕
+                <X className="w-5 h-5" />
               </button>
             </div>
 
-            <form onSubmit={handleCoPartnerSubmit} className="p-6 space-y-4">
+            <form onSubmit={handleCoPartnerSubmit} className="p-6 space-y-4 overflow-y-auto">
               {cpError && (
-                <div className="p-3 rounded-xl bg-rose-500/10 border border-rose-500/30 text-rose-400 text-xs flex items-center gap-2">
+                <div className="p-3.5 rounded-2xl bg-rose-500/10 border border-rose-500/30 text-rose-400 text-xs flex items-center gap-2 font-medium">
                   <AlertTriangle className="w-4 h-4 shrink-0" />
                   <span>{cpError}</span>
                 </div>
               )}
 
+              {activeSites.length === 0 && (
+                <div className="p-3.5 rounded-2xl bg-amber-500/10 border border-amber-500/30 text-amber-400 text-xs flex items-center gap-2">
+                  <Info className="w-4 h-4 shrink-0" />
+                  <span>No active quarry sites available. Please add at least 1 site in the Sites tab first.</span>
+                </div>
+              )}
+
               <div>
-                <label className="block text-xs font-semibold text-slate-300 uppercase tracking-wider mb-1">
-                  Partner Name *
+                <label className="block text-xs font-bold text-slate-300 uppercase tracking-wider mb-1.5">
+                  Partner Full Name *
                 </label>
                 <input
                   type="text"
@@ -657,13 +690,13 @@ export const TeamManagement: React.FC = () => {
                   placeholder="e.g. Shamsu"
                   value={cpName}
                   onChange={(e) => setCpName(e.target.value)}
-                  className="w-full px-3.5 py-2.5 rounded-xl bg-slate-950 border border-slate-800 text-slate-100 text-sm focus:border-amber-500 focus:outline-none"
+                  className="w-full h-11 px-4 rounded-xl bg-slate-950 border border-slate-800 text-white text-sm focus:border-amber-500 focus:ring-1 focus:ring-amber-500/30 focus:outline-none transition-all"
                 />
               </div>
 
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <div>
-                  <label className="block text-xs font-semibold text-slate-300 uppercase tracking-wider mb-1">
+                  <label className="block text-xs font-bold text-slate-300 uppercase tracking-wider mb-1.5">
                     Mobile Number (Login) *
                   </label>
                   <input
@@ -673,47 +706,47 @@ export const TeamManagement: React.FC = () => {
                     placeholder="10-digit mobile"
                     value={cpMobile}
                     onChange={(e) => setCpMobile(e.target.value.replace(/\D/g, '').slice(0, 10))}
-                    className="w-full px-3.5 py-2.5 rounded-xl bg-slate-950 border border-slate-800 text-slate-100 text-sm focus:border-amber-500 focus:outline-none disabled:opacity-60 disabled:cursor-not-allowed"
+                    className="w-full h-11 px-4 rounded-xl bg-slate-950 border border-slate-800 text-white text-sm focus:border-amber-500 focus:ring-1 focus:ring-amber-500/30 focus:outline-none disabled:opacity-50 disabled:cursor-not-allowed transition-all font-mono"
                   />
                 </div>
                 <div>
-                  <label className="block text-xs font-semibold text-slate-300 uppercase tracking-wider mb-1">
-                    Password {editingCoPartner ? '(Leave blank to keep)' : '*'}
+                  <label className="block text-xs font-bold text-slate-300 uppercase tracking-wider mb-1.5">
+                    Password {editingCoPartner ? '(Optional)' : '*'}
                   </label>
                   <input
                     type="password"
                     required={!editingCoPartner}
-                    placeholder={editingCoPartner ? 'New password (optional)' : 'Min 6 characters'}
+                    placeholder={editingCoPartner ? 'Keep current password' : 'Min 6 characters'}
                     value={cpPassword}
                     onChange={(e) => setCpPassword(e.target.value)}
-                    className="w-full px-3.5 py-2.5 rounded-xl bg-slate-950 border border-slate-800 text-slate-100 text-sm focus:border-amber-500 focus:outline-none"
+                    className="w-full h-11 px-4 rounded-xl bg-slate-950 border border-slate-800 text-white text-sm focus:border-amber-500 focus:ring-1 focus:ring-amber-500/30 focus:outline-none transition-all"
                   />
                 </div>
               </div>
 
               {/* Site Assignment & Percentage Share Matrix */}
-              <div className="pt-2 border-t border-slate-800">
-                <div className="flex items-center justify-between mb-2">
-                  <label className="block text-xs font-semibold text-slate-300 uppercase tracking-wider">
-                    Assigned Quarry Sites & Equity % *
+              <div className="pt-2 border-t border-slate-800/80">
+                <div className="flex items-center justify-between mb-2.5">
+                  <label className="block text-xs font-bold text-slate-300 uppercase tracking-wider">
+                    Assigned Quarry Sites & Equity Share *
                   </label>
-                  <span className="text-[11px] text-slate-400">Total must be ≤ 100% per site</span>
+                  <span className="text-[11px] text-slate-400">Total ≤ 100% per site</span>
                 </div>
 
-                <div className="space-y-2.5 max-h-56 overflow-y-auto pr-1">
+                <div className="space-y-2 max-h-52 overflow-y-auto pr-1">
                   {cpSiteShares.map((share, idx) => {
                     const siteObj = activeSites.find((s) => s.id === share.siteId);
                     return (
                       <div
                         key={share.siteId}
-                        className={`p-3 rounded-xl border transition-all ${
+                        className={`p-3 rounded-2xl border transition-all ${
                           share.isActive
-                            ? 'bg-slate-950/80 border-amber-500/30'
-                            : 'bg-slate-950/40 border-slate-800/80 opacity-70'
+                            ? 'bg-slate-950/80 border-amber-500/30 ring-1 ring-amber-500/10'
+                            : 'bg-slate-950/30 border-slate-800/60 opacity-60'
                         }`}
                       >
                         <div className="flex items-center justify-between gap-3">
-                          <label className="flex items-center gap-2 cursor-pointer">
+                          <label className="flex items-center gap-2.5 cursor-pointer select-none">
                             <input
                               type="checkbox"
                               checked={share.isActive}
@@ -731,40 +764,43 @@ export const TeamManagement: React.FC = () => {
                                   )
                                 );
                               }}
-                              className="w-4 h-4 rounded text-amber-500 focus:ring-amber-500 focus:ring-offset-slate-900"
+                              className="w-4 h-4 rounded text-amber-500 focus:ring-amber-500 focus:ring-offset-slate-900 accent-amber-500"
                             />
-                            <span className="font-medium text-slate-200 text-sm">
-                              {siteObj?.siteName || 'Quarry Site'}
-                            </span>
+                            <div>
+                              <span className="font-bold text-white text-sm">
+                                {siteObj?.siteName || 'Quarry Site'}
+                              </span>
+                              {siteObj?.location && (
+                                <span className="text-slate-500 text-xs ml-1.5">({siteObj.location})</span>
+                              )}
+                            </div>
                           </label>
 
                           {share.isActive && (
-                            <div className="flex items-center gap-2">
-                              <div className="flex items-center bg-slate-900 border border-slate-800 rounded-lg px-2 py-1 w-24">
-                                <input
-                                  type="number"
-                                  min="0.1"
-                                  max="100"
-                                  step="0.01"
-                                  value={share.sharePercentage || ''}
-                                  onChange={(e) => {
-                                    const val = parseFloat(e.target.value) || 0;
-                                    setCpSiteShares((prev) =>
-                                      prev.map((s, i) => (i === idx ? { ...s, sharePercentage: val } : s))
-                                    );
-                                  }}
-                                  className="w-full bg-transparent text-right text-amber-400 font-bold text-sm focus:outline-none"
-                                />
-                                <span className="text-slate-500 text-xs ml-1">%</span>
-                              </div>
+                            <div className="flex items-center bg-slate-900 border border-slate-800 rounded-xl px-2.5 py-1 w-24">
+                              <input
+                                type="number"
+                                min="0.1"
+                                max="100"
+                                step="0.01"
+                                value={share.sharePercentage || ''}
+                                onChange={(e) => {
+                                  const val = parseFloat(e.target.value) || 0;
+                                  setCpSiteShares((prev) =>
+                                    prev.map((s, i) => (i === idx ? { ...s, sharePercentage: val } : s))
+                                  );
+                                }}
+                                className="w-full bg-transparent text-right text-amber-400 font-bold text-sm focus:outline-none"
+                              />
+                              <span className="text-slate-500 text-xs ml-1 font-bold">%</span>
                             </div>
                           )}
                         </div>
 
                         {share.isActive && (
-                          <div className="mt-2 flex items-center justify-between text-[11px] text-slate-400 pt-1.5 border-t border-slate-900">
-                            <span className="flex items-center gap-1">
-                              <Calendar className="w-3 h-3 text-amber-400" />
+                          <div className="mt-2.5 flex items-center justify-between text-[11px] text-slate-400 pt-2 border-t border-slate-900">
+                            <span className="flex items-center gap-1.5 text-slate-400">
+                              <Calendar className="w-3.5 h-3.5 text-amber-400" />
                               Effective from:
                             </span>
                             <input
@@ -776,7 +812,7 @@ export const TeamManagement: React.FC = () => {
                                   prev.map((s, i) => (i === idx ? { ...s, effectiveFrom: val } : s))
                                 );
                               }}
-                              className="px-2 py-0.5 rounded bg-slate-900 border border-slate-800 text-slate-300 text-[11px] focus:outline-none"
+                              className="px-2.5 py-1 rounded-lg bg-slate-900 border border-slate-800 text-slate-200 text-xs focus:outline-none focus:border-amber-500"
                             />
                           </div>
                         )}
@@ -786,18 +822,18 @@ export const TeamManagement: React.FC = () => {
                 </div>
               </div>
 
-              <div className="pt-4 border-t border-slate-800 flex items-center justify-end gap-2.5">
+              <div className="pt-4 border-t border-slate-800 flex items-center justify-end gap-3">
                 <button
                   type="button"
                   onClick={() => setCoPartnerModalOpen(false)}
-                  className="px-4 py-2 rounded-xl text-sm font-medium text-slate-400 hover:text-slate-200 transition-colors"
+                  className="px-4 py-2.5 rounded-2xl text-xs sm:text-sm font-semibold text-slate-400 hover:text-white hover:bg-slate-800 transition-colors"
                 >
                   Cancel
                 </button>
                 <button
                   type="submit"
-                  disabled={cpSubmitting}
-                  className="flex items-center gap-2 px-5 py-2.5 rounded-xl bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-400 hover:to-amber-500 text-slate-950 font-bold text-sm shadow-lg shadow-amber-500/20 disabled:opacity-50"
+                  disabled={cpSubmitting || activeSites.length === 0}
+                  className="flex items-center gap-2 px-5 py-2.5 rounded-2xl bg-amber-500 hover:bg-amber-400 text-slate-950 font-bold text-xs sm:text-sm shadow-lg shadow-amber-500/20 disabled:opacity-50 transition-all active:scale-95"
                 >
                   {cpSubmitting && <RefreshCw className="w-4 h-4 animate-spin" />}
                   {editingCoPartner ? 'Save Changes' : 'Create Partner'}
@@ -810,31 +846,38 @@ export const TeamManagement: React.FC = () => {
 
       {/* Site Boy Modal */}
       {siteBoyModalOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-sm animate-fade-in">
-          <div className="w-full max-w-md bg-slate-900 border border-slate-800 rounded-2xl shadow-2xl overflow-hidden">
-            <div className="px-6 py-4 border-b border-slate-800 flex items-center justify-between">
-              <h3 className="font-bold text-slate-100 flex items-center gap-2">
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-md animate-fade-in">
+          <div className="w-full max-w-md bg-slate-900 border border-slate-800 rounded-3xl shadow-2xl overflow-hidden flex flex-col max-h-[90vh]">
+            <div className="px-6 py-4 border-b border-slate-800 flex items-center justify-between bg-slate-950/40">
+              <h3 className="font-bold text-white text-base flex items-center gap-2">
                 <UserCheck className="w-5 h-5 text-blue-400" />
-                {editingSiteBoy ? 'Edit Site Supervisor' : 'Add New Site Supervisor'}
+                {editingSiteBoy ? 'Edit Site Supervisor' : 'Onboard Site Supervisor'}
               </h3>
               <button
                 onClick={() => setSiteBoyModalOpen(false)}
-                className="text-slate-400 hover:text-slate-200 transition-colors"
+                className="p-1 rounded-lg text-slate-400 hover:text-white hover:bg-slate-800 transition-colors"
               >
-                ✕
+                <X className="w-5 h-5" />
               </button>
             </div>
 
-            <form onSubmit={handleSiteBoySubmit} className="p-6 space-y-4">
+            <form onSubmit={handleSiteBoySubmit} className="p-6 space-y-4 overflow-y-auto">
               {sbError && (
-                <div className="p-3 rounded-xl bg-rose-500/10 border border-rose-500/30 text-rose-400 text-xs flex items-center gap-2">
+                <div className="p-3.5 rounded-2xl bg-rose-500/10 border border-rose-500/30 text-rose-400 text-xs flex items-center gap-2 font-medium">
                   <AlertTriangle className="w-4 h-4 shrink-0" />
                   <span>{sbError}</span>
                 </div>
               )}
 
+              {activeSites.length === 0 && (
+                <div className="p-3.5 rounded-2xl bg-amber-500/10 border border-amber-500/30 text-amber-400 text-xs flex items-center gap-2">
+                  <Info className="w-4 h-4 shrink-0" />
+                  <span>No active quarry sites available. Please add at least 1 site in the Sites tab first.</span>
+                </div>
+              )}
+
               <div>
-                <label className="block text-xs font-semibold text-slate-300 uppercase tracking-wider mb-1">
+                <label className="block text-xs font-bold text-slate-300 uppercase tracking-wider mb-1.5">
                   Supervisor Name *
                 </label>
                 <input
@@ -843,12 +886,12 @@ export const TeamManagement: React.FC = () => {
                   placeholder="e.g. Manu"
                   value={sbName}
                   onChange={(e) => setSbName(e.target.value)}
-                  className="w-full px-3.5 py-2.5 rounded-xl bg-slate-950 border border-slate-800 text-slate-100 text-sm focus:border-blue-500 focus:outline-none"
+                  className="w-full h-11 px-4 rounded-xl bg-slate-950 border border-slate-800 text-white text-sm focus:border-blue-500 focus:ring-1 focus:ring-blue-500/30 focus:outline-none transition-all"
                 />
               </div>
 
               <div>
-                <label className="block text-xs font-semibold text-slate-300 uppercase tracking-wider mb-1">
+                <label className="block text-xs font-bold text-slate-300 uppercase tracking-wider mb-1.5">
                   Mobile Number (Login) *
                 </label>
                 <input
@@ -858,54 +901,56 @@ export const TeamManagement: React.FC = () => {
                   placeholder="10-digit mobile"
                   value={sbMobile}
                   onChange={(e) => setSbMobile(e.target.value.replace(/\D/g, '').slice(0, 10))}
-                  className="w-full px-3.5 py-2.5 rounded-xl bg-slate-950 border border-slate-800 text-slate-100 text-sm focus:border-blue-500 focus:outline-none disabled:opacity-60 disabled:cursor-not-allowed"
+                  className="w-full h-11 px-4 rounded-xl bg-slate-950 border border-slate-800 text-white text-sm focus:border-blue-500 focus:ring-1 focus:ring-blue-500/30 focus:outline-none disabled:opacity-50 disabled:cursor-not-allowed transition-all font-mono"
                 />
               </div>
 
               <div>
-                <label className="block text-xs font-semibold text-slate-300 uppercase tracking-wider mb-1">
-                  Password {editingSiteBoy ? '(Leave blank to keep)' : '*'}
+                <label className="block text-xs font-bold text-slate-300 uppercase tracking-wider mb-1.5">
+                  Password {editingSiteBoy ? '(Optional)' : '*'}
                 </label>
                 <input
                   type="password"
                   required={!editingSiteBoy}
-                  placeholder={editingSiteBoy ? 'New password (optional)' : 'Min 6 characters'}
+                  placeholder={editingSiteBoy ? 'Keep current password' : 'Min 6 characters'}
                   value={sbPassword}
                   onChange={(e) => setSbPassword(e.target.value)}
-                  className="w-full px-3.5 py-2.5 rounded-xl bg-slate-950 border border-slate-800 text-slate-100 text-sm focus:border-blue-500 focus:outline-none"
+                  className="w-full h-11 px-4 rounded-xl bg-slate-950 border border-slate-800 text-white text-sm focus:border-blue-500 focus:ring-1 focus:ring-blue-500/30 focus:outline-none transition-all"
                 />
               </div>
 
               <div>
-                <label className="block text-xs font-semibold text-slate-300 uppercase tracking-wider mb-1">
-                  Assigned Quarry Site (Locked) *
+                <label className="block text-xs font-bold text-slate-300 uppercase tracking-wider mb-1.5">
+                  Assigned Quarry Site (Strictly Locked) *
                 </label>
                 <CustomSelect
                   value={sbSiteId}
                   onChange={setSbSiteId}
                   options={activeSites.map((s) => ({
                     value: s.id,
-                    label: `${s.siteName} (${s.location})`,
+                    label: s.siteName,
+                    subLabel: s.location || undefined,
                   }))}
                   placeholder="Select Quarry Site"
                 />
-                <p className="text-[11px] text-slate-400 mt-1">
+                <p className="text-[11px] text-slate-400 mt-1.5 flex items-center gap-1">
+                  <Info className="w-3.5 h-3.5 text-blue-400 shrink-0" />
                   Site supervisors can only record loads and expenses for their assigned quarry site.
                 </p>
               </div>
 
-              <div className="pt-4 border-t border-slate-800 flex items-center justify-end gap-2.5">
+              <div className="pt-4 border-t border-slate-800 flex items-center justify-end gap-3">
                 <button
                   type="button"
                   onClick={() => setSiteBoyModalOpen(false)}
-                  className="px-4 py-2 rounded-xl text-sm font-medium text-slate-400 hover:text-slate-200 transition-colors"
+                  className="px-4 py-2.5 rounded-2xl text-xs sm:text-sm font-semibold text-slate-400 hover:text-white hover:bg-slate-800 transition-colors"
                 >
                   Cancel
                 </button>
                 <button
                   type="submit"
-                  disabled={sbSubmitting}
-                  className="flex items-center gap-2 px-5 py-2.5 rounded-xl bg-gradient-to-r from-blue-500 to-blue-600 hover:from-blue-400 hover:to-blue-500 text-slate-950 font-bold text-sm shadow-lg shadow-blue-500/20 disabled:opacity-50"
+                  disabled={sbSubmitting || activeSites.length === 0}
+                  className="flex items-center gap-2 px-5 py-2.5 rounded-2xl bg-blue-600 hover:bg-blue-500 text-white font-bold text-xs sm:text-sm shadow-lg shadow-blue-500/20 disabled:opacity-50 transition-all active:scale-95"
                 >
                   {sbSubmitting && <RefreshCw className="w-4 h-4 animate-spin" />}
                   {editingSiteBoy ? 'Save Changes' : 'Create Supervisor'}
