@@ -26,7 +26,7 @@ export class RatesController {
     @CurrentUser() user: AuthUser,
     @Body() dto: CreateRateDto,
   ) {
-    return this.ratesService.create(user.id, dto);
+    return this.ratesService.create(user.ownerId, dto);
   }
 
   @Get('lookup')
@@ -34,7 +34,7 @@ export class RatesController {
     @CurrentUser() user: AuthUser,
     @Query() query: LookupRateDto,
   ) {
-    return this.ratesService.lookup(user.id, query);
+    return this.ratesService.lookup(user.ownerId, query);
   }
 
   @Get()
@@ -42,7 +42,7 @@ export class RatesController {
     @CurrentUser() user: AuthUser,
     @Query('siteId') siteId?: string,
   ) {
-    return this.ratesService.findAll(user.id, siteId);
+    return this.ratesService.findAll(user.ownerId, siteId);
   }
 
   @Get(':id')
@@ -50,7 +50,7 @@ export class RatesController {
     @CurrentUser() user: AuthUser,
     @Param('id') id: string,
   ) {
-    return this.ratesService.findOne(user.id, id);
+    return this.ratesService.findOne(user.ownerId, id);
   }
 
   @Patch(':id')
@@ -59,7 +59,7 @@ export class RatesController {
     @Param('id') id: string,
     @Body() dto: UpdateRateDto,
   ) {
-    return this.ratesService.update(user.id, id, dto);
+    return this.ratesService.update(user.ownerId, id, dto);
   }
 
   @Delete(':id')
@@ -67,6 +67,6 @@ export class RatesController {
     @CurrentUser() user: AuthUser,
     @Param('id') id: string,
   ) {
-    return this.ratesService.remove(user.id, id);
+    return this.ratesService.remove(user.ownerId, id);
   }
 }

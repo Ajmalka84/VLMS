@@ -26,7 +26,7 @@ export class LoadsController {
     @CurrentUser() user: AuthUser,
     @Body() dto: CreateLoadDto,
   ) {
-    return this.loadsService.create(user.id, dto);
+    return this.loadsService.create(user, dto);
   }
 
   @Get()
@@ -34,7 +34,7 @@ export class LoadsController {
     @CurrentUser() user: AuthUser,
     @Query() query: QueryLoadsDto,
   ) {
-    return this.loadsService.findAll(user.id, query);
+    return this.loadsService.findAll(user, query);
   }
 
   @Get(':id')
@@ -42,7 +42,7 @@ export class LoadsController {
     @CurrentUser() user: AuthUser,
     @Param('id') id: string,
   ) {
-    return this.loadsService.findOne(user.id, id);
+    return this.loadsService.findOne(user, id);
   }
 
   @Patch(':id')
@@ -51,7 +51,7 @@ export class LoadsController {
     @Param('id') id: string,
     @Body() dto: UpdateLoadDto,
   ) {
-    return this.loadsService.update(user.id, id, dto);
+    return this.loadsService.update(user, id, dto);
   }
 
   @Delete(':id')
@@ -59,6 +59,6 @@ export class LoadsController {
     @CurrentUser() user: AuthUser,
     @Param('id') id: string,
   ) {
-    return this.loadsService.remove(user.id, id);
+    return this.loadsService.remove(user, id);
   }
 }

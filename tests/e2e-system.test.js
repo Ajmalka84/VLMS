@@ -122,7 +122,7 @@ test('2.1 Authenticates Tenant Customer A and B', async () => {
 
   assert.equal(resA.status, 200);
   assert.equal(resA.data.success, true);
-  assert.equal(resA.data.data.user.role, 'USER');
+  assert.equal(resA.data.data.user.role, 'OWNER');
   tenantAToken = resA.data.data.accessToken;
 
   const resB = await req('/auth/login', {
@@ -222,11 +222,11 @@ test('2.4 Prevents inactive customer account from logging in (HTTP 403)', async 
   tenantBToken = resB.data.data.accessToken;
 });
 
-test('3.1 Creates Vehicle Type and Material Type as Super Admin', async () => {
+test('3.1 Creates Vehicle Type and Material Type for Tenant A', async () => {
   const typeName = `Tipper_${uniqueSuffix}`;
-  const resType = await req('/admin/vehicle-types', {
+  const resType = await req('/vehicle-types', {
     method: 'POST',
-    headers: { Authorization: `Bearer ${superAdminToken}` },
+    headers: { Authorization: `Bearer ${tenantAToken}` },
     body: JSON.stringify({ name: typeName }),
   });
 
@@ -235,9 +235,9 @@ test('3.1 Creates Vehicle Type and Material Type as Super Admin', async () => {
   vehicleTypeId = resType.data.data.id;
 
   const matName = `Granite_20mm_${uniqueSuffix}`;
-  const resMat = await req('/admin/material-types', {
+  const resMat = await req('/material-types', {
     method: 'POST',
-    headers: { Authorization: `Bearer ${superAdminToken}` },
+    headers: { Authorization: `Bearer ${tenantAToken}` },
     body: JSON.stringify({ name: matName }),
   });
 
@@ -741,4 +741,54 @@ test('8.10 Inactive user account is blocked from getting /auth/me and protected 
     body: JSON.stringify({ isActive: true }),
   });
 });
+
+test('9.1 Hurdle 13: Tenant profile returns role OWNER, ownerId, and default quotas', async () => {
+  const resMe = await req('/auth/me', {
+    headers: { Authorization: `Bearer ${tenantAToken}` },
+  });
+
+  assert.equal(resMe.status, 200);
+  assert.equal(resMe.data.success, true);
+  assert.equal(resMe.data.data.role, 'OWNER');
+  assert.equal(resMe.data.data.ownerId, tenantAUser.id);
+  assert.equal(resMe.data.data.coPartnerQuota, 3);
+  assert.equal(resMe.data.data.siteBoyQuota, 2);
+  assert.ok(Array.isArray(resMe.data.data.assignedSiteIds));
+  assert.ok(resMe.data.data.assignedSiteIds.includes(siteAId));
+});
+
+test('9.2 Hurdle 13: Tenant-scoped Vehicle Types and Material Types (same name allowed across different tenants)', async () => {
+  const typeName = `Tipper_${uniqueSuffix}`;
+  const resTypeB = await req('/vehicle-types', {
+    method: 'POST',
+    headers: { Authorization: `Bearer ${tenantBToken}` },
+    body: JSON.stringify({ name: typeName }),
+  });
+
+  assert.equal(resTypeB.status, 201);
+  assert.equal(resTypeB.data.success, true);
+  assert.ok(resTypeB.data.data.id);
+
+  // Cross-tenant guard: Tenant B cannot query Tenant A's vehicle type
+  const resCross = await req(`/vehicle-types/${vehicleTypeId}`, {
+    headers: { Authorization: `Bearer ${tenantBToken}` },
+  });
+  assert.equal(resCross.status, 404);
+});
+
+test('9.3 Hurdle 13: Atomic Master Data Bundle contains tenant-scoped fleet and expense structures', async () => {
+  const resBundle = await req('/master-data/bundle', {
+    headers: { Authorization: `Bearer ${tenantAToken}` },
+  });
+
+  assert.equal(resBundle.status, 200);
+  assert.equal(resBundle.data.success, true);
+  assert.ok(Array.isArray(resBundle.data.data.sites));
+  assert.ok(Array.isArray(resBundle.data.data.vehicles));
+  assert.ok(Array.isArray(resBundle.data.data.vehicleTypes));
+  assert.ok(Array.isArray(resBundle.data.data.materialTypes));
+  assert.ok(Array.isArray(resBundle.data.data.expenseCategories));
+  assert.ok(Array.isArray(resBundle.data.data.machinery));
+});
+
 

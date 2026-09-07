@@ -13,7 +13,7 @@ export class ReportsService {
   constructor(private readonly prisma: PrismaService) {}
 
   async getContractorsSummary(user: AuthUser, query: QueryContractorSummaryDto) {
-    let targetUserId = user.id;
+    let targetUserId = user.ownerId || user.id;
 
     // Super Admin support: allow querying specific customer
     if (user.role === 'SUPER_ADMIN') {
@@ -51,7 +51,16 @@ export class ReportsService {
       deletedAt: null,
     };
 
+    if (user.role !== 'OWNER' && user.role !== 'SUPER_ADMIN') {
+      loadWhere.siteId = { in: user.assignedSiteIds || [] };
+    }
+
     if (query.siteId) {
+      if (user.role !== 'OWNER' && user.role !== 'SUPER_ADMIN') {
+        if (!user.assignedSiteIds.includes(query.siteId)) {
+          throw new ForbiddenException('You are not authorized to view reports for this site');
+        }
+      }
       loadWhere.siteId = query.siteId;
     }
 
@@ -211,7 +220,7 @@ export class ReportsService {
   }
 
   async getSettlementStatement(user: AuthUser, query: QuerySettlementDto) {
-    let targetUserId = user.id;
+    let targetUserId = user.ownerId || user.id;
     let contractorObj: { id: string; name: string; mobile: string } | null = null;
 
     if (query.contractorId === 'direct-sales') {
@@ -233,7 +242,7 @@ export class ReportsService {
       }
 
       // Tenant permission check (Super Admin can access any tenant's contractor)
-      if (user.role !== 'SUPER_ADMIN' && contractor.userId !== user.id) {
+      if (user.role !== 'SUPER_ADMIN' && contractor.userId !== targetUserId) {
         throw new ForbiddenException('You do not have permission to access this contractor');
       }
 
@@ -252,7 +261,16 @@ export class ReportsService {
       deletedAt: null,
     };
 
+    if (user.role !== 'OWNER' && user.role !== 'SUPER_ADMIN') {
+      where.siteId = { in: user.assignedSiteIds || [] };
+    }
+
     if (query.siteId) {
+      if (user.role !== 'OWNER' && user.role !== 'SUPER_ADMIN') {
+        if (!user.assignedSiteIds.includes(query.siteId)) {
+          throw new ForbiddenException('You are not authorized to view reports for this site');
+        }
+      }
       where.siteId = query.siteId;
     }
 

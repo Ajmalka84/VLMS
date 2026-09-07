@@ -1,25 +1,111 @@
-generator client {
-  provider = "prisma-client-js"
-}
+# Hurdle 13 — Multi-Role Organization, Expenses & Financial Intelligence
 
-datasource db {
-  provider = "postgresql"
-}
+## Status: 🔄 In Progress
 
+---
+
+## 1. Executive Summary & Vision
+
+Hurdle 13 transforms VLMS from a single-user customer portal into a **Multi-Role Collaborative Quarry & Crusher Management Platform**. 
+
+It addresses:
+1. **Multi-Role Hierarchy & Quotas**: SaaS Owner (`SUPER_ADMIN`), Quarry Business Owner (`OWNER`), Site Investor (`CO_PARTNER` with site-specific `% shares`), and Site Supervisor (`SITE_BOY` assigned strictly 1-to-1 to a site).
+2. **Temporal Partner Site Share Ledger**: Exact interval versioning (`effectiveFrom` – `effectiveTo`) so past settlement calculations remain mathematically immutable when equity shares change.
+3. **Tenant-Scoped Master Data**: `VehicleType` and `MaterialType` become fully tenant-isolated under the Owner account.
+4. **Site Expenses & Heavy Machinery Rental Engine**: Hourly rental logs for Excavators/Hitachis/JCBs (Start/End time, rollover handling, hourly rate, and advance deductions).
+5. **Site Cash Drawer & Financial Intelligence**: Shift cash drawer reconciliation, site cashflow statements, and partner profit-sharing dividend distributions.
+
+---
+
+## 2. Structural Part Breakdown
+
+Hurdle 13 is divided into 5 distinct, sequential phases:
+
+```
+┌─────────────────────────────────────────────────────────────────────────┐
+│ PART 1: Database Migration & Multi-Tenant Scoping Engine               │
+│ - Prisma Schema with Temporal Shares, Expenses, Machinery, Quotas       │
+│ - Tenant-scoping migration for VehicleType and MaterialType             │
+│ - Auth & JWT refactor (ownerId, role, assignedSiteIds, auto-deactivation)│
+└────────────────────────────────────┬────────────────────────────────────┘
+                                     │
+                                     ▼
+┌─────────────────────────────────────────────────────────────────────────┐
+│ PART 2: Sub-Accounts & Quota Management Subsystem                       │
+│ - Owner Sub-Account Manager (Co-partners with Date-ranged % shares)    │
+│ - Site-boy 1-to-1 site assignment & quota limits (3 CPs, 2 SBs)        │
+│ - Super Admin quota override (+₹2,000) & quota transaction ledger      │
+└────────────────────────────────────┬────────────────────────────────────┘
+                                     │
+                                     ▼
+┌─────────────────────────────────────────────────────────────────────────┐
+│ PART 3: Expenses, Machinery/Hitachi Hours & Advance Engine              │
+│ - Expense Categories & Machinery Master CRUD                            │
+│ - Machine Time Calculator (Start/End Time, Rollover, Rate/hr, Advances) │
+│ - Expenses CRUD & Payment Mode Categorization                           │
+└────────────────────────────────────┬────────────────────────────────────┘
+                                     │
+                                     ▼
+┌─────────────────────────────────────────────────────────────────────────┐
+│ PART 4: Role-Based App Experience & Site Boy Field Workflow            │
+│ - Role navigation & site-locking for Site Boy / Co-Partner              │
+│ - Global master creation from Site Boy (Vehicle & Contractor)           │
+│ - Daily Shift Drawer Close & Handover Reconciliation                    │
+└────────────────────────────────────┬────────────────────────────────────┘
+                                     │
+                                     ▼
+┌─────────────────────────────────────────────────────────────────────────┐
+│ PART 5: Advanced Financial Reports & Cashflow Subsystem                │
+│ - Site Daily & Monthly Cashflow Statement (Drawer Inflow vs Outflows)   │
+│ - Co-Partner Temporal Profit-Sharing Settlement Statement               │
+│ - Machinery Rental Logbook & Vendor Settlement Statement               │
+│ - Enhanced Multi-Format Export (PDF with custom headers, CSV)           │
+└─────────────────────────────────────────────────────────────────────────┘
+```
+
+---
+
+## 3. Detailed Hole & Vulnerability Analysis
+
+### Co-Partner Roles
+- **CP-1 (Temporal Share Versioning)**: Editing a partner's share (e.g. 50% to 35% on Aug 1) creates a new time-sliced record (`effectiveFrom: 2026-08-01`), keeping past settlements for March calculated at 50%.
+- **CP-2 (Over-Allocation Guard)**: Enforces $\sum \text{PartnerShares} \le 100\%$ per site across any time interval.
+- **CP-3 (Drawings & Interim Payouts)**: Tracks mid-month withdrawals (`PartnerPayout`) so Net Settlement = `Gross Profit Share - Drawings`.
+- **CP-4 (Loss & Monsoon Months)**: Explicitly tracks negative operating margins as carryover deficits.
+- **CP-5 (Site Isolation)**: Strict query scoping so Co-partners only see data for their assigned sites.
+
+### Site Boy Roles
+- **SB-1 (Offline Quarry Operations)**: LocalStorage/IndexedDB cache of master data with client-UUID load queuing.
+- **SB-2 (Spot Cash Drawer Reconciliation)**: End-of-shift drawer reconciliation (`ShiftReconciliation`) comparing expected cash vs physical handover cash.
+- **SB-3 (Midnight Shift Rollovers)**: Automatically handles machinery shifts running across 12:00 AM (e.g. 21:00 to 05:00 = 8.0 hrs).
+- **SB-4 (Fraud Prevention)**: Immutable records after 2 hours / shift close.
+- **SB-5 (Global Master Reflection)**: Vehicles and Contractors registered by Site Boys save under `ownerId` and are instantly accessible across all the Owner's sites.
+
+### Owner Roles
+- **OW-1 (Fleet Movement)**: Machinery assets are registered organization-wide and assigned to specific sites per shift log.
+- **OW-2 (Expense Payment Modes)**: Distinguishes physical cash (`CASH_DRAWER`) from `BANK_TRANSFER`, `UPI`, or `VENDOR_CREDIT`.
+- **OW-3 (Dual-Mode Reports)**: Supports both site-specific statements and organization-wide consolidated reports.
+- **OW-4 (Safe Site Deactivation)**: Soft-deactivation preserves all historical audits and tax records while deactivating linked site boys.
+
+### Super Admin Roles
+- **SA-1 (Quota Adjustment Tracking)**: Logs all quota increases (+₹2,000 per extra co-partner/site-boy slot) with payment references.
+- **SA-2 (Subscription Inheritance)**: Sub-accounts inherit the parent Owner's subscription state.
+
+---
+
+## 4. Complete Database Schema (Prisma)
+
+```prisma
 enum UserRole {
   SUPER_ADMIN
   OWNER
   CO_PARTNER
   SITE_BOY
-
-  @@map("user_role")
 }
 
 enum PaymentType {
   CASH
   CREDIT
-
-  @@map("payment_type")
 }
 
 enum PaymentMode {
@@ -28,8 +114,6 @@ enum PaymentMode {
   UPI_ONLINE
   VENDOR_CREDIT
   OWNER_DIRECT
-
-  @@map("payment_mode")
 }
 
 model User {
@@ -52,20 +136,20 @@ model User {
   createdAt             DateTime  @default(now()) @map("created_at") @db.Timestamp
   updatedAt             DateTime  @updatedAt @map("updated_at") @db.Timestamp
 
-  owner                 User?                 @relation("OwnerSubAccounts", fields: [ownerId], references: [id], onDelete: Cascade)
-  subAccounts           User[]                @relation("OwnerSubAccounts")
-  assignedSite          Site?                 @relation("SiteBoyAssignment", fields: [assignedSiteId], references: [id], onDelete: SetNull)
+  owner                 User?               @relation("OwnerSubAccounts", fields: [ownerId], references: [id], onDelete: Cascade)
+  subAccounts           User[]              @relation("OwnerSubAccounts")
+  assignedSite          Site?               @relation("SiteBoyAssignment", fields: [assignedSiteId], references: [id], onDelete: SetNull)
   partnerShares         PartnerSiteShare[]
-  partnerPayouts        PartnerPayout[]       @relation("PartnerDrawings")
-  recordedPayouts       PartnerPayout[]       @relation("PayoutRecorder")
-  sites                 Site[]                @relation("OwnerSites")
+  partnerPayouts        PartnerPayout[]     @relation("PartnerDrawings")
+  recordedPayouts       PartnerPayout[]     @relation("PayoutRecorder")
+  sites                 Site[]              @relation("OwnerSites")
   vehicles              Vehicle[]
   contractors           Contractor[]
   vehicleTypes          VehicleType[]
   materialTypes         MaterialType[]
   expenseCategories     ExpenseCategory[]
   machinery             Machinery[]
-  recordedExpenses      Expense[]             @relation("ExpenseRecorder")
+  recordedExpenses      Expense[]           @relation("ExpenseRecorder")
   shiftReconciliations  ShiftReconciliation[] @relation("ShiftSupervisor")
   approvedReconciliations ShiftReconciliation[] @relation("ShiftApprover")
   quotaTransactions     QuotaTransaction[]
@@ -77,23 +161,23 @@ model User {
 }
 
 model Site {
-  id                   String                @id @default(uuid()) @db.Uuid
-  userId               String                @map("user_id") @db.Uuid
-  siteName             String                @map("site_name") @db.VarChar
-  location             String                @map("location") @db.VarChar
-  pincode              String                @map("pincode") @db.VarChar
-  isActive             Boolean               @default(true) @map("is_active")
-  createdAt            DateTime              @default(now()) @map("created_at") @db.Timestamp
-  updatedAt            DateTime              @updatedAt @map("updated_at") @db.Timestamp
+  id                    String              @id @default(uuid()) @db.Uuid
+  userId                String              @map("user_id") @db.Uuid
+  siteName              String              @map("site_name") @db.VarChar
+  location              String              @map("location") @db.VarChar
+  pincode               String              @map("pincode") @db.VarChar
+  isActive              Boolean             @default(true) @map("is_active")
+  createdAt             DateTime            @default(now()) @map("created_at") @db.Timestamp
+  updatedAt             DateTime            @updatedAt @map("updated_at") @db.Timestamp
 
-  user                 User                  @relation("OwnerSites", fields: [userId], references: [id], onDelete: Cascade)
-  rates                Rate[]
-  loads                Load[]
-  expenses             Expense[]
-  partnerShares        PartnerSiteShare[]
-  partnerPayouts       PartnerPayout[]
-  siteBoys             User[]                @relation("SiteBoyAssignment")
-  shiftReconciliations ShiftReconciliation[]
+  user                  User                @relation("OwnerSites", fields: [userId], references: [id], onDelete: Cascade)
+  rates                 Rate[]
+  loads                 Load[]
+  expenses              Expense[]
+  partnerShares         PartnerSiteShare[]
+  partnerPayouts        PartnerPayout[]
+  siteBoys              User[]              @relation("SiteBoyAssignment")
+  shiftReconciliations  ShiftReconciliation[]
 
   @@map("sites")
 }
@@ -354,3 +438,4 @@ model QuotaTransaction {
 
   @@map("quota_transactions")
 }
+```

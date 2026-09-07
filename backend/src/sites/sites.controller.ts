@@ -24,12 +24,12 @@ export class SitesController {
     @CurrentUser() user: AuthUser,
     @Body() dto: CreateSiteDto,
   ) {
-    return this.sitesService.create(user.id, dto);
+    return this.sitesService.create(user, dto);
   }
 
   @Get()
   async findAll(@CurrentUser() user: AuthUser) {
-    return this.sitesService.findAll(user.id);
+    return this.sitesService.findAll(user);
   }
 
   @Get(':id')
@@ -37,7 +37,7 @@ export class SitesController {
     @CurrentUser() user: AuthUser,
     @Param('id') id: string,
   ) {
-    return this.sitesService.findOne(user.id, id);
+    return this.sitesService.findOne(user, id);
   }
 
   @Patch(':id')
@@ -46,7 +46,7 @@ export class SitesController {
     @Param('id') id: string,
     @Body() dto: UpdateSiteDto,
   ) {
-    return this.sitesService.update(user.id, id, dto);
+    return this.sitesService.update(user, id, dto);
   }
 
   @Delete(':id')
@@ -54,6 +54,6 @@ export class SitesController {
     @CurrentUser() user: AuthUser,
     @Param('id') id: string,
   ) {
-    return this.sitesService.remove(user.id, id);
+    return this.sitesService.remove(user, id);
   }
 }

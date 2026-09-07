@@ -1,15 +1,30 @@
 import { Injectable } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
+import { AuthUser } from '../auth/decorators/current-user.decorator';
 
 @Injectable()
 export class MasterDataService {
   constructor(private readonly prisma: PrismaService) {}
 
-  async getBundle(userId: string) {
-    const [sites, vehicles, vehicleTypes, materialTypes, contractors, rates] =
+  async getBundle(user: AuthUser) {
+    const ownerId = user.ownerId;
+    const isOwner = user.role === 'OWNER';
+
+    const siteWhere: any = {
+      userId: ownerId,
+    };
+    if (!isOwner && user.assignedSiteIds && user.assignedSiteIds.length > 0) {
+      siteWhere.id = { in: user.assignedSiteIds };
+    }
+
+    const rateWhere: any = isOwner
+      ? { site: { userId: ownerId } }
+      : { siteId: { in: user.assignedSiteIds || [] } };
+
+    const [sites, vehicles, vehicleTypes, materialTypes, contractors, rates, expenseCategories, machinery] =
       await Promise.all([
         this.prisma.site.findMany({
-          where: { userId },
+          where: siteWhere,
           orderBy: { siteName: 'asc' },
           include: {
             _count: {
@@ -18,7 +33,7 @@ export class MasterDataService {
           },
         }),
         this.prisma.vehicle.findMany({
-          where: { userId },
+          where: { userId: ownerId },
           orderBy: { vehicleNumber: 'asc' },
           include: {
             vehicleType: true,
@@ -28,6 +43,7 @@ export class MasterDataService {
           },
         }),
         this.prisma.vehicleType.findMany({
+          where: { userId: ownerId },
           orderBy: { name: 'asc' },
           include: {
             _count: {
@@ -36,6 +52,7 @@ export class MasterDataService {
           },
         }),
         this.prisma.materialType.findMany({
+          where: { userId: ownerId },
           orderBy: { name: 'asc' },
           include: {
             _count: {
@@ -44,7 +61,7 @@ export class MasterDataService {
           },
         }),
         this.prisma.contractor.findMany({
-          where: { userId },
+          where: { userId: ownerId },
           orderBy: { name: 'asc' },
           include: {
             _count: {
@@ -53,14 +70,20 @@ export class MasterDataService {
           },
         }),
         this.prisma.rate.findMany({
-          where: {
-            site: { userId },
-          },
+          where: rateWhere,
           include: {
             site: true,
             vehicleType: true,
             materialType: true,
           },
+        }),
+        this.prisma.expenseCategory.findMany({
+          where: { userId: ownerId },
+          orderBy: { name: 'asc' },
+        }),
+        this.prisma.machinery.findMany({
+          where: { userId: ownerId, isActive: true },
+          orderBy: { name: 'asc' },
         }),
       ]);
 
@@ -71,6 +94,8 @@ export class MasterDataService {
       materialTypes,
       contractors,
       rates,
+      expenseCategories,
+      machinery,
     };
   }
 }

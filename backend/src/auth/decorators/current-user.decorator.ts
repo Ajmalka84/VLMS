@@ -5,8 +5,19 @@ export interface AuthUser {
   id: string;
   mobile: string;
   role: UserRole;
+  ownerId: string;
+  assignedSiteIds: string[];
+  assignedSiteId?: string | null;
+  name?: string | null;
   businessName?: string;
   isActive?: boolean;
+  coPartnerQuota?: number;
+  siteBoyQuota?: number;
+  subscriptionPlan?: string;
+  subscriptionStatus?: string;
+  daysRemaining?: number | null;
+  isGraceActive?: boolean;
+  isExpired?: boolean;
 }
 
 export const CurrentUser = createParamDecorator(
@@ -16,3 +27,4 @@ export const CurrentUser = createParamDecorator(
     return data ? user?.[data] : user;
   },
 );
+

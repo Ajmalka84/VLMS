@@ -10,6 +10,6 @@ export class MasterDataController {
 
   @Get('bundle')
   async getBundle(@CurrentUser() user: AuthUser) {
-    return this.masterDataService.getBundle(user.id);
+    return this.masterDataService.getBundle(user);
   }
 }

@@ -24,12 +24,12 @@ export class VehiclesController {
     @CurrentUser() user: AuthUser,
     @Body() dto: CreateVehicleDto,
   ) {
-    return this.vehiclesService.create(user.id, dto);
+    return this.vehiclesService.create(user.ownerId, dto);
   }
 
   @Get()
   async findAll(@CurrentUser() user: AuthUser) {
-    return this.vehiclesService.findAll(user.id);
+    return this.vehiclesService.findAll(user.ownerId);
   }
 
   @Get(':id')
@@ -37,7 +37,7 @@ export class VehiclesController {
     @CurrentUser() user: AuthUser,
     @Param('id') id: string,
   ) {
-    return this.vehiclesService.findOne(user.id, id);
+    return this.vehiclesService.findOne(user.ownerId, id);
   }
 
   @Patch(':id')
@@ -46,7 +46,7 @@ export class VehiclesController {
     @Param('id') id: string,
     @Body() dto: UpdateVehicleDto,
   ) {
-    return this.vehiclesService.update(user.id, id, dto);
+    return this.vehiclesService.update(user.ownerId, id, dto);
   }
 
   @Delete(':id')
@@ -54,6 +54,6 @@ export class VehiclesController {
     @CurrentUser() user: AuthUser,
     @Param('id') id: string,
   ) {
-    return this.vehiclesService.remove(user.id, id);
+    return this.vehiclesService.remove(user.ownerId, id);
   }
 }

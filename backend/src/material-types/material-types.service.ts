@@ -12,9 +12,14 @@ import { UpdateMaterialTypeDto } from './dto/update-material-type.dto';
 export class MaterialTypesService {
   constructor(private readonly prisma: PrismaService) {}
 
-  async create(dto: CreateMaterialTypeDto) {
+  async create(userId: string, dto: CreateMaterialTypeDto) {
     const existing = await this.prisma.materialType.findUnique({
-      where: { name: dto.name.trim() },
+      where: {
+        userId_name: {
+          userId,
+          name: dto.name.trim(),
+        },
+      },
     });
 
     if (existing) {
@@ -24,12 +29,16 @@ export class MaterialTypesService {
     }
 
     return this.prisma.materialType.create({
-      data: { name: dto.name.trim() },
+      data: {
+        userId,
+        name: dto.name.trim(),
+      },
     });
   }
 
-  async findAll() {
+  async findAll(userId: string) {
     return this.prisma.materialType.findMany({
+      where: { userId },
       orderBy: { name: 'asc' },
       include: {
         _count: {
@@ -42,7 +51,7 @@ export class MaterialTypesService {
     });
   }
 
-  async findOne(id: string) {
+  async findOne(userId: string, id: string) {
     const materialType = await this.prisma.materialType.findUnique({
       where: { id },
       include: {
@@ -55,18 +64,19 @@ export class MaterialTypesService {
       },
     });
 
-    if (!materialType) {
+    if (!materialType || materialType.userId !== userId) {
       throw new NotFoundException(`Material type with ID "${id}" not found`);
     }
 
     return materialType;
   }
 
-  async update(id: string, dto: UpdateMaterialTypeDto) {
-    await this.findOne(id);
+  async update(userId: string, id: string, dto: UpdateMaterialTypeDto) {
+    await this.findOne(userId, id);
 
     const existing = await this.prisma.materialType.findFirst({
       where: {
+        userId,
         name: dto.name.trim(),
         NOT: { id },
       },
@@ -84,8 +94,8 @@ export class MaterialTypesService {
     });
   }
 
-  async remove(id: string) {
-    const materialType = await this.findOne(id);
+  async remove(userId: string, id: string) {
+    const materialType = await this.findOne(userId, id);
 
     const linkedLoadsCount = await this.prisma.load.count({
       where: { materialTypeId: id, deletedAt: null },

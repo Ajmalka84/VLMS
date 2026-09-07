@@ -17,6 +17,7 @@ export interface Site {
 
 export interface VehicleType {
   id: string;
+  userId?: string;
   name: string;
   createdAt: string;
   updatedAt: string;
@@ -28,6 +29,7 @@ export interface VehicleType {
 
 export interface MaterialType {
   id: string;
+  userId?: string;
   name: string;
   createdAt: string;
   updatedAt: string;
@@ -75,6 +77,28 @@ export interface Rate {
   updatedAt: string;
 }
 
+export interface ExpenseCategory {
+  id: string;
+  userId: string;
+  name: string;
+  isDefault?: boolean;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface Machinery {
+  id: string;
+  userId: string;
+  name: string;
+  code?: string | null;
+  defaultRentPerHour?: number | string | null;
+  vendorName?: string | null;
+  vendorMobile?: string | null;
+  isActive?: boolean;
+  createdAt: string;
+  updatedAt: string;
+}
+
 // ----------------- SITES API -----------------
 export async function getSitesApi(): Promise<Site[]> {
   return apiClient<Site[]>('/sites');
@@ -107,7 +131,7 @@ export async function getVehicleTypesApi(): Promise<VehicleType[]> {
 }
 
 export async function createVehicleTypeApi(dto: { name: string }): Promise<VehicleType> {
-  return apiClient<VehicleType>('/admin/vehicle-types', {
+  return apiClient<VehicleType>('/vehicle-types', {
     method: 'POST',
     body: JSON.stringify(dto),
   });
@@ -117,14 +141,14 @@ export async function updateVehicleTypeApi(
   id: string,
   dto: { name: string },
 ): Promise<VehicleType> {
-  return apiClient<VehicleType>(`/admin/vehicle-types/${id}`, {
+  return apiClient<VehicleType>(`/vehicle-types/${id}`, {
     method: 'PATCH',
     body: JSON.stringify(dto),
   });
 }
 
 export async function deleteVehicleTypeApi(id: string): Promise<VehicleType> {
-  return apiClient<VehicleType>(`/admin/vehicle-types/${id}`, { method: 'DELETE' });
+  return apiClient<VehicleType>(`/vehicle-types/${id}`, { method: 'DELETE' });
 }
 
 // ----------------- MATERIAL TYPES API -----------------
@@ -133,7 +157,7 @@ export async function getMaterialTypesApi(): Promise<MaterialType[]> {
 }
 
 export async function createMaterialTypeApi(dto: { name: string }): Promise<MaterialType> {
-  return apiClient<MaterialType>('/admin/material-types', {
+  return apiClient<MaterialType>('/material-types', {
     method: 'POST',
     body: JSON.stringify(dto),
   });
@@ -143,14 +167,14 @@ export async function updateMaterialTypeApi(
   id: string,
   dto: { name: string },
 ): Promise<MaterialType> {
-  return apiClient<MaterialType>(`/admin/material-types/${id}`, {
+  return apiClient<MaterialType>(`/material-types/${id}`, {
     method: 'PATCH',
     body: JSON.stringify(dto),
   });
 }
 
 export async function deleteMaterialTypeApi(id: string): Promise<MaterialType> {
-  return apiClient<MaterialType>(`/admin/material-types/${id}`, { method: 'DELETE' });
+  return apiClient<MaterialType>(`/material-types/${id}`, { method: 'DELETE' });
 }
 
 // ----------------- VEHICLES API -----------------
@@ -260,6 +284,8 @@ export interface MasterDataBundle {
   materialTypes: MaterialType[];
   contractors: Contractor[];
   rates: Rate[];
+  expenseCategories?: ExpenseCategory[];
+  machinery?: Machinery[];
 }
 
 let inFlightBundlePromise: Promise<MasterDataBundle> | null = null;
@@ -279,5 +305,3 @@ export async function getMasterDataBundleApi(force = false): Promise<MasterDataB
   inFlightBundlePromise = promise;
   return promise;
 }
-
-

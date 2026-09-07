@@ -8,24 +8,34 @@ import { PrismaService } from '../prisma/prisma.service';
 import { CreateLoadDto } from './dto/create-load.dto';
 import { UpdateLoadDto } from './dto/update-load.dto';
 import { QueryLoadsDto } from './dto/query-loads.dto';
+import { AuthUser } from '../auth/decorators/current-user.decorator';
 
 @Injectable()
 export class LoadsService {
   constructor(private readonly prisma: PrismaService) {}
 
-  async create(userId: string, dto: CreateLoadDto) {
-    // 1. Verify Site belongs to user
+  async create(user: AuthUser, dto: CreateLoadDto) {
+    const ownerId = user.ownerId;
+
+    // Verify site access for sub-accounts
+    if (user.role !== 'OWNER' && user.role !== 'SUPER_ADMIN') {
+      if (!user.assignedSiteIds || !user.assignedSiteIds.includes(dto.siteId)) {
+        throw new ForbiddenException('You are not authorized to create loads for this site');
+      }
+    }
+
+    // 1. Verify Site belongs to tenant
     const site = await this.prisma.site.findUnique({
       where: { id: dto.siteId },
     });
     if (!site) {
       throw new NotFoundException(`Site with ID "${dto.siteId}" not found`);
     }
-    if (site.userId !== userId) {
+    if (site.userId !== ownerId) {
       throw new ForbiddenException('You do not have permission to access this site');
     }
 
-    // 2. Verify Vehicle belongs to user
+    // 2. Verify Vehicle belongs to tenant
     const vehicle = await this.prisma.vehicle.findUnique({
       where: { id: dto.vehicleId },
       include: { vehicleType: true },
@@ -33,11 +43,11 @@ export class LoadsService {
     if (!vehicle) {
       throw new NotFoundException(`Vehicle with ID "${dto.vehicleId}" not found`);
     }
-    if (vehicle.userId !== userId) {
+    if (vehicle.userId !== ownerId) {
       throw new ForbiddenException('You do not have permission to access this vehicle');
     }
 
-    // 3. Verify Contractor belongs to user (if contractor is provided)
+    // 3. Verify Contractor belongs to tenant (if contractor is provided)
     if (dto.contractorId) {
       const contractor = await this.prisma.contractor.findUnique({
         where: { id: dto.contractorId },
@@ -45,16 +55,16 @@ export class LoadsService {
       if (!contractor) {
         throw new NotFoundException(`Contractor with ID "${dto.contractorId}" not found`);
       }
-      if (contractor.userId !== userId) {
+      if (contractor.userId !== ownerId) {
         throw new ForbiddenException('You do not have permission to access this contractor');
       }
     }
 
-    // 4. Verify Material Type exists
+    // 4. Verify Material Type exists and belongs to tenant
     const materialType = await this.prisma.materialType.findUnique({
       where: { id: dto.materialTypeId },
     });
-    if (!materialType) {
+    if (!materialType || materialType.userId !== ownerId) {
       throw new NotFoundException(
         `Material type with ID "${dto.materialTypeId}" not found`,
       );
@@ -80,7 +90,6 @@ export class LoadsService {
       if (rate) {
         rateId = rate.id;
       } else {
-        // If no rate entry exists in matrix but manual amount is given, create on-the-fly rate entry
         const createdRate = await this.prisma.rate.create({
           data: {
             siteId: dto.siteId,
@@ -139,19 +148,32 @@ export class LoadsService {
     });
   }
 
-  async findAll(userId: string, query: QueryLoadsDto) {
+  async findAll(user: AuthUser, query: QueryLoadsDto) {
+    const ownerId = user.ownerId;
     const page = Number(query.page) || 1;
     const limit = Number(query.limit) || 20;
     const skip = (page - 1) * limit;
 
     const where: any = {
       site: {
-        userId,
+        userId: ownerId,
       },
       deletedAt: null,
     };
 
-    if (query.siteId) where.siteId = query.siteId;
+    if (user.role !== 'OWNER' && user.role !== 'SUPER_ADMIN') {
+      where.siteId = { in: user.assignedSiteIds || [] };
+    }
+
+    if (query.siteId) {
+      if (user.role !== 'OWNER' && user.role !== 'SUPER_ADMIN') {
+        if (!user.assignedSiteIds.includes(query.siteId)) {
+          throw new ForbiddenException('You are not authorized to view loads for this site');
+        }
+      }
+      where.siteId = query.siteId;
+    }
+
     if (query.vehicleId) where.vehicleId = query.vehicleId;
     if (query.contractorId) {
       if (query.contractorId === 'direct' || query.contractorId === 'direct-sales') {
@@ -212,7 +234,6 @@ export class LoadsService {
       }),
     ]);
 
-    // Calculate dynamic aggregates for the filtered set
     let totalAmount = 0;
     let totalCashAmount = 0;
     let totalCreditAmount = 0;
@@ -248,7 +269,8 @@ export class LoadsService {
     };
   }
 
-  async findOne(userId: string, id: string) {
+  async findOne(user: AuthUser, id: string) {
+    const ownerId = user.ownerId;
     const load = await this.prisma.load.findUnique({
       where: { id },
       include: {
@@ -268,15 +290,22 @@ export class LoadsService {
       throw new NotFoundException(`Load with ID "${id}" not found`);
     }
 
-    if (load.site.userId !== userId) {
+    if (load.site.userId !== ownerId) {
       throw new ForbiddenException('You do not have permission to access this load');
+    }
+
+    if (user.role !== 'OWNER' && user.role !== 'SUPER_ADMIN') {
+      if (!user.assignedSiteIds.includes(load.siteId)) {
+        throw new ForbiddenException('You are not authorized to view loads for this site');
+      }
     }
 
     return load;
   }
 
-  async update(userId: string, id: string, dto: UpdateLoadDto) {
-    const current = await this.findOne(userId, id);
+  async update(user: AuthUser, id: string, dto: UpdateLoadDto) {
+    const current = await this.findOne(user, id);
+    const ownerId = user.ownerId;
 
     const updateData: any = {};
 
@@ -291,7 +320,7 @@ export class LoadsService {
         const contractor = await this.prisma.contractor.findUnique({
           where: { id: dto.contractorId },
         });
-        if (!contractor || contractor.userId !== userId) {
+        if (!contractor || contractor.userId !== ownerId) {
           throw new NotFoundException(`Contractor with ID "${dto.contractorId}" not found`);
         }
         updateData.contractorId = dto.contractorId;
@@ -303,7 +332,7 @@ export class LoadsService {
       const site = await this.prisma.site.findUnique({
         where: { id: dto.siteId },
       });
-      if (!site || site.userId !== userId) {
+      if (!site || site.userId !== ownerId) {
         throw new NotFoundException(`Site with ID "${dto.siteId}" not found`);
       }
       updateData.siteId = dto.siteId;
@@ -312,7 +341,7 @@ export class LoadsService {
       const vehicle = await this.prisma.vehicle.findUnique({
         where: { id: dto.vehicleId },
       });
-      if (!vehicle || vehicle.userId !== userId) {
+      if (!vehicle || vehicle.userId !== ownerId) {
         throw new NotFoundException(`Vehicle with ID "${dto.vehicleId}" not found`);
       }
       updateData.vehicleId = dto.vehicleId;
@@ -321,7 +350,7 @@ export class LoadsService {
       const materialType = await this.prisma.materialType.findUnique({
         where: { id: dto.materialTypeId },
       });
-      if (!materialType) {
+      if (!materialType || materialType.userId !== ownerId) {
         throw new NotFoundException(`Material type with ID "${dto.materialTypeId}" not found`);
       }
       updateData.materialTypeId = dto.materialTypeId;
@@ -348,8 +377,8 @@ export class LoadsService {
     });
   }
 
-  async remove(userId: string, id: string) {
-    await this.findOne(userId, id);
+  async remove(user: AuthUser, id: string) {
+    await this.findOne(user, id);
 
     return this.prisma.load.update({
       where: { id },

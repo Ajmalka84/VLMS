@@ -519,39 +519,53 @@ Hurdle 11.
 Production architecture and deployment configuration fully prepared, tested, and documented.
 
 
-# HURDLE 13 — REAL CUSTOMER VALIDATION
+# HURDLE 13 — MULTI-ROLE COLLABORATION, EXPENSES & FINANCIAL INTELLIGENCE
+
+Status: 🔄 In Progress
+
+## Objective
+
+Transform VLMS into a multi-role collaborative platform supporting Quarry Owners, Co-Partners (with time-sliced equity shares), and Site Boys (with 1-to-1 site assignments), with tenant-scoped masters, heavy machinery hourly rental logging, cash drawer reconciliations, and multi-site profit sharing intelligence.
+
+## Parts Breakdown
+
+- **Part 1**: Database Migration & Multi-Tenant Scoping Engine (Prisma schema with temporal shares, expenses, machinery, quotas, and auth context refactor)
+- **Part 2**: Sub-Accounts & Quota Management Subsystem (Owner sub-account UI, quota limits [3 CPs, 2 SBs], Super Admin overrides)
+- **Part 3**: Expenses, Machinery/Hitachi Hours & Advance Engine (Categories, machine masters, working hour calculator with overnight rollover, advance tracking)
+- **Part 4**: Role-Based App Experience & Site Boy Field Workflow (Role navigation, site locking, global vehicle/contractor registration, shift drawer close)
+- **Part 5**: Advanced Financial Reports & Cashflow Subsystem (Site cashflow statement, temporal partner profit-sharing statement, machine settlement, multi-format export)
+
+## Dependency
+
+Hurdle 12.
+
+## Definition of Done
+
+All 5 parts fully implemented, tested, verified with automated test suites, and documented in `docs/hurdles/hurdle-13/`.
+
+
+# HURDLE 14 — REAL CUSTOMER VALIDATION
 
 Status: ⬜ Not Started
 
 ## Objective
 
-Validate VLMS against actual customer usage.
+Validate VLMS against actual customer usage in live quarry operations.
 
 ## Process
 
-Give VLMS to the customer.
-
-Observe:
-
-- What is confusing?
-- What is slow?
-- What information is missing?
-- What manual work remains?
-- What reports are actually required?
+Deploy to production and observe real-world dispatch recording, heavy machinery hourly logs, cash drawer balances, and contractor/partner settlement workflows.
 
 ## Definition of Done
 
-First customer can complete their real workflow successfully.
-
-After this hurdle, new improvements should be driven by
-real customer feedback.
+First customer completes real-world operational workflows across Owner, Co-Partner, and Site Boy roles without critical defects.
 
 
 # CURRENT DEVELOPMENT STATE
 
 Current hurdle:
 
-HURDLE 13 — REAL CUSTOMER VALIDATION
+HURDLE 13 — MULTI-ROLE COLLABORATION, EXPENSES & FINANCIAL INTELLIGENCE (PART 2: SUB-ACCOUNTS & QUOTA MANAGEMENT)
 
 Current blocker:
 
@@ -559,7 +573,7 @@ None.
 
 Immediate goal:
 
-Onboard initial quarry customer onto production VPS instance and observe real-world dispatch recording and settlement statement workflows.
+Implement Part 2: Sub-Accounts & Quota Management Subsystem.
 
 
 # DEVELOPMENT RULES

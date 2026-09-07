@@ -12,9 +12,14 @@ import { UpdateVehicleTypeDto } from './dto/update-vehicle-type.dto';
 export class VehicleTypesService {
   constructor(private readonly prisma: PrismaService) {}
 
-  async create(dto: CreateVehicleTypeDto) {
+  async create(userId: string, dto: CreateVehicleTypeDto) {
     const existing = await this.prisma.vehicleType.findUnique({
-      where: { name: dto.name.trim() },
+      where: {
+        userId_name: {
+          userId,
+          name: dto.name.trim(),
+        },
+      },
     });
 
     if (existing) {
@@ -24,12 +29,16 @@ export class VehicleTypesService {
     }
 
     return this.prisma.vehicleType.create({
-      data: { name: dto.name.trim() },
+      data: {
+        userId,
+        name: dto.name.trim(),
+      },
     });
   }
 
-  async findAll() {
+  async findAll(userId: string) {
     return this.prisma.vehicleType.findMany({
+      where: { userId },
       orderBy: { name: 'asc' },
       include: {
         _count: {
@@ -42,7 +51,7 @@ export class VehicleTypesService {
     });
   }
 
-  async findOne(id: string) {
+  async findOne(userId: string, id: string) {
     const vehicleType = await this.prisma.vehicleType.findUnique({
       where: { id },
       include: {
@@ -55,18 +64,19 @@ export class VehicleTypesService {
       },
     });
 
-    if (!vehicleType) {
+    if (!vehicleType || vehicleType.userId !== userId) {
       throw new NotFoundException(`Vehicle type with ID "${id}" not found`);
     }
 
     return vehicleType;
   }
 
-  async update(id: string, dto: UpdateVehicleTypeDto) {
-    await this.findOne(id);
+  async update(userId: string, id: string, dto: UpdateVehicleTypeDto) {
+    await this.findOne(userId, id);
 
     const existing = await this.prisma.vehicleType.findFirst({
       where: {
+        userId,
         name: dto.name.trim(),
         NOT: { id },
       },
@@ -84,8 +94,8 @@ export class VehicleTypesService {
     });
   }
 
-  async remove(id: string) {
-    const vehicleType = await this.findOne(id);
+  async remove(userId: string, id: string) {
+    const vehicleType = await this.findOne(userId, id);
 
     const linkedVehiclesCount = await this.prisma.vehicle.count({
       where: { vehicleTypeId: id },

@@ -1,14 +1,20 @@
 import { apiClient } from './client';
 
-export type UserRole = 'SUPER_ADMIN' | 'USER';
+export type UserRole = 'SUPER_ADMIN' | 'OWNER' | 'CO_PARTNER' | 'SITE_BOY' | 'USER';
 
 export interface AuthUser {
   id: string;
+  ownerId?: string;
+  name?: string | null;
   mobile: string;
   role: UserRole;
+  assignedSiteIds?: string[];
+  assignedSiteId?: string | null;
   businessName?: string;
   gstin?: string | null;
   isActive?: boolean;
+  coPartnerQuota?: number;
+  siteBoyQuota?: number;
   subscriptionPlan?: string;
   subscriptionStartsAt?: string;
   subscriptionExpiresAt?: string | null;

@@ -24,12 +24,12 @@ export class ContractorsController {
     @CurrentUser() user: AuthUser,
     @Body() dto: CreateContractorDto,
   ) {
-    return this.contractorsService.create(user.id, dto);
+    return this.contractorsService.create(user.ownerId, dto);
   }
 
   @Get()
   async findAll(@CurrentUser() user: AuthUser) {
-    return this.contractorsService.findAll(user.id);
+    return this.contractorsService.findAll(user.ownerId);
   }
 
   @Get(':id')
@@ -37,7 +37,7 @@ export class ContractorsController {
     @CurrentUser() user: AuthUser,
     @Param('id') id: string,
   ) {
-    return this.contractorsService.findOne(user.id, id);
+    return this.contractorsService.findOne(user.ownerId, id);
   }
 
   @Patch(':id')
@@ -46,7 +46,7 @@ export class ContractorsController {
     @Param('id') id: string,
     @Body() dto: UpdateContractorDto,
   ) {
-    return this.contractorsService.update(user.id, id, dto);
+    return this.contractorsService.update(user.ownerId, id, dto);
   }
 
   @Delete(':id')
@@ -54,6 +54,6 @@ export class ContractorsController {
     @CurrentUser() user: AuthUser,
     @Param('id') id: string,
   ) {
-    return this.contractorsService.remove(user.id, id);
+    return this.contractorsService.remove(user.ownerId, id);
   }
 }

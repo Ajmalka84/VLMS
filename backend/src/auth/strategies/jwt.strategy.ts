@@ -6,8 +6,12 @@ import { UserRole } from '../decorators/roles.decorator';
 
 export interface JwtPayload {
   sub: string;
+  ownerId?: string;
   mobile: string;
   role: UserRole;
+  assignedSiteIds?: string[];
+  assignedSiteId?: string | null;
+  name?: string | null;
   businessName?: string;
   iat?: number;
   exp?: number;
@@ -28,10 +32,16 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
       throw new UnauthorizedException('Invalid token payload');
     }
 
+    const effectiveRole: UserRole = payload.role === 'USER' ? 'OWNER' : payload.role;
+
     return {
       id: payload.sub,
+      ownerId: payload.ownerId || payload.sub,
       mobile: payload.mobile,
-      role: payload.role,
+      role: effectiveRole,
+      assignedSiteIds: payload.assignedSiteIds || [],
+      assignedSiteId: payload.assignedSiteId || null,
+      name: payload.name || null,
       businessName: payload.businessName,
     };
   }
