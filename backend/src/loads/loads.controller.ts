@@ -14,10 +14,12 @@ import { CreateLoadDto } from './dto/create-load.dto';
 import { UpdateLoadDto } from './dto/update-load.dto';
 import { QueryLoadsDto } from './dto/query-loads.dto';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
+import { RolesGuard } from '../auth/guards/roles.guard';
+import { Roles } from '../auth/decorators/roles.decorator';
 import { CurrentUser, AuthUser } from '../auth/decorators/current-user.decorator';
 
 @Controller('loads')
-@UseGuards(JwtAuthGuard)
+@UseGuards(JwtAuthGuard, RolesGuard)
 export class LoadsController {
   constructor(private readonly loadsService: LoadsService) {}
 
@@ -55,6 +57,7 @@ export class LoadsController {
   }
 
   @Delete(':id')
+  @Roles('OWNER', 'SUPER_ADMIN')
   async remove(
     @CurrentUser() user: AuthUser,
     @Param('id') id: string,

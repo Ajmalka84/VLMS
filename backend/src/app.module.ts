@@ -16,6 +16,7 @@ import { VehiclesModule } from './vehicles/vehicles.module';
 import { MasterDataModule } from './master-data/master-data.module';
 import { SubAccountsModule } from './sub-accounts/sub-accounts.module';
 import { ExpensesModule } from './expenses/expenses.module';
+import { ShiftsModule } from './shifts/shifts.module';
 
 @Module({
   imports: [
@@ -35,6 +36,7 @@ import { ExpensesModule } from './expenses/expenses.module';
     MasterDataModule,
     SubAccountsModule,
     ExpensesModule,
+    ShiftsModule,
   ],
   controllers: [AppController],
 })

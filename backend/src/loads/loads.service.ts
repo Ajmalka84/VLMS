@@ -17,8 +17,15 @@ export class LoadsService {
   async create(user: AuthUser, dto: CreateLoadDto) {
     const ownerId = user.ownerId;
 
-    // Verify site access for sub-accounts
-    if (user.role !== 'OWNER' && user.role !== 'SUPER_ADMIN') {
+    // Verify site access and site locking for sub-accounts
+    if (user.role === 'SITE_BOY') {
+      if (user.assignedSiteId && dto.siteId && dto.siteId !== user.assignedSiteId) {
+        throw new ForbiddenException('Site supervisor is strictly locked to their assigned quarry site.');
+      }
+      if (!dto.siteId && user.assignedSiteId) {
+        dto.siteId = user.assignedSiteId;
+      }
+    } else if (user.role !== 'OWNER' && user.role !== 'SUPER_ADMIN') {
       if (!user.assignedSiteIds || !user.assignedSiteIds.includes(dto.siteId)) {
         throw new ForbiddenException('You are not authorized to create loads for this site');
       }
@@ -307,6 +314,16 @@ export class LoadsService {
     const current = await this.findOne(user, id);
     const ownerId = user.ownerId;
 
+    if (user.role === 'SITE_BOY') {
+      const diffHours = (Date.now() - new Date(current.createdAt).getTime()) / (1000 * 60 * 60);
+      if (diffHours > 2) {
+        throw new ForbiddenException('Site supervisors can only edit loads within 2 hours of creation.');
+      }
+      if (dto.siteId && dto.siteId !== user.assignedSiteId) {
+        throw new ForbiddenException('Site supervisor cannot reassign loads to another site.');
+      }
+    }
+
     const updateData: any = {};
 
     if (dto.date) {
@@ -378,6 +395,9 @@ export class LoadsService {
   }
 
   async remove(user: AuthUser, id: string) {
+    if (user.role !== 'OWNER' && user.role !== 'SUPER_ADMIN') {
+      throw new ForbiddenException('Only Owners and Administrators can delete loads.');
+    }
     await this.findOne(user, id);
 
     return this.prisma.load.update({

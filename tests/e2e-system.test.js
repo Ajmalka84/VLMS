@@ -1301,6 +1301,199 @@ test('11.8 Hurdle 13 Part 3: Soft-deletes expense and verifies exclusion from le
   assert.ok(delMachRes.data.message.includes('Cannot delete machinery'));
 });
 
+// ---------------------------------------------------------------------------------
+// HURDLE 13 PART 4: ROLE-BASED APP EXPERIENCE, SITE BOY WORKFLOW & CASH DRAWER RECONCILIATION
+// ---------------------------------------------------------------------------------
+
+let shiftRecordId = '';
+let siteBoyVehicleId = '';
+let siteBoyContractorId = '';
+const shiftTestDate = '2026-09-15';
+const nextShiftDate = '2026-09-16';
+
+test('12.1 Hurdle 13 Part 4: Site Boy site-locking - cannot record load on unassigned / unauthorized site', async () => {
+  // Site Boy 1 (assigned to Site A) tries to create load with an unassigned site ID -> 403 Forbidden
+  const unassignedSiteId = 'a1234567-89ab-4cde-8f01-23456789abcd';
+  const res = await req('/loads', {
+    method: 'POST',
+    headers: { Authorization: `Bearer ${siteBoy1Token}` },
+    body: JSON.stringify({
+      siteId: unassignedSiteId,
+      vehicleId: vehicleAId,
+      materialTypeId: materialTypeId,
+      paymentType: 'CASH',
+      amount: 1200.0,
+      date: shiftTestDate,
+    }),
+  });
+
+  assert.equal(res.status, 403);
+  assert.ok(res.data.message.includes('Site supervisor is strictly locked') || res.data.message.includes('quarry site'));
+});
+
+test('12.2 Hurdle 13 Part 4: Site Boy records CASH load on assigned site successfully', async () => {
+  const res = await req('/loads', {
+    method: 'POST',
+    headers: { Authorization: `Bearer ${siteBoy1Token}` },
+    body: JSON.stringify({
+      siteId: siteAId,
+      vehicleId: vehicleAId,
+      materialTypeId: materialTypeId,
+      paymentType: 'CASH',
+      amount: 1500.0,
+      date: shiftTestDate,
+    }),
+  });
+
+  assert.equal(res.status, 201);
+  assert.equal(res.data.success, true);
+  assert.equal(Number(res.data.data.amount), 1500.0);
+  assert.equal(res.data.data.paymentType, 'CASH');
+});
+
+test('12.3 Hurdle 13 Part 4: Site Boy creates global vehicle & contractor (saved under owner account)', async () => {
+  // 1. Site Boy registers new vehicle (alphanumeric, no hyphens)
+  const vehRes = await req('/vehicles', {
+    method: 'POST',
+    headers: { Authorization: `Bearer ${siteBoy1Token}` },
+    body: JSON.stringify({
+      vehicleNumber: `KL07SB${uniqueSuffix.slice(-4)}`,
+      vehicleTypeId: vehicleTypeId,
+    }),
+  });
+
+  assert.equal(vehRes.status, 201);
+  assert.equal(vehRes.data.success, true);
+  siteBoyVehicleId = vehRes.data.data.id;
+  assert.equal(vehRes.data.data.userId, tenantAUser.id);
+
+  // 2. Site Boy registers new contractor
+  const contRes = await req('/contractors', {
+    method: 'POST',
+    headers: { Authorization: `Bearer ${siteBoy1Token}` },
+    body: JSON.stringify({
+      name: `Site Boy Transporter ${uniqueSuffix}`,
+      mobile: `99${rand8.toString().slice(0, 8)}`,
+    }),
+  });
+
+  assert.equal(contRes.status, 201);
+  assert.equal(contRes.data.success, true);
+  siteBoyContractorId = contRes.data.data.id;
+  assert.equal(contRes.data.data.userId, tenantAUser.id);
+});
+
+test('12.4 Hurdle 13 Part 4: Site Boy is blocked from deleting loads (HTTP 403)', async () => {
+  // Site Boy 1 attempts to delete loadA1Id -> returns HTTP 403 Forbidden
+  const delRes = await req(`/loads/${loadA1Id}`, {
+    method: 'DELETE',
+    headers: { Authorization: `Bearer ${siteBoy1Token}` },
+  });
+
+  assert.equal(delRes.status, 403);
+});
+
+test('12.5 Hurdle 13 Part 4: Shifts - Live Drawer calculation aggregates cash loads and cash expenses accurately', async () => {
+  // Record a Cash Drawer expense on shiftTestDate for ₹300
+  const expRes = await req('/expenses', {
+    method: 'POST',
+    headers: { Authorization: `Bearer ${siteBoy1Token}` },
+    body: JSON.stringify({
+      siteId: siteAId,
+      categoryId: categoryLabourId,
+      date: shiftTestDate,
+      amount: 300.0,
+      paymentMode: 'CASH_DRAWER',
+      paidTo: 'Site Cleaner',
+      remarks: 'Morning washing charges',
+    }),
+  });
+  assert.equal(expRes.status, 201);
+
+  // Fetch Current Drawer for shiftTestDate
+  const drawerRes = await req(`/shifts/current-drawer?siteId=${siteAId}&date=${shiftTestDate}`, {
+    headers: { Authorization: `Bearer ${siteBoy1Token}` },
+  });
+
+  assert.equal(drawerRes.status, 200);
+  assert.equal(drawerRes.data.data.openingCash, 0); // No prior approved shift
+  assert.equal(drawerRes.data.data.cashInflows, 1500.0); // 1500 load
+  assert.equal(drawerRes.data.data.cashLoadsCount, 1);
+  assert.equal(drawerRes.data.data.cashOutflows, 300.0); // 300 expense
+  assert.equal(drawerRes.data.data.expectedCash, 1200.0); // 1500 - 300 = 1200
+});
+
+test('12.6 Hurdle 13 Part 4: Shifts - Site Boy closes daily shift with cash count & calculates discrepancy', async () => {
+  // Site Boy counts ₹1,150 in physical cash (₹50 shortage discrepancy)
+  const closeRes = await req('/shifts/close', {
+    method: 'POST',
+    headers: { Authorization: `Bearer ${siteBoy1Token}` },
+    body: JSON.stringify({
+      siteId: siteAId,
+      date: shiftTestDate,
+      shiftType: 'DAY',
+      actualHandoverCash: 1150.0,
+      remarks: '₹50 short due to small change coins missing',
+    }),
+  });
+
+  assert.equal(closeRes.status, 201);
+  assert.equal(Number(closeRes.data.data.openingCash), 0.0);
+  assert.equal(Number(closeRes.data.data.cashInflows), 1500.0);
+  assert.equal(Number(closeRes.data.data.cashOutflows), 300.0);
+  assert.equal(Number(closeRes.data.data.expectedCash), 1200.0);
+  assert.equal(Number(closeRes.data.data.actualHandoverCash), 1150.0);
+  assert.equal(Number(closeRes.data.data.discrepancy), -50.0);
+  assert.equal(closeRes.data.data.isApproved, false);
+  shiftRecordId = closeRes.data.data.id;
+});
+
+test('12.7 Hurdle 13 Part 4: Shifts - Site Boy cannot approve shift (403), Owner approves & locks shift', async () => {
+  // 1. Site Boy attempts approval -> HTTP 403
+  const sbApproveRes = await req(`/shifts/${shiftRecordId}/approve`, {
+    method: 'PATCH',
+    headers: { Authorization: `Bearer ${siteBoy1Token}` },
+    body: JSON.stringify({ remarks: 'Self approval attempt' }),
+  });
+  assert.equal(sbApproveRes.status, 403);
+
+  // 2. Owner approves shift
+  const ownerApproveRes = await req(`/shifts/${shiftRecordId}/approve`, {
+    method: 'PATCH',
+    headers: { Authorization: `Bearer ${tenantAToken}` },
+    body: JSON.stringify({ remarks: 'Verified ₹50 minor shortage accepted' }),
+  });
+
+  assert.equal(ownerApproveRes.status, 200);
+  assert.equal(ownerApproveRes.data.data.isApproved, true);
+  assert.equal(ownerApproveRes.data.data.approvedBy.id, tenantAUser.id);
+});
+
+test('12.8 Hurdle 13 Part 4: Shifts - Next shift drawer carries forward approved closing balance (₹1,150)', async () => {
+  const nextDrawerRes = await req(`/shifts/current-drawer?siteId=${siteAId}&date=${nextShiftDate}`, {
+    headers: { Authorization: `Bearer ${tenantAToken}` },
+  });
+
+  assert.equal(nextDrawerRes.status, 200);
+  assert.equal(nextDrawerRes.data.data.openingCash, 1150.0); // Handed over from approved previous shift
+  assert.equal(nextDrawerRes.data.data.expectedCash, 1150.0); // 1150 + 0 - 0 = 1150
+});
+
+test('12.9 Hurdle 13 Part 4: Shifts - Query shift history with site and date filters', async () => {
+  const historyRes = await req(`/shifts/history?siteId=${siteAId}`, {
+    headers: { Authorization: `Bearer ${tenantAToken}` },
+  });
+
+  assert.equal(historyRes.status, 200);
+  assert.ok(Array.isArray(historyRes.data.data));
+  assert.ok(historyRes.data.data.length >= 1);
+  const found = historyRes.data.data.find((s) => s.id === shiftRecordId);
+  assert.ok(found);
+  assert.equal(found.isApproved, true);
+  assert.equal(Number(found.actualHandoverCash), 1150.0);
+});
+
+
 
 
 

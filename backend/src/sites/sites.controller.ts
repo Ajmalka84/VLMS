@@ -12,14 +12,17 @@ import { SitesService } from './sites.service';
 import { CreateSiteDto } from './dto/create-site.dto';
 import { UpdateSiteDto } from './dto/update-site.dto';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
+import { RolesGuard } from '../auth/guards/roles.guard';
+import { Roles } from '../auth/decorators/roles.decorator';
 import { CurrentUser, AuthUser } from '../auth/decorators/current-user.decorator';
 
 @Controller('sites')
-@UseGuards(JwtAuthGuard)
+@UseGuards(JwtAuthGuard, RolesGuard)
 export class SitesController {
   constructor(private readonly sitesService: SitesService) {}
 
   @Post()
+  @Roles('OWNER', 'SUPER_ADMIN')
   async create(
     @CurrentUser() user: AuthUser,
     @Body() dto: CreateSiteDto,
@@ -41,6 +44,7 @@ export class SitesController {
   }
 
   @Patch(':id')
+  @Roles('OWNER', 'SUPER_ADMIN')
   async update(
     @CurrentUser() user: AuthUser,
     @Param('id') id: string,
@@ -50,6 +54,7 @@ export class SitesController {
   }
 
   @Delete(':id')
+  @Roles('OWNER', 'SUPER_ADMIN')
   async remove(
     @CurrentUser() user: AuthUser,
     @Param('id') id: string,

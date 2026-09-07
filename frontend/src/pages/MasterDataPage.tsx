@@ -68,16 +68,21 @@ type AdminTab = 'vehicle-types' | 'material-types';
 export const MasterDataPage: React.FC = () => {
   const { user } = useAuth();
   const isSuperAdmin = user?.role === 'SUPER_ADMIN';
+  const isSiteBoy = user?.role === 'SITE_BOY';
   const cache = useMasterCache();
 
   const [searchParams, setSearchParams] = useSearchParams();
   const tabFromUrl = searchParams.get('tab') as CustomerTab | null;
 
-  const validCustomerTabs = ['sites', 'vehicles', 'contractors', 'rates', 'team', 'expense-categories', 'machinery'];
+  const validCustomerTabs = isSiteBoy
+    ? ['vehicles', 'contractors']
+    : ['sites', 'vehicles', 'contractors', 'rates', 'team', 'expense-categories', 'machinery'];
 
   const [customerTab, setCustomerTab] = useState<CustomerTab>(
     tabFromUrl && validCustomerTabs.includes(tabFromUrl)
       ? tabFromUrl
+      : isSiteBoy
+      ? 'vehicles'
       : 'sites'
   );
   const [adminTab, setAdminTab] = useState<AdminTab>('vehicle-types');
@@ -817,16 +822,18 @@ export const MasterDataPage: React.FC = () => {
       <div className="flex items-center gap-2 p-1.5 rounded-2xl bg-slate-900/80 border border-slate-800/80 overflow-x-auto">
         {!isSuperAdmin ? (
           <>
-            <button
-              onClick={() => handleCustomerTabChange('sites')}
-              className={`flex items-center gap-2 px-4 py-2 rounded-xl text-xs sm:text-sm font-bold transition-all whitespace-nowrap cursor-pointer select-none touch-manipulation ${
-                customerTab === 'sites'
-                  ? 'bg-amber-500 text-slate-950 shadow-md shadow-amber-500/20'
-                  : 'text-slate-400 hover:text-slate-200'
-              }`}
-            >
-              <MapPin className="w-4 h-4" /> Sites ({sites.length})
-            </button>
+            {!isSiteBoy && (
+              <button
+                onClick={() => handleCustomerTabChange('sites')}
+                className={`flex items-center gap-2 px-4 py-2 rounded-xl text-xs sm:text-sm font-bold transition-all whitespace-nowrap cursor-pointer select-none touch-manipulation ${
+                  customerTab === 'sites'
+                    ? 'bg-amber-500 text-slate-950 shadow-md shadow-amber-500/20'
+                    : 'text-slate-400 hover:text-slate-200'
+                }`}
+              >
+                <MapPin className="w-4 h-4" /> Quarry Sites ({sites.length})
+              </button>
+            )}
             <button
               onClick={() => handleCustomerTabChange('vehicles')}
               className={`flex items-center gap-2 px-4 py-2 rounded-xl text-xs sm:text-sm font-bold transition-all whitespace-nowrap cursor-pointer select-none touch-manipulation ${
@@ -847,46 +854,50 @@ export const MasterDataPage: React.FC = () => {
             >
               <UserCheck className="w-4 h-4" /> Contractors / C/Os ({contractors.length})
             </button>
-            <button
-              onClick={() => handleCustomerTabChange('rates')}
-              className={`flex items-center gap-2 px-4 py-2 rounded-xl text-xs sm:text-sm font-bold transition-all whitespace-nowrap cursor-pointer select-none touch-manipulation ${
-                customerTab === 'rates'
-                  ? 'bg-amber-500 text-slate-950 shadow-md shadow-amber-500/20'
-                  : 'text-slate-400 hover:text-slate-200'
-              }`}
-            >
-              <Coins className="w-4 h-4" /> Rate Matrix ({rates.length})
-            </button>
-            <button
-              onClick={() => handleCustomerTabChange('team')}
-              className={`flex items-center gap-2 px-4 py-2 rounded-xl text-xs sm:text-sm font-bold transition-all whitespace-nowrap cursor-pointer select-none touch-manipulation ${
-                customerTab === 'team'
-                  ? 'bg-amber-500 text-slate-950 shadow-md shadow-amber-500/20'
-                  : 'text-slate-400 hover:text-slate-200'
-              }`}
-            >
-              <Users className="w-4 h-4" /> Team & Roles
-            </button>
-            <button
-              onClick={() => handleCustomerTabChange('expense-categories')}
-              className={`flex items-center gap-2 px-4 py-2 rounded-xl text-xs sm:text-sm font-bold transition-all whitespace-nowrap cursor-pointer select-none touch-manipulation ${
-                customerTab === 'expense-categories'
-                  ? 'bg-amber-500 text-slate-950 shadow-md shadow-amber-500/20'
-                  : 'text-slate-400 hover:text-slate-200'
-              }`}
-            >
-              <Layers className="w-4 h-4" /> Expense Heads
-            </button>
-            <button
-              onClick={() => handleCustomerTabChange('machinery')}
-              className={`flex items-center gap-2 px-4 py-2 rounded-xl text-xs sm:text-sm font-bold transition-all whitespace-nowrap cursor-pointer select-none touch-manipulation ${
-                customerTab === 'machinery'
-                  ? 'bg-amber-500 text-slate-950 shadow-md shadow-amber-500/20'
-                  : 'text-slate-400 hover:text-slate-200'
-              }`}
-            >
-              <Truck className="w-4 h-4" /> Heavy Machinery
-            </button>
+            {!isSiteBoy && (
+              <>
+                <button
+                  onClick={() => handleCustomerTabChange('rates')}
+                  className={`flex items-center gap-2 px-4 py-2 rounded-xl text-xs sm:text-sm font-bold transition-all whitespace-nowrap cursor-pointer select-none touch-manipulation ${
+                    customerTab === 'rates'
+                      ? 'bg-amber-500 text-slate-950 shadow-md shadow-amber-500/20'
+                      : 'text-slate-400 hover:text-slate-200'
+                  }`}
+                >
+                  <Coins className="w-4 h-4" /> Rate Matrix ({rates.length})
+                </button>
+                <button
+                  onClick={() => handleCustomerTabChange('team')}
+                  className={`flex items-center gap-2 px-4 py-2 rounded-xl text-xs sm:text-sm font-bold transition-all whitespace-nowrap cursor-pointer select-none touch-manipulation ${
+                    customerTab === 'team'
+                      ? 'bg-amber-500 text-slate-950 shadow-md shadow-amber-500/20'
+                      : 'text-slate-400 hover:text-slate-200'
+                  }`}
+                >
+                  <Users className="w-4 h-4" /> Team & Roles
+                </button>
+                <button
+                  onClick={() => handleCustomerTabChange('expense-categories')}
+                  className={`flex items-center gap-2 px-4 py-2 rounded-xl text-xs sm:text-sm font-bold transition-all whitespace-nowrap cursor-pointer select-none touch-manipulation ${
+                    customerTab === 'expense-categories'
+                      ? 'bg-amber-500 text-slate-950 shadow-md shadow-amber-500/20'
+                      : 'text-slate-400 hover:text-slate-200'
+                  }`}
+                >
+                  <Layers className="w-4 h-4" /> Expense Heads
+                </button>
+                <button
+                  onClick={() => handleCustomerTabChange('machinery')}
+                  className={`flex items-center gap-2 px-4 py-2 rounded-xl text-xs sm:text-sm font-bold transition-all whitespace-nowrap cursor-pointer select-none touch-manipulation ${
+                    customerTab === 'machinery'
+                      ? 'bg-amber-500 text-slate-950 shadow-md shadow-amber-500/20'
+                      : 'text-slate-400 hover:text-slate-200'
+                  }`}
+                >
+                  <Truck className="w-4 h-4" /> Heavy Machinery
+                </button>
+              </>
+            )}
           </>
         ) : (
           <>
@@ -1042,13 +1053,15 @@ export const MasterDataPage: React.FC = () => {
                     >
                       <Edit2 className="w-4 h-4" />
                     </button>
-                    <button
-                      onClick={() => handleDeleteVehicle(veh.id, veh.vehicleNumber)}
-                      className="p-1.5 rounded-lg text-slate-400 hover:text-rose-400 hover:bg-rose-500/10 transition-colors cursor-pointer"
-                      title="Delete Vehicle"
-                    >
-                      <Trash2 className="w-4 h-4" />
-                    </button>
+                    {!isSiteBoy && (
+                      <button
+                        onClick={() => handleDeleteVehicle(veh.id, veh.vehicleNumber)}
+                        className="p-1.5 rounded-lg text-slate-400 hover:text-rose-400 hover:bg-rose-500/10 transition-colors cursor-pointer"
+                        title="Delete Vehicle"
+                      >
+                        <Trash2 className="w-4 h-4" />
+                      </button>
+                    )}
                   </div>
                 </div>
 
@@ -1099,13 +1112,15 @@ export const MasterDataPage: React.FC = () => {
                     >
                       <Edit2 className="w-4 h-4" />
                     </button>
-                    <button
-                      onClick={() => handleDeleteContractor(c.id, c.name)}
-                      className="p-1.5 rounded-lg text-slate-400 hover:text-rose-400 hover:bg-rose-500/10 transition-colors cursor-pointer"
-                      title="Delete Contractor"
-                    >
-                      <Trash2 className="w-4 h-4" />
-                    </button>
+                    {!isSiteBoy && (
+                      <button
+                        onClick={() => handleDeleteContractor(c.id, c.name)}
+                        className="p-1.5 rounded-lg text-slate-400 hover:text-rose-400 hover:bg-rose-500/10 transition-colors cursor-pointer"
+                        title="Delete Contractor"
+                      >
+                        <Trash2 className="w-4 h-4" />
+                      </button>
+                    )}
                   </div>
                 </div>
 

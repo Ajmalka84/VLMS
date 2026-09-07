@@ -20,6 +20,7 @@ import {
   Building2,
   Banknote,
   Sparkles,
+  Lock,
 } from 'lucide-react';
 import {
   fetchExpensesApi,
@@ -151,21 +152,41 @@ export const ExpensesPage: React.FC = () => {
   const loadMasterData = useCallback(async () => {
     try {
       const bundle = await getMasterDataBundleApi();
-      setSites(bundle.sites || []);
+      const activeSitesList = bundle.sites || [];
+      setSites(activeSitesList);
       setCategories(bundle.expenseCategories || []);
       setMachinery(bundle.machinery || []);
+
+      if (user?.role === 'SITE_BOY' && user?.assignedSiteId) {
+        setSelectedSiteId(user.assignedSiteId);
+        setFormSiteId(user.assignedSiteId);
+      } else if (activeSitesList.length > 0) {
+        if (!selectedSiteId) setSelectedSiteId(activeSitesList[0].id);
+        if (!formSiteId) setFormSiteId(activeSitesList[0].id);
+      }
+
+      if (bundle.expenseCategories && bundle.expenseCategories.length > 0) {
+        setFormCategoryId(bundle.expenseCategories[0].id);
+      }
+      if (bundle.machinery && bundle.machinery.length > 0) {
+        setFormMachineryId(bundle.machinery[0].id);
+        if (bundle.machinery[0].defaultRentPerHour) {
+          setFormRentPerHour(String(bundle.machinery[0].defaultRentPerHour));
+        }
+      }
     } catch (err: any) {
       console.error('Failed to load master data bundle', err);
     }
-  }, []);
+  }, [user, selectedSiteId, formSiteId]);
 
   // Load Expenses
   const loadExpenses = useCallback(async () => {
     setIsLoading(true);
     setError(null);
     try {
+      const effectiveSiteId = user?.role === 'SITE_BOY' ? user?.assignedSiteId || undefined : selectedSiteId || undefined;
       const data = await fetchExpensesApi({
-        siteId: selectedSiteId || undefined,
+        siteId: effectiveSiteId,
         categoryId: selectedCategoryId || undefined,
         machineryId: selectedMachineryId || undefined,
         paymentMode: (selectedPaymentMode as PaymentMode) || undefined,
@@ -179,7 +200,7 @@ export const ExpensesPage: React.FC = () => {
     } finally {
       setIsLoading(false);
     }
-  }, [selectedSiteId, selectedCategoryId, selectedMachineryId, selectedPaymentMode, startDate, endDate]);
+  }, [user, selectedSiteId, selectedCategoryId, selectedMachineryId, selectedPaymentMode, startDate, endDate]);
 
   useEffect(() => {
     loadMasterData();
@@ -658,17 +679,39 @@ export const ExpensesPage: React.FC = () => {
 
                       <td className="px-4 py-3.5 whitespace-nowrap text-right">
                         <div className="flex items-center justify-end gap-1.5">
-                          <button
-                            onClick={() => openEditModal(exp)}
-                            className="p-1.5 text-slate-400 hover:text-amber-400 hover:bg-slate-800 rounded-lg transition"
-                            title="Edit Record"
-                          >
-                            <Edit2 className="w-4 h-4" />
-                          </button>
+                          {/* Edit button with 2-hour window check for Site Boy */}
+                          {(() => {
+                            const isSiteBoy = user?.role === 'SITE_BOY';
+                            const isOlderThan2Hours =
+                              isSiteBoy &&
+                              (Date.now() - new Date(exp.createdAt).getTime()) / (1000 * 60 * 60) > 2;
+
+                            if (isOlderThan2Hours) {
+                              return (
+                                <span
+                                  className="p-1.5 text-slate-600 cursor-not-allowed"
+                                  title="Locked: Edits only permitted within 2 hours of creation"
+                                >
+                                  <Lock className="w-4 h-4" />
+                                </span>
+                              );
+                            }
+
+                            return (
+                              <button
+                                onClick={() => openEditModal(exp)}
+                                className="p-1.5 text-slate-400 hover:text-amber-400 hover:bg-slate-800 rounded-lg transition cursor-pointer"
+                                title="Edit Record"
+                              >
+                                <Edit2 className="w-4 h-4" />
+                              </button>
+                            );
+                          })()}
+
                           {(user?.role === 'OWNER' || user?.role === 'SUPER_ADMIN') && (
                             <button
                               onClick={() => setDeletingExpenseId(exp.id)}
-                              className="p-1.5 text-slate-400 hover:text-rose-400 hover:bg-slate-800 rounded-lg transition"
+                              className="p-1.5 text-slate-400 hover:text-rose-400 hover:bg-slate-800 rounded-lg transition cursor-pointer"
                               title="Delete Record"
                             >
                               <Trash2 className="w-4 h-4" />
@@ -747,7 +790,8 @@ export const ExpensesPage: React.FC = () => {
                     value={formSiteId}
                     onChange={(e) => setFormSiteId(e.target.value)}
                     required
-                    className="w-full text-sm px-3.5 py-2.5 rounded-xl bg-slate-950 border border-slate-700 text-white focus:border-amber-500 focus:ring-1 focus:ring-amber-500 outline-none"
+                    disabled={user?.role === 'SITE_BOY'}
+                    className="w-full text-sm px-3.5 py-2.5 rounded-xl bg-slate-950 border border-slate-700 text-white focus:border-amber-500 focus:ring-1 focus:ring-amber-500 outline-none disabled:opacity-60 disabled:cursor-not-allowed"
                   >
                     {sites.map((s) => (
                       <option key={s.id} value={s.id}>

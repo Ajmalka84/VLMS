@@ -25,6 +25,7 @@ import {
   ChevronRight,
   UserCheck,
   Download,
+  Lock,
 } from 'lucide-react';
 import { Card } from '../components/common/Card';
 import { ConfirmModal } from '../components/common/ConfirmModal';
@@ -177,14 +178,21 @@ export const LoadsPage: React.FC = () => {
     const activeSites = sites.filter((s) => s.isActive !== false);
     if (!isInitialized || activeSites.length === 0) return;
 
-    // 1. Site: Auto-select if 1 site, else restore sticky
-    const savedSite = localStorage.getItem(STORAGE_KEY_SITE);
-    if (activeSites.length === 1) {
-      setSiteId(activeSites[0].id);
-    } else if (savedSite && activeSites.some((s) => s.id === savedSite)) {
-      setSiteId(savedSite);
-    } else if (!siteId && activeSites.length > 0) {
-      setSiteId(activeSites[0].id);
+    const isSiteBoy = user?.role === 'SITE_BOY';
+
+    // 1. Site: Auto-select if Site Boy or 1 site, else restore sticky
+    if (isSiteBoy && user?.assignedSiteId) {
+      setSiteId(user.assignedSiteId);
+      setFilterSite(user.assignedSiteId);
+    } else {
+      const savedSite = localStorage.getItem(STORAGE_KEY_SITE);
+      if (activeSites.length === 1) {
+        setSiteId(activeSites[0].id);
+      } else if (savedSite && activeSites.some((s) => s.id === savedSite)) {
+        setSiteId(savedSite);
+      } else if (!siteId && activeSites.length > 0) {
+        setSiteId(activeSites[0].id);
+      }
     }
 
     // 2. Material: Auto-select if 1 material, else restore sticky
@@ -1390,20 +1398,45 @@ export const LoadsPage: React.FC = () => {
                     </div>
 
                     <div className="flex items-center gap-1">
-                      <button
-                        onClick={() => openEditModal(load)}
-                        className="p-2 rounded-xl text-slate-400 hover:text-amber-400 hover:bg-amber-500/10 transition-colors cursor-pointer"
-                        title={t('edit')}
-                      >
-                        <Edit2 className="w-4 h-4" />
-                      </button>
-                      <button
-                        onClick={() => handleDeleteLoad(load)}
-                        className="p-2 rounded-xl text-slate-400 hover:text-rose-400 hover:bg-rose-500/10 transition-colors cursor-pointer"
-                        title={t('delete')}
-                      >
-                        <Trash2 className="w-4 h-4" />
-                      </button>
+                      {/* Edit button: Check if Site Boy has exceeded 2h window */}
+                      {(() => {
+                        const isSiteBoy = user?.role === 'SITE_BOY';
+                        const isOlderThan2Hours =
+                          isSiteBoy &&
+                          (Date.now() - new Date(load.createdAt).getTime()) / (1000 * 60 * 60) > 2;
+
+                        if (isOlderThan2Hours) {
+                          return (
+                            <span
+                              className="p-2 text-slate-600 cursor-not-allowed text-xs font-semibold"
+                              title="Locked: Edits only permitted within 2 hours of creation"
+                            >
+                              <Lock className="w-4 h-4" />
+                            </span>
+                          );
+                        }
+
+                        return (
+                          <button
+                            onClick={() => openEditModal(load)}
+                            className="p-2 rounded-xl text-slate-400 hover:text-amber-400 hover:bg-amber-500/10 transition-colors cursor-pointer"
+                            title={t('edit')}
+                          >
+                            <Edit2 className="w-4 h-4" />
+                          </button>
+                        );
+                      })()}
+
+                      {/* Delete button: Only for Owner and Super Admin */}
+                      {(user?.role === 'OWNER' || user?.role === 'SUPER_ADMIN') && (
+                        <button
+                          onClick={() => handleDeleteLoad(load)}
+                          className="p-2 rounded-xl text-slate-400 hover:text-rose-400 hover:bg-rose-500/10 transition-colors cursor-pointer"
+                          title={t('delete')}
+                        >
+                          <Trash2 className="w-4 h-4" />
+                        </button>
+                      )}
                     </div>
                   </div>
                 </Card>

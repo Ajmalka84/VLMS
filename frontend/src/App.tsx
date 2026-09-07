@@ -13,6 +13,7 @@ const DashboardPage = React.lazy(() => import('./pages/DashboardPage').then((m) 
 const LoadsPage = React.lazy(() => import('./pages/LoadsPage').then((m) => ({ default: m.LoadsPage })));
 const ReportsPage = React.lazy(() => import('./pages/ReportsPage').then((m) => ({ default: m.ReportsPage })));
 const ExpensesPage = React.lazy(() => import('./pages/ExpensesPage').then((m) => ({ default: m.ExpensesPage })));
+const ShiftDrawerPage = React.lazy(() => import('./pages/ShiftDrawerPage').then((m) => ({ default: m.ShiftDrawerPage })));
 const MasterDataPage = React.lazy(() => import('./pages/MasterDataPage').then((m) => ({ default: m.MasterDataPage })));
 const CustomersPage = React.lazy(() => import('./pages/admin/CustomersPage').then((m) => ({ default: m.CustomersPage })));
 const NotFoundPage = React.lazy(() => import('./pages/NotFoundPage').then((m) => ({ default: m.NotFoundPage })));
@@ -36,6 +37,9 @@ const RootIndex: React.FC = () => {
   const { user } = useAuth();
   if (user?.role === 'SUPER_ADMIN') {
     return <Navigate to="/admin/users" replace />;
+  }
+  if (user?.role === 'CO_PARTNER') {
+    return <Navigate to="/dashboard" replace />;
   }
   return <Navigate to="/loads" replace />;
 };
@@ -73,10 +77,54 @@ export function App() {
                   />
 
                   {/* Operational Customer Routes */}
-                  <Route path="loads" element={<LoadsPage />} />
-                  <Route path="expenses" element={<ExpensesPage />} />
-                  <Route path="reports" element={<ReportsPage />} />
-                  <Route path="settings" element={<MasterDataPage />} />
+                  <Route
+                    path="dashboard"
+                    element={
+                      <ProtectedRoute allowedRoles={['OWNER', 'CO_PARTNER', 'SUPER_ADMIN']}>
+                        <DashboardPage />
+                      </ProtectedRoute>
+                    }
+                  />
+                  <Route
+                    path="loads"
+                    element={
+                      <ProtectedRoute allowedRoles={['OWNER', 'SITE_BOY', 'SUPER_ADMIN']}>
+                        <LoadsPage />
+                      </ProtectedRoute>
+                    }
+                  />
+                  <Route
+                    path="expenses"
+                    element={
+                      <ProtectedRoute allowedRoles={['OWNER', 'SITE_BOY', 'SUPER_ADMIN']}>
+                        <ExpensesPage />
+                      </ProtectedRoute>
+                    }
+                  />
+                  <Route
+                    path="shift-drawer"
+                    element={
+                      <ProtectedRoute allowedRoles={['OWNER', 'SITE_BOY', 'SUPER_ADMIN']}>
+                        <ShiftDrawerPage />
+                      </ProtectedRoute>
+                    }
+                  />
+                  <Route
+                    path="reports"
+                    element={
+                      <ProtectedRoute allowedRoles={['OWNER', 'CO_PARTNER', 'SUPER_ADMIN']}>
+                        <ReportsPage />
+                      </ProtectedRoute>
+                    }
+                  />
+                  <Route
+                    path="settings"
+                    element={
+                      <ProtectedRoute allowedRoles={['OWNER', 'SITE_BOY', 'SUPER_ADMIN']}>
+                        <MasterDataPage />
+                      </ProtectedRoute>
+                    }
+                  />
                   <Route path="*" element={<NotFoundPage />} />
                 </Route>
               </Routes>

@@ -12,6 +12,9 @@ import {
   CheckCircle2,
   AlertTriangle,
   DollarSign,
+  Wallet,
+  Lock,
+  Building2,
 } from 'lucide-react';
 import { fetchHealth, HealthData } from '../../api/health';
 import { useAuth } from '../../context/AuthContext';
@@ -50,23 +53,76 @@ export const AppLayout: React.FC = () => {
 
   const isSuperAdmin = user?.role === 'SUPER_ADMIN';
 
-  // Navigation Items: Super Admin starts directly with Customers; Customer starts directly with Loads!
-  const navItems = isSuperAdmin
-    ? [
-        { to: '/admin/users', label: t('customers'), icon: Users },
-        { to: '/reports', label: t('reports'), icon: FileSpreadsheet },
-        { to: '/settings', label: t('global_master'), icon: Layers },
-      ]
-    : [
-        { to: '/loads', label: t('loads'), icon: Truck },
-        { to: '/expenses', label: 'Expenses', icon: DollarSign },
-        { to: '/reports', label: t('reports'), icon: FileSpreadsheet },
-        { to: '/settings', label: t('master_data'), icon: Settings },
-      ];
+  // Navigation Items tailored per role:
+  let navItems: { to: string; label: string; icon: any }[] = [];
 
-  // Helper for customer subscription badge in header (visible on mobile & desktop)
+  if (isSuperAdmin) {
+    navItems = [
+      { to: '/admin/users', label: t('customers'), icon: Users },
+      { to: '/reports', label: t('reports'), icon: FileSpreadsheet },
+      { to: '/settings', label: t('global_master'), icon: Layers },
+    ];
+  } else if (user?.role === 'CO_PARTNER') {
+    navItems = [
+      { to: '/dashboard', label: 'Dashboard', icon: LayoutDashboard },
+      { to: '/reports', label: t('reports'), icon: FileSpreadsheet },
+    ];
+  } else if (user?.role === 'SITE_BOY') {
+    navItems = [
+      { to: '/loads', label: t('loads'), icon: Truck },
+      { to: '/expenses', label: 'Expenses', icon: DollarSign },
+      { to: '/shift-drawer', label: 'Cash Drawer', icon: Wallet },
+      { to: '/settings', label: t('master_data'), icon: Settings },
+    ];
+  } else {
+    // OWNER / default
+    navItems = [
+      { to: '/dashboard', label: 'Dashboard', icon: LayoutDashboard },
+      { to: '/loads', label: t('loads'), icon: Truck },
+      { to: '/expenses', label: 'Expenses', icon: DollarSign },
+      { to: '/reports', label: t('reports'), icon: FileSpreadsheet },
+      { to: '/shift-drawer', label: 'Cash Drawer', icon: Wallet },
+      { to: '/settings', label: t('master_data'), icon: Settings },
+    ];
+  }
+
+  // Helper for role badge in header
+  const renderRoleBadge = () => {
+    if (!user) return null;
+    if (isSuperAdmin) {
+      return (
+        <span className="px-2 sm:px-2.5 py-0.5 rounded-full bg-purple-500/10 border border-purple-500/30 text-purple-300 text-[10px] sm:text-[11px] font-bold shrink-0 whitespace-nowrap">
+          Super Admin
+        </span>
+      );
+    }
+    if (user.role === 'CO_PARTNER') {
+      const count = user.assignedSiteIds?.length || 0;
+      return (
+        <span className="px-2 sm:px-2.5 py-0.5 rounded-full bg-amber-500/10 border border-amber-500/30 text-amber-300 text-[10px] sm:text-[11px] font-bold shrink-0 flex items-center gap-1 whitespace-nowrap">
+          <Building2 className="w-3 h-3 text-amber-400" />
+          Partner ({count} {count === 1 ? 'Site' : 'Sites'})
+        </span>
+      );
+    }
+    if (user.role === 'SITE_BOY') {
+      return (
+        <span className="px-2 sm:px-2.5 py-0.5 rounded-full bg-blue-500/10 border border-blue-500/30 text-blue-300 text-[10px] sm:text-[11px] font-bold shrink-0 flex items-center gap-1 whitespace-nowrap">
+          <Lock className="w-3 h-3 text-blue-400" />
+          Gate Supervisor
+        </span>
+      );
+    }
+    return (
+      <span className="px-2 sm:px-2.5 py-0.5 rounded-full bg-amber-500/10 border border-amber-500/30 text-amber-300 text-[10px] sm:text-[11px] font-bold shrink-0 whitespace-nowrap">
+        Quarry Owner
+      </span>
+    );
+  };
+
+  // Helper for customer subscription badge in header
   const renderSubscriptionHeaderPill = () => {
-    if (isSuperAdmin || !user) return null;
+    if (isSuperAdmin || !user || user.role === 'SITE_BOY' || user.role === 'CO_PARTNER') return null;
 
     if (user.subscriptionPlan === 'TRIAL' || user.subscriptionStatus === 'TRIAL_ACTIVE') {
       const days = user.daysRemaining ?? 7;
@@ -120,6 +176,12 @@ export const AppLayout: React.FC = () => {
     return null;
   };
 
+  const defaultHome = isSuperAdmin
+    ? '/admin/users'
+    : user?.role === 'CO_PARTNER'
+    ? '/dashboard'
+    : '/loads';
+
   return (
     <div className="min-h-screen flex flex-col bg-slate-950 text-slate-100 selection:bg-amber-500 selection:text-slate-950">
       {/* Top Header */}
@@ -128,17 +190,20 @@ export const AppLayout: React.FC = () => {
           {/* Brand Logo & Client Name below */}
           <div className="flex items-center gap-2 sm:gap-3 shrink-0 min-w-0">
             <NavLink
-              to={isSuperAdmin ? '/admin/users' : '/loads'}
+              to={defaultHome}
               className="flex flex-col items-start cursor-pointer select-none group shrink-0 min-w-0"
             >
               <span className="font-black text-lg sm:text-2xl tracking-tight text-white leading-none">
                 VLMS
               </span>
-              <span className="text-[10px] sm:text-[11px] text-slate-400 font-medium truncate max-w-[100px] sm:max-w-[220px] leading-tight mt-0.5 group-hover:text-slate-300 transition-colors">
+              <span className="text-[10px] sm:text-[11px] text-slate-400 font-medium truncate max-w-[100px] sm:max-w-[200px] leading-tight mt-0.5 group-hover:text-slate-300 transition-colors">
                 {user?.businessName || 'Quarry Management'}
               </span>
             </NavLink>
-            {renderSubscriptionHeaderPill()}
+            <div className="flex items-center gap-1.5">
+              {renderRoleBadge()}
+              {renderSubscriptionHeaderPill()}
+            </div>
           </div>
 
           {/* Desktop Navigation Menu */}
@@ -149,7 +214,7 @@ export const AppLayout: React.FC = () => {
                 <NavLink
                   key={item.to}
                   to={item.to}
-                  end={item.to === '/admin/users' || item.to === '/loads'}
+                  end={item.to === '/admin/users' || item.to === '/loads' || item.to === '/dashboard'}
                   id={`desktop-nav-${item.label.toLowerCase().replace(/\s+/g, '-')}`}
                   className={({ isActive }) =>
                     `flex items-center gap-2 px-3.5 py-2 rounded-xl text-xs font-bold transition-all cursor-pointer select-none touch-manipulation active:scale-[0.98] ${
@@ -230,7 +295,7 @@ export const AppLayout: React.FC = () => {
               <NavLink
                 key={item.to}
                 to={item.to}
-                end={item.to === '/admin/users' || item.to === '/loads'}
+                end={item.to === '/admin/users' || item.to === '/loads' || item.to === '/dashboard'}
                 id={`mobile-nav-${item.label.toLowerCase().replace(/\s+/g, '-')}`}
                 className={({ isActive }) =>
                   `flex flex-col items-center justify-center py-2 px-1 rounded-xl text-[11px] font-bold transition-all select-none touch-manipulation active:scale-95 cursor-pointer ${
@@ -243,7 +308,7 @@ export const AppLayout: React.FC = () => {
                 }
               >
                 <Icon className="w-5 h-5 mb-0.5 shrink-0 pointer-events-none" />
-                <span className="truncate max-w-full pointer-events-none">{item.label}</span>
+                <span className="truncate max-w-full pointer-events-none text-[10px]">{item.label}</span>
               </NavLink>
             );
           })}
