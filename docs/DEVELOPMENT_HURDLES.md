@@ -565,7 +565,7 @@ First customer completes real-world operational workflows across Owner, Co-Partn
 
 Current hurdle:
 
-HURDLE 13 — MULTI-ROLE COLLABORATION, EXPENSES & FINANCIAL INTELLIGENCE (PART 2: SUB-ACCOUNTS & QUOTA MANAGEMENT)
+HURDLE 13 — MULTI-ROLE COLLABORATION, EXPENSES & FINANCIAL INTELLIGENCE (PART 3: EXPENSES, MACHINERY/HITACHI HOURS & ADVANCE ENGINE)
 
 Current blocker:
 
@@ -573,7 +573,7 @@ None.
 
 Immediate goal:
 
-Implement Part 2: Sub-Accounts & Quota Management Subsystem.
+Implement Part 3: Expenses, Machinery/Hitachi Hours & Advance Engine.
 
 
 # DEVELOPMENT RULES

@@ -791,4 +791,231 @@ test('9.3 Hurdle 13: Atomic Master Data Bundle contains tenant-scoped fleet and 
   assert.ok(Array.isArray(resBundle.data.data.machinery));
 });
 
+let coPartner1Id, coPartner2Id, coPartner3Id, coPartner4Id;
+let siteBoy1Id, siteBoy2Id;
+
+test('10.1 Hurdle 13 Part 2: Owner creates Co-Partners up to quota limit (3) with date-sliced site shares', async () => {
+  // Co-Partner 1
+  const cp1Res = await req('/sub-accounts/co-partners', {
+    method: 'POST',
+    headers: { Authorization: `Bearer ${tenantAToken}` },
+    body: JSON.stringify({
+      name: 'Shamsu Partner 1',
+      mobile: `981100${uniqueSuffix}`,
+      password: 'Password@123',
+      siteShares: [
+        { siteId: siteAId, sharePercentage: 25.0, effectiveFrom: '2026-01-01' },
+      ],
+    }),
+  });
+  assert.equal(cp1Res.status, 201);
+  assert.equal(cp1Res.data.success, true);
+  assert.equal(cp1Res.data.data.role, 'CO_PARTNER');
+  coPartner1Id = cp1Res.data.data.id;
+
+  // Co-Partner 2
+  const cp2Res = await req('/sub-accounts/co-partners', {
+    method: 'POST',
+    headers: { Authorization: `Bearer ${tenantAToken}` },
+    body: JSON.stringify({
+      name: 'Babu Partner 2',
+      mobile: `981200${uniqueSuffix}`,
+      password: 'Password@123',
+      siteShares: [
+        { siteId: siteAId, sharePercentage: 15.0, effectiveFrom: '2026-01-01' },
+      ],
+    }),
+  });
+  assert.equal(cp2Res.status, 201);
+  coPartner2Id = cp2Res.data.data.id;
+
+  // Co-Partner 3
+  const cp3Res = await req('/sub-accounts/co-partners', {
+    method: 'POST',
+    headers: { Authorization: `Bearer ${tenantAToken}` },
+    body: JSON.stringify({
+      name: 'Rahim Partner 3',
+      mobile: `981300${uniqueSuffix}`,
+      password: 'Password@123',
+      siteShares: [
+        { siteId: siteAId, sharePercentage: 20.0, effectiveFrom: '2026-01-01' },
+      ],
+    }),
+  });
+  assert.equal(cp3Res.status, 201);
+  coPartner3Id = cp3Res.data.data.id;
+});
+
+test('10.2 Hurdle 13 Part 2: Owner exceeds Co-Partner quota (4th partner) -> HTTP 400 with code QUOTA_EXCEEDED', async () => {
+  const cp4Res = await req('/sub-accounts/co-partners', {
+    method: 'POST',
+    headers: { Authorization: `Bearer ${tenantAToken}` },
+    body: JSON.stringify({
+      name: 'Extra Partner 4',
+      mobile: `981400${uniqueSuffix}`,
+      password: 'Password@123',
+      siteShares: [
+        { siteId: siteAId, sharePercentage: 10.0 },
+      ],
+    }),
+  });
+
+  assert.equal(cp4Res.status, 400);
+  assert.equal(cp4Res.data.code, 'QUOTA_EXCEEDED');
+  assert.ok(cp4Res.data.message.includes('Co-partner quota limit reached'));
+});
+
+test('10.3 Hurdle 13 Part 2: Owner creates Site Boys up to quota limit (2) and rejects 3rd -> HTTP 400 QUOTA_EXCEEDED', async () => {
+  // Site Boy 1
+  const sb1Res = await req('/sub-accounts/site-boys', {
+    method: 'POST',
+    headers: { Authorization: `Bearer ${tenantAToken}` },
+    body: JSON.stringify({
+      name: 'Manu Gate Boy',
+      mobile: `982100${uniqueSuffix}`,
+      password: 'Password@123',
+      assignedSiteId: siteAId,
+    }),
+  });
+  assert.equal(sb1Res.status, 201);
+  assert.equal(sb1Res.data.data.role, 'SITE_BOY');
+  siteBoy1Id = sb1Res.data.data.id;
+
+  // Site Boy 2
+  const sb2Res = await req('/sub-accounts/site-boys', {
+    method: 'POST',
+    headers: { Authorization: `Bearer ${tenantAToken}` },
+    body: JSON.stringify({
+      name: 'Ratheesh Gate Boy',
+      mobile: `982200${uniqueSuffix}`,
+      password: 'Password@123',
+      assignedSiteId: siteAId,
+    }),
+  });
+  assert.equal(sb2Res.status, 201);
+  siteBoy2Id = sb2Res.data.data.id;
+
+  // Site Boy 3 (Exceeds quota)
+  const sb3Res = await req('/sub-accounts/site-boys', {
+    method: 'POST',
+    headers: { Authorization: `Bearer ${tenantAToken}` },
+    body: JSON.stringify({
+      name: 'Extra Site Boy 3',
+      mobile: `982300${uniqueSuffix}`,
+      password: 'Password@123',
+      assignedSiteId: siteAId,
+    }),
+  });
+  assert.equal(sb3Res.status, 400);
+  assert.equal(sb3Res.data.code, 'QUOTA_EXCEEDED');
+  assert.ok(sb3Res.data.message.includes('Site boy quota limit reached'));
+});
+
+test('10.4 Hurdle 13 Part 2: Super Admin upgrades Owner quota (+₹4,000) and creates QuotaTransaction record', async () => {
+  const upgradeRes = await req(`/admin/users/${tenantAUser.id}/quotas`, {
+    method: 'PATCH',
+    headers: { Authorization: `Bearer ${superAdminToken}` },
+    body: JSON.stringify({
+      coPartnerQuota: 5,
+      siteBoyQuota: 4,
+      amountPaid: 4000,
+      paymentRef: 'UPI-CRUSHER-9988',
+      notes: 'Monsoon season multi-site team expansion',
+    }),
+  });
+
+  assert.equal(upgradeRes.status, 200);
+  assert.equal(upgradeRes.data.success, true);
+  assert.equal(upgradeRes.data.data.coPartnerQuota, 5);
+  assert.equal(upgradeRes.data.data.siteBoyQuota, 4);
+  assert.ok(upgradeRes.data.data.quotaTransactions.length > 0);
+  assert.equal(upgradeRes.data.data.quotaTransactions[0].paymentRef, 'UPI-CRUSHER-9988');
+});
+
+test('10.5 Hurdle 13 Part 2: Owner successfully creates 4th Co-Partner after Super Admin quota expansion', async () => {
+  const cp4Res = await req('/sub-accounts/co-partners', {
+    method: 'POST',
+    headers: { Authorization: `Bearer ${tenantAToken}` },
+    body: JSON.stringify({
+      name: 'Extra Partner 4 Approved',
+      mobile: `981400${uniqueSuffix}`,
+      password: 'Password@123',
+      siteShares: [
+        { siteId: siteAId, sharePercentage: 10.0, effectiveFrom: '2026-06-01' },
+      ],
+    }),
+  });
+
+  assert.equal(cp4Res.status, 201);
+  assert.equal(cp4Res.data.success, true);
+  coPartner4Id = cp4Res.data.data.id;
+});
+
+test('10.6 Hurdle 13 Part 2: Owner updates Co-Partner equity percentage with temporal date-slice versioning', async () => {
+  // Update Partner 1's share on Site A from 25% to 35% effective 2026-09-01
+  const updateRes = await req(`/sub-accounts/co-partners/${coPartner1Id}`, {
+    method: 'PATCH',
+    headers: { Authorization: `Bearer ${tenantAToken}` },
+    body: JSON.stringify({
+      name: 'Shamsu Partner 1 Updated',
+      siteShares: [
+        { siteId: siteAId, sharePercentage: 35.0, effectiveFrom: '2026-09-01' },
+      ],
+    }),
+  });
+
+  assert.equal(updateRes.status, 200);
+  assert.equal(updateRes.data.success, true);
+  assert.equal(updateRes.data.data.name, 'Shamsu Partner 1 Updated');
+
+  // Verify temporal slices in sub-accounts list
+  const listRes = await req('/sub-accounts', {
+    headers: { Authorization: `Bearer ${tenantAToken}` },
+  });
+
+  assert.equal(listRes.status, 200);
+  assert.equal(listRes.data.success, true);
+  const cp1 = listRes.data.data.coPartners.find((cp) => cp.id === coPartner1Id);
+  assert.ok(cp1);
+  assert.equal(cp1.partnerShares.length, 2);
+
+  // Active slice: 35%, effectiveFrom 2026-09-01, effectiveTo null
+  const activeSlice = cp1.partnerShares.find((s) => s.isActive && !s.effectiveTo);
+  assert.ok(activeSlice);
+  assert.equal(Number(activeSlice.sharePercentage), 35.0);
+
+  // Historical slice: 25%, effectiveFrom 2026-01-01, effectiveTo 2026-08-31
+  const closedSlice = cp1.partnerShares.find((s) => !s.isActive && s.effectiveTo);
+  assert.ok(closedSlice);
+  assert.equal(Number(closedSlice.sharePercentage), 25.0);
+  assert.ok(closedSlice.effectiveTo.startsWith('2026-08-31'));
+});
+
+test('10.7 Hurdle 13 Part 2: Removing all active site shares from Co-Partner triggers auto-deactivation', async () => {
+  // Deactivate the site share for Partner 2
+  const updateRes = await req(`/sub-accounts/co-partners/${coPartner2Id}`, {
+    method: 'PATCH',
+    headers: { Authorization: `Bearer ${tenantAToken}` },
+    body: JSON.stringify({
+      siteShares: [
+        { siteId: siteAId, sharePercentage: 0, isActive: false, effectiveFrom: '2026-09-01' },
+      ],
+    }),
+  });
+
+  assert.equal(updateRes.status, 200);
+  assert.equal(updateRes.data.data.isActive, false);
+
+  // Verify Partner 2 is blocked from logging in
+  const loginRes = await req('/auth/login', {
+    method: 'POST',
+    body: JSON.stringify({
+      mobile: `981200${uniqueSuffix}`,
+      password: 'Password@123',
+    }),
+  });
+  assert.equal(loginRes.status, 403);
+});
+
+
 

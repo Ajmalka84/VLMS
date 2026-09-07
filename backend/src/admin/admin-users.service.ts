@@ -5,11 +5,13 @@ import {
   BadRequestException,
 } from '@nestjs/common';
 import * as bcrypt from 'bcryptjs';
+import { Prisma } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { CreateUserDto } from './dto/create-user.dto';
 import { UpdateUserDto } from './dto/update-user.dto';
 import { QueryUsersDto } from './dto/query-users.dto';
 import { UpdateSubscriptionDto } from './dto/update-subscription.dto';
+import { UpdateUserQuotasDto } from './dto/update-user-quotas.dto';
 
 export interface SubscriptionStatusInfo {
   subscriptionPlan: string;
@@ -237,16 +239,27 @@ export class AdminUsersService {
         orderBy: { createdAt: 'desc' },
         select: {
           id: true,
+          name: true,
           businessName: true,
           mobile: true,
+          role: true,
           gstin: true,
           isActive: true,
+          coPartnerQuota: true,
+          siteBoyQuota: true,
           subscriptionPlan: true,
           subscriptionStartsAt: true,
           subscriptionExpiresAt: true,
           gracePeriodDays: true,
           createdAt: true,
           updatedAt: true,
+          subAccounts: {
+            select: {
+              id: true,
+              role: true,
+              isActive: true,
+            },
+          },
           _count: {
             select: {
               sites: true,
@@ -261,9 +274,19 @@ export class AdminUsersService {
 
     const enrichedUsers = users.map((u) => {
       const subInfo = computeSubscriptionStatus(u);
+      const activeCoPartners = u.subAccounts.filter(
+        (s) => s.role === 'CO_PARTNER' && s.isActive,
+      ).length;
+      const activeSiteBoys = u.subAccounts.filter(
+        (s) => s.role === 'SITE_BOY' && s.isActive,
+      ).length;
       return {
         ...u,
         ...subInfo,
+        quotaUsage: {
+          coPartner: { active: activeCoPartners, max: u.coPartnerQuota },
+          siteBoy: { active: activeSiteBoys, max: u.siteBoyQuota },
+        },
       };
     });
 
@@ -281,16 +304,32 @@ export class AdminUsersService {
       where: { id },
       select: {
         id: true,
+        name: true,
         businessName: true,
         mobile: true,
+        role: true,
         gstin: true,
         isActive: true,
+        coPartnerQuota: true,
+        siteBoyQuota: true,
         subscriptionPlan: true,
         subscriptionStartsAt: true,
         subscriptionExpiresAt: true,
         gracePeriodDays: true,
         createdAt: true,
         updatedAt: true,
+        subAccounts: {
+          select: {
+            id: true,
+            name: true,
+            mobile: true,
+            role: true,
+            isActive: true,
+          },
+        },
+        quotaTransactions: {
+          orderBy: { createdAt: 'desc' },
+        },
         _count: {
           select: {
             sites: true,
@@ -306,10 +345,20 @@ export class AdminUsersService {
     }
 
     const subInfo = computeSubscriptionStatus(user);
+    const activeCoPartners = user.subAccounts.filter(
+      (s) => s.role === 'CO_PARTNER' && s.isActive,
+    ).length;
+    const activeSiteBoys = user.subAccounts.filter(
+      (s) => s.role === 'SITE_BOY' && s.isActive,
+    ).length;
 
     return {
       ...user,
       ...subInfo,
+      quotaUsage: {
+        coPartner: { active: activeCoPartners, max: user.coPartnerQuota },
+        siteBoy: { active: activeSiteBoys, max: user.siteBoyQuota },
+      },
     };
   }
 
@@ -441,6 +490,64 @@ export class AdminUsersService {
         ? 'Customer account activated successfully'
         : 'Customer account deactivated successfully',
     };
+  }
+
+  async updateQuotas(id: string, dto: UpdateUserQuotasDto) {
+    const user = await this.prisma.user.findUnique({
+      where: { id },
+    });
+
+    if (!user) {
+      throw new NotFoundException(`Customer user with ID "${id}" not found`);
+    }
+
+    if (user.role !== 'OWNER') {
+      throw new BadRequestException('Quotas can only be configured for OWNER accounts');
+    }
+
+    const updateData: any = {};
+    const amountPaid = dto.amountPaid ? new Prisma.Decimal(dto.amountPaid) : new Prisma.Decimal(0);
+
+    await this.prisma.$transaction(async (tx) => {
+      if (dto.coPartnerQuota !== undefined && dto.coPartnerQuota !== user.coPartnerQuota) {
+        updateData.coPartnerQuota = dto.coPartnerQuota;
+        await tx.quotaTransaction.create({
+          data: {
+            userId: id,
+            quotaType: 'CO_PARTNER',
+            previousQuota: user.coPartnerQuota,
+            newQuota: dto.coPartnerQuota,
+            amountPaid,
+            paymentRef: dto.paymentRef || null,
+            notes: dto.notes || `Co-Partner quota updated from ${user.coPartnerQuota} to ${dto.coPartnerQuota}`,
+          },
+        });
+      }
+
+      if (dto.siteBoyQuota !== undefined && dto.siteBoyQuota !== user.siteBoyQuota) {
+        updateData.siteBoyQuota = dto.siteBoyQuota;
+        await tx.quotaTransaction.create({
+          data: {
+            userId: id,
+            quotaType: 'SITE_BOY',
+            previousQuota: user.siteBoyQuota,
+            newQuota: dto.siteBoyQuota,
+            amountPaid,
+            paymentRef: dto.paymentRef || null,
+            notes: dto.notes || `Site Boy quota updated from ${user.siteBoyQuota} to ${dto.siteBoyQuota}`,
+          },
+        });
+      }
+
+      if (Object.keys(updateData).length > 0) {
+        await tx.user.update({
+          where: { id },
+          data: updateData,
+        });
+      }
+    });
+
+    return this.getUserById(id);
   }
 
   async resetPassword(id: string, newPassword: string) {

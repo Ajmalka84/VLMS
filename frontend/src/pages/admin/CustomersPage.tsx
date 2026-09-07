@@ -34,6 +34,7 @@ import {
   CreateCustomerDto,
   UpdateCustomerDto,
   UpdateSubscriptionDto,
+  updateCustomerQuotasApi,
 } from '../../api/admin';
 import { Card } from '../../components/common/Card';
 import { StatusBadge } from '../../components/common/StatusBadge';
@@ -57,7 +58,16 @@ export const CustomersPage: React.FC = () => {
   const [showEditModal, setShowEditModal] = useState(false);
   const [showResetModal, setShowResetModal] = useState(false);
   const [showSubModal, setShowSubModal] = useState(false);
+  const [showQuotaModal, setShowQuotaModal] = useState(false);
   const [selectedCustomer, setSelectedCustomer] = useState<CustomerUser | null>(null);
+
+  const [quotaForm, setQuotaForm] = useState({
+    coPartnerQuota: 3,
+    siteBoyQuota: 2,
+    amountPaid: 0,
+    paymentRef: '',
+    notes: '',
+  });
 
   // Form States
   const [createForm, setCreateForm] = useState<CreateCustomerDto>({
@@ -256,6 +266,31 @@ export const CustomersPage: React.FC = () => {
       void fetchCustomers();
     } catch (err: any) {
       setFormError(err?.message || 'Failed to update subscription');
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  const handleSaveQuotas = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!selectedCustomer) return;
+
+    try {
+      setSubmitting(true);
+      setFormError(null);
+      await updateCustomerQuotasApi(selectedCustomer.id, {
+        coPartnerQuota: Number(quotaForm.coPartnerQuota),
+        siteBoyQuota: Number(quotaForm.siteBoyQuota),
+        amountPaid: Number(quotaForm.amountPaid) || 0,
+        paymentRef: quotaForm.paymentRef.trim() || undefined,
+        notes: quotaForm.notes.trim() || undefined,
+      });
+      setShowQuotaModal(false);
+      setSelectedCustomer(null);
+      toast.success(`Quotas updated for ${selectedCustomer.businessName}`);
+      void fetchCustomers();
+    } catch (err: any) {
+      setFormError(err?.message || 'Failed to update quotas');
     } finally {
       setSubmitting(false);
     }
@@ -528,6 +563,12 @@ export const CustomersPage: React.FC = () => {
                       </span>
                     </div>
                   )}
+                  <div className="flex items-center gap-1.5 px-2 py-0.5 rounded-md bg-slate-800/80 border border-slate-700/60 text-slate-300 font-medium">
+                    <Users className="w-3.5 h-3.5 text-amber-400" />
+                    <span>CP: {customer.quotaUsage?.coPartner.active ?? 0}/{customer.coPartnerQuota ?? 3}</span>
+                    <span className="text-slate-600">•</span>
+                    <span>SB: {customer.quotaUsage?.siteBoy.active ?? 0}/{customer.siteBoyQuota ?? 2}</span>
+                  </div>
                 </div>
               </div>
 
@@ -572,6 +613,27 @@ export const CustomersPage: React.FC = () => {
                   className="p-2 rounded-xl bg-slate-900 border border-slate-800 hover:border-slate-700 text-slate-300 hover:text-amber-400 transition-colors cursor-pointer"
                 >
                   <CreditCard className="w-4 h-4" />
+                </button>
+
+                {/* Manage Quotas Modal Button */}
+                <button
+                  type="button"
+                  onClick={() => {
+                    setSelectedCustomer(customer);
+                    setQuotaForm({
+                      coPartnerQuota: customer.coPartnerQuota ?? 3,
+                      siteBoyQuota: customer.siteBoyQuota ?? 2,
+                      amountPaid: 0,
+                      paymentRef: '',
+                      notes: '',
+                    });
+                    setFormError(null);
+                    setShowQuotaModal(true);
+                  }}
+                  title="Expand Team Quotas (+₹2,000 / slot)"
+                  className="p-2 rounded-xl bg-slate-900 border border-slate-800 hover:border-slate-700 text-slate-300 hover:text-amber-400 transition-colors cursor-pointer"
+                >
+                  <Users className="w-4 h-4 text-amber-400" />
                 </button>
 
                 {/* Status Toggle */}
@@ -899,6 +961,160 @@ export const CustomersPage: React.FC = () => {
                   className="flex-1 py-2.5 rounded-xl bg-amber-500 hover:bg-amber-400 text-slate-950 text-sm font-bold shadow-lg shadow-amber-500/20 cursor-pointer disabled:opacity-50"
                 >
                   {submitting ? 'Saving...' : 'Update Validity'}
+                </button>
+              </div>
+            </form>
+          </Card>
+        </div>
+      )}
+
+      {/* MANAGE QUOTAS MODAL */}
+      {showQuotaModal && selectedCustomer && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-sm animate-fade-in">
+          <Card
+            variant="glass"
+            className="max-w-md w-full p-6 space-y-4 border border-slate-700 shadow-2xl"
+          >
+            <div className="flex items-center justify-between pb-3 border-b border-slate-800">
+              <div className="flex items-center gap-2.5">
+                <div className="p-2 rounded-xl bg-amber-500/10 text-amber-400">
+                  <Users className="w-5 h-5" />
+                </div>
+                <div>
+                  <h2 className="text-lg font-bold text-white">Expand Team Quotas</h2>
+                  <p className="text-xs text-slate-400">{selectedCustomer.businessName}</p>
+                </div>
+              </div>
+              <button
+                onClick={() => setShowQuotaModal(false)}
+                className="text-slate-400 hover:text-slate-200 cursor-pointer"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            {formError && (
+              <div className="p-3 rounded-xl bg-rose-950/80 border border-rose-800/70 text-rose-300 text-xs flex items-center gap-2">
+                <AlertCircle className="w-4 h-4 shrink-0" />
+                <span>{formError}</span>
+              </div>
+            )}
+
+            <form onSubmit={handleSaveQuotas} className="space-y-4">
+              <div className="grid grid-cols-2 gap-3">
+                <div className="space-y-1">
+                  <label className="text-xs font-semibold text-slate-300">
+                    Co-Partner Quota *
+                  </label>
+                  <input
+                    type="number"
+                    min={selectedCustomer.quotaUsage?.coPartner.active || 0}
+                    max={50}
+                    value={quotaForm.coPartnerQuota}
+                    onChange={(e) =>
+                      setQuotaForm({
+                        ...quotaForm,
+                        coPartnerQuota: parseInt(e.target.value, 10) || 0,
+                      })
+                    }
+                    className="w-full px-3.5 py-2.5 rounded-xl bg-slate-900 border border-slate-700 text-sm text-white focus:border-amber-400 outline-none"
+                    required
+                  />
+                  <span className="text-[10px] text-slate-500">Currently: {selectedCustomer.coPartnerQuota ?? 3}</span>
+                </div>
+
+                <div className="space-y-1">
+                  <label className="text-xs font-semibold text-slate-300">
+                    Site Boy Quota *
+                  </label>
+                  <input
+                    type="number"
+                    min={selectedCustomer.quotaUsage?.siteBoy.active || 0}
+                    max={50}
+                    value={quotaForm.siteBoyQuota}
+                    onChange={(e) =>
+                      setQuotaForm({
+                        ...quotaForm,
+                        siteBoyQuota: parseInt(e.target.value, 10) || 0,
+                      })
+                    }
+                    className="w-full px-3.5 py-2.5 rounded-xl bg-slate-900 border border-slate-700 text-sm text-white focus:border-amber-400 outline-none"
+                    required
+                  />
+                  <span className="text-[10px] text-slate-500">Currently: {selectedCustomer.siteBoyQuota ?? 2}</span>
+                </div>
+              </div>
+
+              <div className="space-y-1">
+                <label className="text-xs font-semibold text-slate-300">
+                  Expansion Amount Paid (₹)
+                </label>
+                <input
+                  type="number"
+                  min={0}
+                  step="100"
+                  placeholder="e.g. 2000"
+                  value={quotaForm.amountPaid || ''}
+                  onChange={(e) =>
+                    setQuotaForm({
+                      ...quotaForm,
+                      amountPaid: parseFloat(e.target.value) || 0,
+                    })
+                  }
+                  className="w-full px-3.5 py-2.5 rounded-xl bg-slate-900 border border-slate-700 text-sm text-white focus:border-amber-400 outline-none"
+                />
+              </div>
+
+              <div className="space-y-1">
+                <label className="text-xs font-semibold text-slate-300">
+                  Payment Reference / Transaction ID
+                </label>
+                <input
+                  type="text"
+                  placeholder="e.g. UPI-9988772211"
+                  value={quotaForm.paymentRef}
+                  onChange={(e) =>
+                    setQuotaForm({
+                      ...quotaForm,
+                      paymentRef: e.target.value,
+                    })
+                  }
+                  className="w-full px-3.5 py-2.5 rounded-xl bg-slate-900 border border-slate-700 text-sm text-white focus:border-amber-400 outline-none"
+                />
+              </div>
+
+              <div className="space-y-1">
+                <label className="text-xs font-semibold text-slate-300">
+                  Notes / Expansion Reason
+                </label>
+                <input
+                  type="text"
+                  placeholder="e.g. Added 1 extra Co-partner for new crusher unit"
+                  value={quotaForm.notes}
+                  onChange={(e) =>
+                    setQuotaForm({
+                      ...quotaForm,
+                      notes: e.target.value,
+                    })
+                  }
+                  className="w-full px-3.5 py-2.5 rounded-xl bg-slate-900 border border-slate-700 text-sm text-white focus:border-amber-400 outline-none"
+                />
+              </div>
+
+              <div className="pt-3 flex gap-2">
+                <button
+                  type="button"
+                  onClick={() => setShowQuotaModal(false)}
+                  className="flex-1 py-2.5 rounded-xl bg-slate-900 border border-slate-800 text-sm font-semibold text-slate-300 hover:bg-slate-800 cursor-pointer"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={submitting}
+                  className="flex-1 py-2.5 rounded-xl bg-amber-500 hover:bg-amber-400 text-slate-950 text-sm font-bold shadow-lg shadow-amber-500/20 cursor-pointer disabled:opacity-50"
+                >
+                  {submitting ? 'Saving...' : 'Update Quotas'}
                 </button>
               </div>
             </form>

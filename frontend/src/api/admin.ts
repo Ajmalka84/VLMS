@@ -2,10 +2,18 @@ import { apiClient } from './client';
 
 export interface CustomerUser {
   id: string;
+  name?: string | null;
   businessName: string;
   mobile: string;
+  role?: string;
   gstin: string | null;
   isActive: boolean;
+  coPartnerQuota?: number;
+  siteBoyQuota?: number;
+  quotaUsage?: {
+    coPartner: { active: number; max: number };
+    siteBoy: { active: number; max: number };
+  };
   subscriptionPlan?: string;
   subscriptionStartsAt?: string;
   subscriptionExpiresAt?: string | null;
@@ -64,6 +72,14 @@ export interface UpdateSubscriptionDto {
     | 'SET_CUSTOM_DATE';
   subscriptionExpiresAt?: string;
   gracePeriodDays?: number;
+}
+
+export interface UpdateQuotasDto {
+  coPartnerQuota?: number;
+  siteBoyQuota?: number;
+  amountPaid?: number;
+  paymentRef?: string;
+  notes?: string;
 }
 
 export async function getCustomersApi(params?: {
@@ -145,3 +161,14 @@ export async function resetCustomerPasswordApi(
     },
   );
 }
+
+export async function updateCustomerQuotasApi(
+  id: string,
+  dto: UpdateQuotasDto,
+): Promise<CustomerUser> {
+  return apiClient<CustomerUser>(`/admin/users/${id}/quotas`, {
+    method: 'PATCH',
+    body: JSON.stringify(dto),
+  });
+}
+

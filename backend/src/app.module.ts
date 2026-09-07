@@ -14,6 +14,7 @@ import { SitesModule } from './sites/sites.module';
 import { VehicleTypesModule } from './vehicle-types/vehicle-types.module';
 import { VehiclesModule } from './vehicles/vehicles.module';
 import { MasterDataModule } from './master-data/master-data.module';
+import { SubAccountsModule } from './sub-accounts/sub-accounts.module';
 
 @Module({
   imports: [
@@ -31,6 +32,7 @@ import { MasterDataModule } from './master-data/master-data.module';
     LoadsModule,
     ReportsModule,
     MasterDataModule,
+    SubAccountsModule,
   ],
   controllers: [AppController],
 })

@@ -20,10 +20,12 @@ import {
   Shield,
   Zap,
   Power,
+  Users,
 } from 'lucide-react';
 import { Card } from '../components/common/Card';
 import { ConfirmModal } from '../components/common/ConfirmModal';
 import { CustomSelect } from '../components/common/CustomSelect';
+import { TeamManagement } from '../components/team/TeamManagement';
 import { useAuth } from '../context/AuthContext';
 import {
   Site,
@@ -58,7 +60,7 @@ import {
 } from '../api/masterData';
 import { useMasterCache } from '../context/MasterCacheContext';
 
-type CustomerTab = 'sites' | 'vehicles' | 'contractors' | 'rates';
+type CustomerTab = 'sites' | 'vehicles' | 'contractors' | 'rates' | 'team';
 type AdminTab = 'vehicle-types' | 'material-types';
 
 export const MasterDataPage: React.FC = () => {
@@ -70,7 +72,7 @@ export const MasterDataPage: React.FC = () => {
   const tabFromUrl = searchParams.get('tab') as CustomerTab | null;
 
   const [customerTab, setCustomerTab] = useState<CustomerTab>(
-    tabFromUrl && ['sites', 'vehicles', 'contractors', 'rates'].includes(tabFromUrl)
+    tabFromUrl && ['sites', 'vehicles', 'contractors', 'rates', 'team'].includes(tabFromUrl)
       ? tabFromUrl
       : 'sites'
   );
@@ -78,7 +80,7 @@ export const MasterDataPage: React.FC = () => {
 
   useEffect(() => {
     const t = searchParams.get('tab') as CustomerTab | null;
-    if (t && ['sites', 'vehicles', 'contractors', 'rates'].includes(t)) {
+    if (t && ['sites', 'vehicles', 'contractors', 'rates', 'team'].includes(t)) {
       setCustomerTab(t);
     }
   }, [searchParams]);
@@ -851,6 +853,16 @@ export const MasterDataPage: React.FC = () => {
             >
               <Coins className="w-4 h-4" /> Rate Matrix ({rates.length})
             </button>
+            <button
+              onClick={() => handleCustomerTabChange('team')}
+              className={`flex items-center gap-2 px-4 py-2 rounded-xl text-xs sm:text-sm font-bold transition-all whitespace-nowrap cursor-pointer select-none touch-manipulation ${
+                customerTab === 'team'
+                  ? 'bg-amber-500 text-slate-950 shadow-md shadow-amber-500/20'
+                  : 'text-slate-400 hover:text-slate-200'
+              }`}
+            >
+              <Users className="w-4 h-4" /> Team & Roles
+            </button>
           </>
         ) : (
           <>
@@ -885,16 +897,18 @@ export const MasterDataPage: React.FC = () => {
       </div>
 
       {/* Search Input */}
-      <div className="relative">
-        <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-500" />
-        <input
-          type="text"
-          placeholder="Search items..."
-          value={search}
-          onChange={(e) => setSearch(e.target.value)}
-          className="w-full pl-10 pr-4 py-2.5 rounded-xl bg-slate-900/60 border border-slate-800 text-sm text-slate-100 placeholder-slate-500 focus:outline-none focus:border-amber-500 transition-colors"
-        />
-      </div>
+      {(!isSuperAdmin && customerTab !== 'team') || isSuperAdmin ? (
+        <div className="relative">
+          <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-500" />
+          <input
+            type="text"
+            placeholder="Search items..."
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            className="w-full pl-10 pr-4 py-2.5 rounded-xl bg-slate-900/60 border border-slate-800 text-sm text-slate-100 placeholder-slate-500 focus:outline-none focus:border-amber-500 transition-colors"
+          />
+        </div>
+      ) : null}
 
       {/* ----------------- TAB 1: SITES (CUSTOMER) ----------------- */}
       {!isSuperAdmin && customerTab === 'sites' && (
@@ -1160,6 +1174,11 @@ export const MasterDataPage: React.FC = () => {
             )}
           </div>
         </div>
+      )}
+
+      {/* ----------------- TAB 5: TEAM & SUB-ACCOUNTS (CUSTOMER) ----------------- */}
+      {!isSuperAdmin && customerTab === 'team' && (
+        <TeamManagement />
       )}
 
       {/* ----------------- SUPER ADMIN: VEHICLE TYPES ----------------- */}
