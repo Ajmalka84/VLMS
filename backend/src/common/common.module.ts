@@ -2,10 +2,12 @@ import { Global, Module, ValidationPipe } from '@nestjs/common';
 import { APP_FILTER, APP_INTERCEPTOR, APP_PIPE } from '@nestjs/core';
 import { AllExceptionsFilter } from './filters/all-exceptions.filter';
 import { ResponseInterceptor } from './interceptors/response.interceptor';
+import { MasterCacheService } from './cache/master-cache.service';
 
 @Global()
 @Module({
   providers: [
+    MasterCacheService,
     {
       provide: APP_FILTER,
       useClass: AllExceptionsFilter,
@@ -23,5 +25,6 @@ import { ResponseInterceptor } from './interceptors/response.interceptor';
       }),
     },
   ],
+  exports: [MasterCacheService],
 })
 export class CommonModule {}

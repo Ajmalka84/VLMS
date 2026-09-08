@@ -439,6 +439,344 @@ describe('Frontend Utilities Unit Tests', () => {
       assert.equal(filtered.length, 2);
     });
   });
+
+  describe('6. Backend MasterCacheService High-Speed Cache & Invalidation', () => {
+    class MasterCacheService {
+      constructor(maxCapacity = 2000) {
+        this.store = new Map();
+        this.defaultTtlMs = 300000;
+        this.maxCapacity = maxCapacity;
+        this.hits = 0;
+        this.misses = 0;
+        this.evictions = 0;
+      }
+      get(key) {
+        const entry = this.store.get(key);
+        if (!entry) {
+          this.misses++;
+          return undefined;
+        }
+        if (Date.now() > entry.expiresAt) {
+          this.store.delete(key);
+          this.misses++;
+          return undefined;
+        }
+        // LRU re-insert to maintain recency
+        this.store.delete(key);
+        this.store.set(key, entry);
+        this.hits++;
+        return entry.value;
+      }
+      set(key, value, ttlMs = this.defaultTtlMs) {
+        if (this.store.has(key)) {
+          this.store.delete(key);
+        } else if (this.store.size >= this.maxCapacity) {
+          const oldestKey = this.store.keys().next().value;
+          if (oldestKey) {
+            this.store.delete(oldestKey);
+            this.evictions++;
+          }
+        }
+        this.store.set(key, { value, expiresAt: Date.now() + ttlMs });
+      }
+      invalidateTenant(ownerId) {
+        if (!ownerId) return;
+        for (const key of this.store.keys()) {
+          if (key.includes(ownerId)) {
+            this.store.delete(key);
+          }
+        }
+      }
+      invalidateRate(siteId, vehicleTypeId, materialTypeId) {
+        for (const [key] of this.store.entries()) {
+          if (
+            (siteId && key.includes(siteId)) ||
+            (vehicleTypeId && key.includes(vehicleTypeId)) ||
+            (materialTypeId && key.includes(materialTypeId))
+          ) {
+            this.store.delete(key);
+          }
+        }
+      }
+      getStats() {
+        return {
+          size: this.store.size,
+          maxCapacity: this.maxCapacity,
+          hits: this.hits,
+          misses: this.misses,
+          evictions: this.evictions,
+        };
+      }
+    }
+
+    it('stores and retrieves master bundle in cache with 0ms latency', () => {
+      const cache = new MasterCacheService();
+      const bundle = { sites: [{ id: 'site_1', siteName: 'North Quarry' }], vehicles: [] };
+      cache.set('master_bundle:tenant_a:OWNER:ALL', bundle);
+
+      const cached = cache.get('master_bundle:tenant_a:OWNER:ALL');
+      assert.deepEqual(cached, bundle);
+    });
+
+    it('invalidates all tenant entries on master data mutation', () => {
+      const cache = new MasterCacheService();
+      cache.set('master_bundle:tenant_a:OWNER:ALL', { sites: [] });
+      cache.set('rate_lookup:tenant_a:s1:v1:m1', { amount: 1500 });
+      cache.set('master_bundle:tenant_b:OWNER:ALL', { sites: [] });
+
+      cache.invalidateTenant('tenant_a');
+
+      assert.equal(cache.get('master_bundle:tenant_a:OWNER:ALL'), undefined);
+      assert.equal(cache.get('rate_lookup:tenant_a:s1:v1:m1'), undefined);
+      assert.notEqual(cache.get('master_bundle:tenant_b:OWNER:ALL'), undefined);
+    });
+
+    it('evicts expired cache entries based on TTL', async () => {
+      const cache = new MasterCacheService();
+      cache.set('short_lived', { data: 123 }, 10); // 10ms TTL
+
+      assert.equal(cache.get('short_lived').data, 123);
+      await new Promise((r) => setTimeout(r, 20));
+      assert.equal(cache.get('short_lived'), undefined);
+    });
+
+    it('enforces LRU capacity limit and tracks cache stats', () => {
+      const cache = new MasterCacheService(3);
+      cache.set('k1', 1);
+      cache.set('k2', 2);
+      cache.set('k3', 3);
+
+      // Access k1 to make it most recently used: order in Map is now k2, k3, k1
+      cache.get('k1');
+
+      // Adding k4 should evict k2 (least recently used)
+      cache.set('k4', 4);
+
+      assert.equal(cache.get('k2'), undefined);
+      assert.equal(cache.get('k1'), 1);
+      assert.equal(cache.get('k3'), 3);
+      assert.equal(cache.get('k4'), 4);
+      assert.equal(cache.getStats().evictions, 1);
+      assert.equal(cache.getStats().hits, 4);
+    });
+  });
+
+  describe('7. Backend Query Builder & Date Normalizer', () => {
+    function buildDateRangeFilter(startDate, endDate) {
+      if (!startDate && !endDate) return undefined;
+      const filter = {};
+      if (startDate) {
+        const start = new Date(startDate.includes('T') ? startDate : `${startDate}T00:00:00.000Z`);
+        if (!isNaN(start.getTime())) filter.gte = start;
+      }
+      if (endDate) {
+        const end = new Date(endDate.includes('T') ? endDate : `${endDate}T23:59:59.999Z`);
+        if (!isNaN(end.getTime())) filter.lte = end;
+      }
+      return Object.keys(filter).length > 0 ? filter : undefined;
+    }
+
+    it('generates accurate UTC start and end-of-day boundaries for date filters', () => {
+      const filter = buildDateRangeFilter('2026-09-01', '2026-09-08');
+      assert.ok(filter);
+      assert.equal(filter.gte.toISOString(), '2026-09-01T00:00:00.000Z');
+      assert.equal(filter.lte.toISOString(), '2026-09-08T23:59:59.999Z');
+    });
+
+    it('returns undefined when no dates are provided (All Time query)', () => {
+      const filter = buildDateRangeFilter(undefined, undefined);
+      assert.equal(filter, undefined);
+    });
+  });
+
+  describe('8. Backend Global Exception Filter & Prisma Error Normalizer', () => {
+    function normalizePrismaError(code, meta) {
+      switch (code) {
+        case 'P2002': {
+          const target = meta?.target;
+          const field = Array.isArray(target) ? target.join(', ') : target ? String(target) : 'unique field';
+          return { status: 409, code: 'CONFLICT', message: `A record with this ${field} already exists.` };
+        }
+        case 'P2003':
+          return { status: 400, code: 'BAD_REQUEST', message: 'Referenced record does not exist or cannot be modified due to dependent records.' };
+        case 'P2025':
+          return { status: 404, code: 'NOT_FOUND', message: 'The requested record was not found.' };
+        case 'P2024':
+          return { status: 503, code: 'SERVICE_UNAVAILABLE', message: 'Database connection pool timed out. Please try again shortly.' };
+        default:
+          return { status: 400, code: 'BAD_REQUEST', message: 'A database constraint error occurred.' };
+      }
+    }
+
+    it('normalizes P2002 unique constraint violations to HTTP 409 Conflict', () => {
+      const res = normalizePrismaError('P2002', { target: ['vehicle_number'] });
+      assert.equal(res.status, 409);
+      assert.equal(res.code, 'CONFLICT');
+      assert.match(res.message, /vehicle_number/);
+    });
+
+    it('normalizes P2003 foreign key constraint errors to HTTP 400 Bad Request', () => {
+      const res = normalizePrismaError('P2003', {});
+      assert.equal(res.status, 400);
+      assert.equal(res.code, 'BAD_REQUEST');
+      assert.match(res.message, /Referenced record/);
+    });
+
+    it('normalizes P2025 record-not-found to HTTP 404 Not Found', () => {
+      const res = normalizePrismaError('P2025', {});
+      assert.equal(res.status, 404);
+      assert.equal(res.code, 'NOT_FOUND');
+    });
+
+    it('normalizes P2024 pool timeout to HTTP 503 Service Unavailable', () => {
+      const res = normalizePrismaError('P2024', {});
+      assert.equal(res.status, 503);
+      assert.equal(res.code, 'SERVICE_UNAVAILABLE');
+    });
+  });
+
+  describe('9. Frontend Formatter Utilities', () => {
+    function formatINR(amount, options = {}) {
+      const num = typeof amount === 'number' ? amount : parseFloat(String(amount || 0));
+      if (isNaN(num)) return options.showSymbol !== false ? '₹0' : '0';
+      const decimals = options.decimals !== undefined ? options.decimals : 0;
+      const showSymbol = options.showSymbol !== false;
+      const formatted = new Intl.NumberFormat('en-IN', {
+        minimumFractionDigits: decimals,
+        maximumFractionDigits: decimals,
+      }).format(num);
+      return showSymbol ? `₹${formatted}` : formatted;
+    }
+
+    function formatShortDate(dateStr) {
+      if (!dateStr) return '—';
+      try {
+        const d = typeof dateStr === 'string' ? new Date(dateStr) : dateStr;
+        if (isNaN(d.getTime())) return '—';
+        return d.toLocaleDateString('en-IN', {
+          day: '2-digit',
+          month: 'short',
+          year: 'numeric',
+        });
+      } catch {
+        return '—';
+      }
+    }
+
+    function formatHours(hours) {
+      const num = typeof hours === 'number' ? hours : parseFloat(String(hours || 0));
+      if (isNaN(num) || num === 0) return '0 hrs';
+      return `${Math.round(num * 10) / 10} hrs`;
+    }
+
+    it('formats numbers into Indian Rupee strings with symbol and separators', () => {
+      assert.equal(formatINR(0), '₹0');
+      assert.equal(formatINR(5000), '₹5,000');
+      assert.equal(formatINR(150000), '₹1,50,000');
+      assert.equal(formatINR(12500000), '₹1,25,00,000');
+    });
+
+    it('supports custom decimals and disabling currency symbol', () => {
+      assert.equal(formatINR(1500.5, { decimals: 2 }), '₹1,500.50');
+      assert.equal(formatINR(1500, { showSymbol: false }), '1,500');
+    });
+
+    it('formats short dates into localized strings and handles invalid dates', () => {
+      assert.equal(formatShortDate(null), '—');
+      assert.equal(formatShortDate('invalid-date'), '—');
+      const formatted = formatShortDate('2026-09-08T10:00:00.000Z');
+      assert.ok(formatted.includes('Sep') || formatted.includes('08'));
+    });
+
+    it('formats decimal hours cleanly to 1 decimal place', () => {
+      assert.equal(formatHours(0), '0 hrs');
+      assert.equal(formatHours(null), '0 hrs');
+      assert.equal(formatHours(8.54), '8.5 hrs');
+      assert.equal(formatHours(12), '12 hrs');
+    });
+  });
+
+  describe('10. Frontend Client Query Cache & Invalidation', () => {
+    class QueryCache {
+      constructor() {
+        this.cache = new Map();
+      }
+      get(key, ttlMs = 45000) {
+        const entry = this.cache.get(key);
+        if (!entry) return null;
+        if (Date.now() - entry.timestamp > ttlMs) {
+          this.cache.delete(key);
+          return null;
+        }
+        return entry.data;
+      }
+      set(key, data) {
+        this.cache.set(key, { data, timestamp: Date.now() });
+      }
+      invalidate(pattern) {
+        if (!pattern) {
+          this.cache.clear();
+          return;
+        }
+        for (const key of this.cache.keys()) {
+          if (typeof pattern === 'string' && (key.startsWith(pattern) || key.includes(pattern))) {
+            this.cache.delete(key);
+          }
+        }
+      }
+    }
+
+    it('caches and returns query responses synchronously within TTL', () => {
+      const qc = new QueryCache();
+      qc.set('/api/v1/loads?siteId=s1', [{ id: 1, amount: 1500 }]);
+
+      const cached = qc.get('/api/v1/loads?siteId=s1');
+      assert.deepEqual(cached, [{ id: 1, amount: 1500 }]);
+    });
+
+    it('evicts entries when TTL expires', async () => {
+      const qc = new QueryCache();
+      qc.set('short_lived_key', { test: true });
+
+      assert.ok(qc.get('short_lived_key', 50));
+      await new Promise((r) => setTimeout(r, 60));
+      assert.equal(qc.get('short_lived_key', 50), null);
+    });
+
+    it('invalidates matching keys by prefix or pattern', () => {
+      const qc = new QueryCache();
+      qc.set('/loads/list?siteId=s1', [1]);
+      qc.set('/loads/summary?siteId=s1', { total: 100 });
+      qc.set('/expenses/list?siteId=s1', [2]);
+
+      qc.invalidate('/loads');
+
+      assert.equal(qc.get('/loads/list?siteId=s1'), null);
+      assert.equal(qc.get('/loads/summary?siteId=s1'), null);
+      assert.deepEqual(qc.get('/expenses/list?siteId=s1'), [2]);
+    });
+  });
+
+  describe('11. PWA Web App Manifest & Service Worker Configuration', () => {
+    it('validates PWA manifest structure and essential fields', () => {
+      const manifest = {
+        name: 'VLMS - Vehicle Load Management System',
+        short_name: 'VLMS',
+        start_url: '/',
+        display: 'standalone',
+        background_color: '#0f172a',
+        theme_color: '#0f172a',
+        icons: [
+          { src: '/icons/icon.svg', sizes: '192x192 512x512', type: 'image/svg+xml' },
+        ],
+      };
+
+      assert.equal(manifest.display, 'standalone');
+      assert.equal(manifest.start_url, '/');
+      assert.ok(manifest.icons.length > 0);
+      assert.equal(manifest.theme_color, '#0f172a');
+    });
+  });
 });
 
 

@@ -7,6 +7,8 @@ import React, {
 } from 'react';
 import { AuthUser, LoginCredentials, getMeApi, loginApi } from '../api/auth';
 import { AUTH_TOKEN_KEY } from '../api/client';
+export { AUTH_TOKEN_KEY } from '../api/client';
+export const AUTH_USER_KEY = 'vlms_auth_user';
 
 interface AuthContextType {
   user: AuthUser | null;
@@ -25,11 +27,26 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({
   const [token, setToken] = useState<string | null>(() =>
     localStorage.getItem(AUTH_TOKEN_KEY),
   );
-  const [user, setUser] = useState<AuthUser | null>(null);
-  const [isLoading, setIsLoading] = useState<boolean>(true);
+  const [user, setUser] = useState<AuthUser | null>(() => {
+    const storedToken = localStorage.getItem(AUTH_TOKEN_KEY);
+    if (!storedToken) return null;
+    try {
+      const rawUser = localStorage.getItem(AUTH_USER_KEY);
+      return rawUser ? JSON.parse(rawUser) : null;
+    } catch {
+      return null;
+    }
+  });
+  const [isLoading, setIsLoading] = useState<boolean>(() => {
+    const storedToken = localStorage.getItem(AUTH_TOKEN_KEY);
+    const rawUser = localStorage.getItem(AUTH_USER_KEY);
+    // If we have token and cached user, don't block the screen with full loader
+    return !storedToken || !rawUser;
+  });
 
   const logout = useCallback(() => {
     localStorage.removeItem(AUTH_TOKEN_KEY);
+    localStorage.removeItem(AUTH_USER_KEY);
     setToken(null);
     setUser(null);
   }, []);
@@ -47,6 +64,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({
       const profile = await getMeApi();
       setUser(profile);
       setToken(storedToken);
+      localStorage.setItem(AUTH_USER_KEY, JSON.stringify(profile));
     } catch {
       logout();
     } finally {
@@ -90,6 +108,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({
     try {
       const result = await loginApi(credentials);
       localStorage.setItem(AUTH_TOKEN_KEY, result.accessToken);
+      localStorage.setItem(AUTH_USER_KEY, JSON.stringify(result.user));
       setToken(result.accessToken);
       setUser(result.user);
       return result.user;

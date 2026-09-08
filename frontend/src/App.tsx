@@ -3,9 +3,11 @@ import { Routes, Route, Navigate } from 'react-router-dom';
 import { AuthProvider, useAuth } from './context/AuthContext';
 import { LanguageProvider } from './context/LanguageContext';
 import { ToastProvider } from './context/ToastContext';
+import { ThemeProvider } from './context/ThemeContext';
 import { MasterCacheProvider } from './context/MasterCacheContext';
 import { ProtectedRoute } from './components/auth/ProtectedRoute';
 import { AppLayout } from './components/layout/AppLayout';
+import { ErrorBoundary } from './components/common';
 
 // Lazy Loaded Route Pages for Optimal Bundle Size (<75 KB initial shell)
 const LoginPage = React.lazy(() => import('./pages/LoginPage').then((m) => ({ default: m.LoginPage })));
@@ -38,100 +40,104 @@ const RootIndex: React.FC = () => {
   if (user?.role === 'SUPER_ADMIN') {
     return <Navigate to="/admin/users" replace />;
   }
-  if (user?.role === 'CO_PARTNER') {
-    return <Navigate to="/dashboard" replace />;
+  if (user?.role === 'SITE_BOY') {
+    return <Navigate to="/loads" replace />;
   }
-  return <Navigate to="/loads" replace />;
+  return <Navigate to="/dashboard" replace />;
 };
 
 export function App() {
   return (
-    <LanguageProvider>
-      <ToastProvider>
-        <AuthProvider>
-          <MasterCacheProvider>
-            <Suspense fallback={<RouteLoadingFallback />}>
-              <Routes>
-                {/* Public Login Route */}
-                <Route path="/login" element={<LoginPage />} />
+    <ThemeProvider>
+      <LanguageProvider>
+        <ToastProvider>
+          <AuthProvider>
+            <MasterCacheProvider>
+              <ErrorBoundary>
+                <Suspense fallback={<RouteLoadingFallback />}>
+                  <Routes>
+                    {/* Public Login Route */}
+                    <Route path="/login" element={<LoginPage />} />
 
-                {/* Protected App Routes */}
-                <Route
-                  path="/"
-                  element={
-                    <ProtectedRoute>
-                      <AppLayout />
-                    </ProtectedRoute>
-                  }
-                >
-                  <Route index element={<RootIndex />} />
+                    {/* Protected App Routes */}
+                    <Route
+                      path="/"
+                      element={
+                        <ProtectedRoute>
+                          <AppLayout />
+                        </ProtectedRoute>
+                      }
+                    >
+                      <Route index element={<RootIndex />} />
 
-                  {/* Super Admin Route */}
-                  <Route
-                    path="admin/users"
-                    element={
-                      <ProtectedRoute allowedRoles={['SUPER_ADMIN']}>
-                        <CustomersPage />
-                      </ProtectedRoute>
-                    }
-                  />
+                      {/* Super Admin Route */}
+                      <Route
+                        path="admin/users"
+                        element={
+                          <ProtectedRoute allowedRoles={['SUPER_ADMIN']}>
+                            <CustomersPage />
+                          </ProtectedRoute>
+                        }
+                      />
 
-                  {/* Operational Customer Routes */}
-                  <Route
-                    path="dashboard"
-                    element={
-                      <ProtectedRoute allowedRoles={['OWNER', 'CO_PARTNER', 'SUPER_ADMIN']}>
-                        <DashboardPage />
-                      </ProtectedRoute>
-                    }
-                  />
-                  <Route
-                    path="loads"
-                    element={
-                      <ProtectedRoute allowedRoles={['OWNER', 'SITE_BOY', 'SUPER_ADMIN']}>
-                        <LoadsPage />
-                      </ProtectedRoute>
-                    }
-                  />
-                  <Route
-                    path="expenses"
-                    element={
-                      <ProtectedRoute allowedRoles={['OWNER', 'SITE_BOY', 'SUPER_ADMIN']}>
-                        <ExpensesPage />
-                      </ProtectedRoute>
-                    }
-                  />
-                  <Route
-                    path="shift-drawer"
-                    element={
-                      <ProtectedRoute allowedRoles={['OWNER', 'SITE_BOY', 'SUPER_ADMIN']}>
-                        <ShiftDrawerPage />
-                      </ProtectedRoute>
-                    }
-                  />
-                  <Route
-                    path="reports"
-                    element={
-                      <ProtectedRoute allowedRoles={['OWNER', 'CO_PARTNER', 'SUPER_ADMIN']}>
-                        <ReportsPage />
-                      </ProtectedRoute>
-                    }
-                  />
-                  <Route
-                    path="settings"
-                    element={
-                      <ProtectedRoute allowedRoles={['OWNER', 'SITE_BOY', 'SUPER_ADMIN']}>
-                        <MasterDataPage />
-                      </ProtectedRoute>
-                    }
-                  />
-                  <Route path="*" element={<NotFoundPage />} />
-                </Route>
-              </Routes>
-            </Suspense>
-          </MasterCacheProvider>
-        </AuthProvider>
+                      {/* Operational Customer Routes */}
+                      <Route
+                        path="dashboard"
+                        element={
+                          <ProtectedRoute allowedRoles={['OWNER', 'CO_PARTNER', 'SUPER_ADMIN']}>
+                            <DashboardPage />
+                          </ProtectedRoute>
+                        }
+                      />
+                      <Route
+                        path="loads"
+                        element={
+                          <ProtectedRoute allowedRoles={['OWNER', 'SITE_BOY', 'SUPER_ADMIN']}>
+                            <LoadsPage />
+                          </ProtectedRoute>
+                        }
+                      />
+                      <Route
+                        path="expenses"
+                        element={
+                          <ProtectedRoute allowedRoles={['OWNER', 'SITE_BOY', 'SUPER_ADMIN']}>
+                            <ExpensesPage />
+                          </ProtectedRoute>
+                        }
+                      />
+                      <Route
+                        path="shift-drawer"
+                        element={
+                          <ProtectedRoute allowedRoles={['OWNER', 'SITE_BOY', 'SUPER_ADMIN']}>
+                            <ShiftDrawerPage />
+                          </ProtectedRoute>
+                        }
+                      />
+                      <Route
+                        path="reports"
+                        element={
+                          <ProtectedRoute allowedRoles={['OWNER', 'CO_PARTNER', 'SITE_BOY', 'SUPER_ADMIN']}>
+                            <ReportsPage />
+                          </ProtectedRoute>
+                        }
+                      />
+                      <Route
+                        path="settings"
+                        element={
+                          <ProtectedRoute allowedRoles={['OWNER', 'SITE_BOY']}>
+                            <MasterDataPage />
+                          </ProtectedRoute>
+                        }
+                      />
+                      <Route path="*" element={<NotFoundPage />} />
+                    </Route>
+                  </Routes>
+                </Suspense>
+              </ErrorBoundary>
+            </MasterCacheProvider>
+          </AuthProvider>
       </ToastProvider>
     </LanguageProvider>
+  </ThemeProvider>
   );
 }

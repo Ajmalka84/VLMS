@@ -1,7 +1,7 @@
 import React from 'react';
 import { Link } from 'react-router-dom';
 import { AlertCircle, ArrowLeft } from 'lucide-react';
-import { Card } from '../components/common/Card';
+import { Card, Button } from '../components/common';
 
 export const NotFoundPage: React.FC = () => {
   return (
@@ -17,12 +17,14 @@ export const NotFoundPage: React.FC = () => {
           </p>
         </div>
         <div className="pt-4">
-          <Link
-            to="/"
-            className="inline-flex items-center gap-2 px-4 py-2 rounded-xl bg-slate-900 border border-slate-800 hover:border-slate-700 text-sm font-medium text-slate-200 hover:text-amber-400 transition-colors"
-          >
-            <ArrowLeft className="w-4 h-4" />
-            Back to Dashboard
+          <Link to="/">
+            <Button
+              variant="secondary"
+              size="md"
+              leftIcon={<ArrowLeft className="w-4 h-4" />}
+            >
+              Back to Dashboard
+            </Button>
           </Link>
         </div>
       </Card>

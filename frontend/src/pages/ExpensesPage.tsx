@@ -1,26 +1,21 @@
-import React, { useState, useEffect, useMemo, useCallback } from 'react';
+import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react';
+import { useNavigate } from 'react-router-dom';
 import {
   Plus,
-  Filter,
   DollarSign,
   Truck,
-  CreditCard,
   Layers,
-  Calendar,
-  Search,
+  Clock,
   Trash2,
   Edit2,
-  Clock,
-  CheckCircle2,
-  AlertCircle,
   X,
   Gauge,
   User,
-  FileText,
   Building2,
   Banknote,
   Sparkles,
   Lock,
+  AlertCircle,
 } from 'lucide-react';
 import {
   fetchExpensesApi,
@@ -35,25 +30,32 @@ import {
 } from '../api/expenses';
 import { getMasterDataBundleApi } from '../api/masterData';
 import { useAuth } from '../context/AuthContext';
-import { Card } from '../components/common/Card';
-import { ConfirmModal } from '../components/common/ConfirmModal';
+import { useToast } from '../context/ToastContext';
+import {
+  Button,
+  Input,
+  DateInput,
+  CustomSelect,
+  CustomSelectOption,
+  Badge,
+  Modal,
+  PageHeader,
+  MetricCard,
+  FilterBar,
+  ConfirmModal,
+  EmptyState,
+} from '../components/common';
+import { useFilterState } from '../hooks/useFilterState';
+import { formatINR } from '../utils/formatters';
+import { queryCache } from '../utils/queryCache';
 
 export const PAYMENT_MODES: { label: string; value: PaymentMode; badgeClass: string }[] = [
-  { label: 'Cash Drawer', value: 'CASH_DRAWER', badgeClass: 'bg-emerald-500/10 text-emerald-300 border-emerald-500/30' },
-  { label: 'Bank Transfer', value: 'BANK_TRANSFER', badgeClass: 'bg-blue-500/10 text-blue-300 border-blue-500/30' },
-  { label: 'UPI / Online', value: 'UPI_ONLINE', badgeClass: 'bg-indigo-500/10 text-indigo-300 border-indigo-500/30' },
-  { label: 'Vendor Credit', value: 'VENDOR_CREDIT', badgeClass: 'bg-amber-500/10 text-amber-300 border-amber-500/30' },
-  { label: 'Owner Direct', value: 'OWNER_DIRECT', badgeClass: 'bg-purple-500/10 text-purple-300 border-purple-500/30' },
+  { label: 'Cash Drawer', value: 'CASH_DRAWER', badgeClass: 'bg-emerald-500/10 text-emerald-400 border-emerald-500/30' },
+  { label: 'Bank Transfer', value: 'BANK_TRANSFER', badgeClass: 'bg-blue-500/10 text-blue-400 border-blue-500/30' },
+  { label: 'UPI / Online', value: 'UPI_ONLINE', badgeClass: 'bg-indigo-500/10 text-indigo-400 border-indigo-500/30' },
+  { label: 'Vendor Credit', value: 'VENDOR_CREDIT', badgeClass: 'bg-amber-500/10 text-amber-400 border-amber-500/30' },
+  { label: 'Owner Direct', value: 'OWNER_DIRECT', badgeClass: 'bg-purple-500/10 text-purple-400 border-purple-500/30' },
 ];
-
-function formatCurrency(amount: number | string | undefined | null) {
-  const num = Number(amount || 0);
-  return new Intl.NumberFormat('en-IN', {
-    style: 'currency',
-    currency: 'INR',
-    maximumFractionDigits: 2,
-  }).format(num);
-}
 
 function parseTimeToMins(timeStr: string): number | null {
   if (!timeStr) return null;
@@ -97,7 +99,10 @@ function computeHours(startTime: string, closingTime: string): { hours: number; 
 }
 
 export const ExpensesPage: React.FC = () => {
+  const navigate = useNavigate();
   const { user } = useAuth();
+  const toast = useToast();
+
   const [expenses, setExpenses] = useState<Expense[]>([]);
   const [summary, setSummary] = useState<ExpenseSummary>({
     totalExpenses: 0,
@@ -114,16 +119,16 @@ export const ExpensesPage: React.FC = () => {
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  // Filters
+  // Filter state
+  const filter = useFilterState({ defaultPreset: 'all' });
   const [selectedSiteId, setSelectedSiteId] = useState<string>('');
   const [selectedCategoryId, setSelectedCategoryId] = useState<string>('');
   const [selectedMachineryId, setSelectedMachineryId] = useState<string>('');
   const [selectedPaymentMode, setSelectedPaymentMode] = useState<string>('');
-  const [startDate, setStartDate] = useState<string>('');
-  const [endDate, setEndDate] = useState<string>('');
 
   // Modal State
   const [isModalOpen, setIsModalOpen] = useState(false);
+  const [showNoMachineryModal, setShowNoMachineryModal] = useState(false);
   const [entryMode, setEntryMode] = useState<'GENERAL' | 'MACHINERY'>('GENERAL');
   const [editingExpense, setEditingExpense] = useState<Expense | null>(null);
   const [deletingExpenseId, setDeletingExpenseId] = useState<string | null>(null);
@@ -138,6 +143,49 @@ export const ExpensesPage: React.FC = () => {
   const [formPaymentMode, setFormPaymentMode] = useState<PaymentMode>('CASH_DRAWER');
   const [formPaidTo, setFormPaidTo] = useState('');
   const [formRemarks, setFormRemarks] = useState('');
+
+  // Memoized Select Options for 0-lag FilterBar & Modals
+  const filterSiteOptions = useMemo(
+    () => [{ value: '', label: 'All Sites' }, ...sites.map((s) => ({ value: s.id, label: s.siteName }))],
+    [sites]
+  );
+
+  const filterCategoryOptions = useMemo(
+    () => [{ value: '', label: 'All Categories' }, ...categories.map((c) => ({ value: c.id, label: c.name }))],
+    [categories]
+  );
+
+  const filterMachineryOptions = useMemo(
+    () => [
+      { value: '', label: 'All Machines' },
+      ...machinery.map((m) => ({ value: m.id, label: `${m.name}${m.code ? ` (${m.code})` : ''}` })),
+    ],
+    [machinery]
+  );
+
+  const filterPaymentModeOptions = useMemo(
+    () => [
+      { value: '', label: 'All Payment Modes' },
+      ...PAYMENT_MODES.map((pm) => ({ value: pm.value, label: pm.label })),
+    ],
+    []
+  );
+
+  const modalSiteOptions = useMemo(
+    () => sites.map((s) => ({ value: s.id, label: s.siteName })),
+    [sites]
+  );
+
+  const modalCategoryOptions = useMemo(
+    () => categories.map((c) => ({ value: c.id, label: c.name })),
+    [categories]
+  );
+
+  const modalMachineryOptions = useMemo(
+    () => machinery.map((m) => ({ value: m.id, label: `${m.name}${m.code ? ` (${m.code})` : ''}` })),
+    [machinery]
+  );
+
 
   // Machinery Form Fields
   const [formMachineryId, setFormMachineryId] = useState('');
@@ -179,8 +227,22 @@ export const ExpensesPage: React.FC = () => {
     }
   }, [user, selectedSiteId, formSiteId]);
 
+  const expensesAbortRef = useRef<AbortController | null>(null);
+
+  useEffect(() => {
+    return () => {
+      expensesAbortRef.current?.abort();
+    };
+  }, []);
+
   // Load Expenses
   const loadExpenses = useCallback(async () => {
+    if (expensesAbortRef.current) {
+      expensesAbortRef.current.abort();
+    }
+    const controller = new AbortController();
+    expensesAbortRef.current = controller;
+
     setIsLoading(true);
     setError(null);
     try {
@@ -190,17 +252,19 @@ export const ExpensesPage: React.FC = () => {
         categoryId: selectedCategoryId || undefined,
         machineryId: selectedMachineryId || undefined,
         paymentMode: (selectedPaymentMode as PaymentMode) || undefined,
-        startDate: startDate || undefined,
-        endDate: endDate || undefined,
-      });
+        startDate: filter.startDate || undefined,
+        endDate: filter.endDate || undefined,
+      }, { signal: controller.signal });
       setExpenses(data.expenses);
       setSummary(data.summary);
     } catch (err: any) {
-      setError(err.message || 'Failed to fetch expenses');
+      if (err.name !== 'AbortError') {
+        setError(err.message || 'Failed to fetch expenses');
+      }
     } finally {
       setIsLoading(false);
     }
-  }, [user, selectedSiteId, selectedCategoryId, selectedMachineryId, selectedPaymentMode, startDate, endDate]);
+  }, [user, selectedSiteId, selectedCategoryId, selectedMachineryId, selectedPaymentMode, filter.startDate, filter.endDate]);
 
   useEffect(() => {
     loadMasterData();
@@ -210,21 +274,49 @@ export const ExpensesPage: React.FC = () => {
     loadExpenses();
   }, [loadExpenses]);
 
+  // Filtered expenses by debounced search
+  const filteredExpenses = useMemo(() => {
+    if (!filter.debouncedSearch) return expenses;
+    const term = filter.debouncedSearch.toLowerCase();
+    return expenses.filter(
+      (e) =>
+        e.paidTo?.toLowerCase().includes(term) ||
+        e.remarks?.toLowerCase().includes(term) ||
+        e.category?.name.toLowerCase().includes(term) ||
+        e.machinery?.name.toLowerCase().includes(term) ||
+        e.site?.siteName.toLowerCase().includes(term),
+    );
+  }, [expenses, filter.debouncedSearch]);
+
   // Live Hours & Cost Calculation for Machinery form
   const liveMachineryCalculation = useMemo(() => {
     if (entryMode !== 'MACHINERY') return null;
-    const calc = computeHours(formStartTime, formClosingTime);
-    if (!calc) return null;
-
     const rentRate = parseFloat(formRentPerHour) || 0;
-    const totalRent = Math.round(calc.hours * rentRate * 100) / 100;
+    const startM = parseFloat(formStartMeter);
+    const endM = parseFloat(formEndMeter);
+
+    let hours = 0;
+    let calculationSource: 'METER' | 'TIME' = 'METER';
+
+    if (!isNaN(startM) && !isNaN(endM) && endM >= startM) {
+      hours = Math.round((endM - startM) * 100) / 100;
+      calculationSource = 'METER';
+    } else {
+      const calc = computeHours(formStartTime, formClosingTime);
+      if (calc) {
+        hours = calc.hours;
+        calculationSource = 'TIME';
+      }
+    }
+
+    const totalRent = Math.round(hours * rentRate * 100) / 100;
     return {
-      hours: calc.hours,
-      isOvernight: calc.isOvernight,
+      hours,
+      calculationSource,
       rentRate,
       totalRent,
     };
-  }, [entryMode, formStartTime, formClosingTime, formRentPerHour]);
+  }, [entryMode, formStartMeter, formEndMeter, formStartTime, formClosingTime, formRentPerHour]);
 
   // Handle Machine Selection in Modal
   const handleMachineChange = (machId: string) => {
@@ -242,9 +334,14 @@ export const ExpensesPage: React.FC = () => {
   };
 
   const openCreateModal = (mode: 'GENERAL' | 'MACHINERY' = 'GENERAL') => {
+    if (mode === 'MACHINERY' && machinery.length === 0) {
+      setShowNoMachineryModal(true);
+      return;
+    }
+
     setEditingExpense(null);
     setEntryMode(mode);
-    setFormSiteId(sites[0]?.id || '');
+    setFormSiteId(user?.role === 'SITE_BOY' ? (user?.assignedSiteId || sites[0]?.id || '') : (sites[0]?.id || ''));
     setFormCategoryId(categories[0]?.id || '');
     setFormDate(new Date().toISOString().slice(0, 10));
     setFormAmount('');
@@ -283,8 +380,8 @@ export const ExpensesPage: React.FC = () => {
     setFormMachineryId(exp.machineryId || '');
     setFormStartTime(exp.startTime || '08:00 AM');
     setFormClosingTime(exp.closingTime || '05:30 PM');
-    setFormStartMeter(exp.startMeterReading ? String(exp.startMeterReading) : '');
-    setFormEndMeter(exp.endMeterReading ? String(exp.endMeterReading) : '');
+    setFormStartMeter(exp.startMeterReading !== undefined && exp.startMeterReading !== null ? String(exp.startMeterReading) : '');
+    setFormEndMeter(exp.endMeterReading !== undefined && exp.endMeterReading !== null ? String(exp.endMeterReading) : '');
     setFormRentPerHour(exp.rentPerHour ? String(exp.rentPerHour) : '');
     setFormAdvanceAmount(exp.advanceAmount ? String(exp.advanceAmount) : '0');
 
@@ -323,27 +420,43 @@ export const ExpensesPage: React.FC = () => {
           throw new Error('Please enter a valid rent per hour.');
         }
 
-        const calc = computeHours(formStartTime, formClosingTime);
-        if (!calc) {
-          throw new Error('Invalid start or closing time format (e.g. 08:00 AM, 05:30 PM).');
+        const startM = parseFloat(formStartMeter);
+        const endM = parseFloat(formEndMeter);
+        let totalHours = 0;
+
+        if (!isNaN(startM) && !isNaN(endM)) {
+          if (endM < startM) {
+            throw new Error('Closing meter reading cannot be less than start meter reading.');
+          }
+          totalHours = Math.round((endM - startM) * 100) / 100;
+          payload.startMeterReading = startM;
+          payload.endMeterReading = endM;
+        } else {
+          const calc = computeHours(formStartTime, formClosingTime);
+          if (!calc) {
+            throw new Error('Please enter valid Start & End Meter readings or time window.');
+          }
+          totalHours = calc.hours;
         }
 
         payload.machineryId = formMachineryId;
-        payload.startTime = formStartTime;
-        payload.closingTime = formClosingTime;
-        payload.totalHours = calc.hours;
+        payload.startTime = formStartTime || '08:00 AM';
+        payload.closingTime = formClosingTime || '05:30 PM';
+        payload.totalHours = totalHours;
         payload.rentPerHour = rentRate;
-        payload.amount = Math.round(calc.hours * rentRate * 100) / 100;
-        payload.startMeterReading = formStartMeter ? parseFloat(formStartMeter) : undefined;
-        payload.endMeterReading = formEndMeter ? parseFloat(formEndMeter) : undefined;
+        payload.amount = Math.round(totalHours * rentRate * 100) / 100;
         payload.advanceAmount = formAdvanceAmount ? parseFloat(formAdvanceAmount) : 0;
       }
 
       if (editingExpense) {
         await updateExpenseApi(editingExpense.id, payload);
+        toast.success('Expense record updated successfully');
       } else {
         await createExpenseApi(payload);
+        toast.success('Expense recorded successfully');
       }
+      queryCache.invalidate('dashboard_');
+      queryCache.invalidate('rep_');
 
       setIsModalOpen(false);
       await loadExpenses();
@@ -358,209 +471,154 @@ export const ExpensesPage: React.FC = () => {
     if (!deletingExpenseId) return;
     try {
       await deleteExpenseApi(deletingExpenseId);
+      queryCache.invalidate('dashboard_');
+      queryCache.invalidate('rep_');
       setDeletingExpenseId(null);
+      toast.info('Expense record deleted');
       await loadExpenses();
     } catch (err: any) {
-      alert(err.message || 'Failed to delete expense record.');
+      toast.error(err.message || 'Failed to delete expense record');
     }
   };
+
+  // CSV Export
+  const handleExportCSV = () => {
+    if (filteredExpenses.length === 0) {
+      toast.info('No expenses to export');
+      return;
+    }
+    const headers = ['Date', 'Site', 'Category', 'Machinery', 'Total Hours', 'Rent/Hr', 'Payment Mode', 'Paid To', 'Advance', 'Amount', 'Remarks'];
+    const rows = filteredExpenses.map((exp) => [
+      exp.date.slice(0, 10),
+      `"${exp.site?.siteName || ''}"`,
+      `"${exp.category?.name || ''}"`,
+      `"${exp.machinery?.name || ''}"`,
+      exp.totalHours || '',
+      exp.rentPerHour || '',
+      exp.paymentMode,
+      `"${exp.paidTo || ''}"`,
+      exp.advanceAmount || 0,
+      exp.amount,
+      `"${exp.remarks || ''}"`,
+    ]);
+    const csvContent = 'data:text/csv;charset=utf-8,' + [headers.join(','), ...rows.map((r) => r.join(','))].join('\n');
+    const encodedUri = encodeURI(csvContent);
+    const link = document.createElement('a');
+    link.setAttribute('href', encodedUri);
+    link.setAttribute('download', `Expenses_Export_${new Date().toISOString().slice(0, 10)}.csv`);
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    toast.success('Exported expenses to CSV');
+  };
+
+  const extraActiveFilters = (selectedCategoryId ? 1 : 0) + (selectedMachineryId ? 1 : 0) + (selectedPaymentMode ? 1 : 0) + (selectedSiteId && user?.role !== 'SITE_BOY' ? 1 : 0);
 
   return (
     <div className="space-y-6 pb-12 animate-fade-in">
       {/* Top Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-        <div>
-          <h1 className="text-xl sm:text-2xl font-black text-white tracking-tight flex items-center gap-2.5">
-            <DollarSign className="w-6 h-6 text-amber-400" />
-            Site Expenses & Machine Rental
-          </h1>
-          <p className="text-xs sm:text-sm text-slate-400 mt-1">
-            Track daily site operational costs, cash drawer disbursements, and heavy machinery hourly logs.
-          </p>
-        </div>
-        <div className="flex items-center gap-3">
-          <button
-            onClick={() => openCreateModal('GENERAL')}
-            className="inline-flex items-center gap-2 px-4 py-2.5 bg-slate-800/80 hover:bg-slate-700 text-slate-200 font-bold rounded-xl border border-slate-700/80 transition-all shadow-md cursor-pointer select-none touch-manipulation text-xs sm:text-sm"
-          >
-            <Plus className="w-4 h-4 text-amber-400" />
-            Add Expense
-          </button>
-          <button
-            onClick={() => openCreateModal('MACHINERY')}
-            className="inline-flex items-center gap-2 px-4 py-2.5 bg-amber-500 hover:bg-amber-400 text-slate-950 font-bold rounded-xl shadow-lg shadow-amber-500/20 transition-all cursor-pointer select-none touch-manipulation text-xs sm:text-sm"
-          >
-            <Truck className="w-4 h-4" />
-            Log Machine Hours
-          </button>
-        </div>
-      </div>
+      <PageHeader
+        title="Site Expenses & Machine Rental"
+        subtitle="Track daily site operational costs, cash drawer disbursements, and heavy machinery hourly logs."
+        badge={`${summary.count} Records`}
+        actions={
+          <div className="flex items-center gap-2">
+            <button
+              onClick={() => openCreateModal('GENERAL')}
+              className="inline-flex items-center gap-2 px-3.5 py-2.5 bg-slate-800 hover:bg-slate-700 text-slate-200 font-bold rounded-xl border border-slate-700 transition shadow-sm cursor-pointer text-xs sm:text-sm min-h-[42px] touch-manipulation"
+            >
+              <Plus className="w-4 h-4 text-amber-400" />
+              Add Expense
+            </button>
+            <button
+              onClick={() => openCreateModal('MACHINERY')}
+              className="inline-flex items-center gap-2 px-4 py-2.5 bg-amber-500 hover:bg-amber-400 text-slate-950 font-black rounded-xl shadow-lg shadow-amber-500/20 transition cursor-pointer text-xs sm:text-sm min-h-[42px] touch-manipulation"
+            >
+              <Truck className="w-4 h-4" />
+              Log Machine Hours
+            </button>
+          </div>
+        }
+      />
 
       {/* KPI Cards */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-        <Card variant="glass" className="p-5 border border-slate-800/80">
-          <div className="flex items-start justify-between">
-            <div>
-              <p className="text-[11px] font-bold text-slate-400 uppercase tracking-wider">Total Expenses</p>
-              <h3 className="text-2xl font-black text-white mt-1">{formatCurrency(summary.totalExpenses)}</h3>
-              <p className="text-xs text-slate-500 mt-1">{summary.count} entries recorded</p>
-            </div>
-            <div className="p-3 bg-rose-500/10 border border-rose-500/20 text-rose-400 rounded-xl">
-              <DollarSign className="w-5 h-5" />
-            </div>
-          </div>
-        </Card>
-
-        <Card variant="glass" className="p-5 border border-slate-800/80">
-          <div className="flex items-start justify-between">
-            <div>
-              <p className="text-[11px] font-bold text-emerald-400 uppercase tracking-wider">Cash Drawer Paid</p>
-              <h3 className="text-2xl font-black text-emerald-400 mt-1">{formatCurrency(summary.totalCashDrawerExpenses)}</h3>
-              <p className="text-xs text-slate-500 mt-1">On-site cash box disbursements</p>
-            </div>
-            <div className="p-3 bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 rounded-xl">
-              <Banknote className="w-5 h-5" />
-            </div>
-          </div>
-        </Card>
-
-        <Card variant="glass" className="p-5 border border-slate-800/80">
-          <div className="flex items-start justify-between">
-            <div>
-              <p className="text-[11px] font-bold text-amber-400 uppercase tracking-wider">Machinery Rental</p>
-              <h3 className="text-2xl font-black text-amber-400 mt-1">{formatCurrency(summary.totalMachineRent)}</h3>
-              <p className="text-xs text-slate-500 mt-1">{summary.totalMachineHours} machine hours logged</p>
-            </div>
-            <div className="p-3 bg-amber-500/10 border border-amber-500/20 text-amber-400 rounded-xl">
-              <Truck className="w-5 h-5" />
-            </div>
-          </div>
-        </Card>
-
-        <Card variant="glass" className="p-5 border border-slate-800/80">
-          <div className="flex items-start justify-between">
-            <div>
-              <p className="text-[11px] font-bold text-cyan-400 uppercase tracking-wider">Advances Paid</p>
-              <h3 className="text-2xl font-black text-cyan-400 mt-1">{formatCurrency(summary.totalAdvancesPaid)}</h3>
-              <p className="text-xs text-slate-500 mt-1">Operator / diesel cash advances</p>
-            </div>
-            <div className="p-3 bg-cyan-500/10 border border-cyan-500/20 text-cyan-400 rounded-xl">
-              <Layers className="w-5 h-5" />
-            </div>
-          </div>
-        </Card>
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
+        <MetricCard
+          label="Total Expenses"
+          value={formatINR(summary.totalExpenses)}
+          subtext={`${summary.count} entries recorded`}
+          icon={<DollarSign className="w-5 h-5 text-rose-400" />}
+          variant="rose"
+        />
+        <MetricCard
+          label="Cash Drawer Paid"
+          value={formatINR(summary.totalCashDrawerExpenses)}
+          subtext="On-site cash box disbursements"
+          icon={<Banknote className="w-5 h-5 text-emerald-400" />}
+          variant="emerald"
+        />
+        <MetricCard
+          label="Machinery Rental"
+          value={formatINR(summary.totalMachineRent)}
+          subtext={`${summary.totalMachineHours} hrs logged`}
+          icon={<Truck className="w-5 h-5 text-amber-400" />}
+          variant="amber"
+        />
+        <MetricCard
+          label="Advances Paid"
+          value={formatINR(summary.totalAdvancesPaid)}
+          subtext="Operator / diesel cash advances"
+          icon={<Layers className="w-5 h-5 text-blue-400" />}
+          variant="blue"
+        />
       </div>
 
-      {/* Filter Bar */}
-      <Card variant="glass" className="p-4 border border-slate-800/80 space-y-3">
-        <div className="flex items-center justify-between">
-          <div className="flex items-center gap-2 text-xs font-bold text-slate-400 uppercase tracking-wider">
-            <Filter className="w-4 h-4 text-amber-400" />
-            Filter Expenses Ledger
-          </div>
-          {(selectedSiteId || selectedCategoryId || selectedMachineryId || selectedPaymentMode || startDate || endDate) && (
-            <button
-              onClick={() => {
-                setSelectedSiteId('');
-                setSelectedCategoryId('');
-                setSelectedMachineryId('');
-                setSelectedPaymentMode('');
-                setStartDate('');
-                setEndDate('');
-              }}
-              className="text-xs text-amber-400 hover:text-amber-300 font-bold transition"
-            >
-              Reset Filters
-            </button>
-          )}
-        </div>
+      {/* Modern FilterBar */}
+      <FilterBar
+        activePreset={filter.preset}
+        onPresetChange={filter.setPreset}
+        startDate={filter.startDate}
+        onStartDateChange={filter.setStartDate}
+        endDate={filter.endDate}
+        onEndDateChange={filter.setEndDate}
+        search={filter.search}
+        onSearchChange={filter.setSearch}
+        searchPlaceholder="Search category, paid to, vehicle, remarks..."
+        onExportCSV={handleExportCSV}
+      >
+        {user?.role !== 'SITE_BOY' && sites.length > 1 && (
+          <CustomSelect
+            value={selectedSiteId}
+            onChange={setSelectedSiteId}
+            placeholder="All Sites"
+            options={filterSiteOptions}
+          />
+        )}
 
-        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3">
-          <div>
-            <label className="block text-xs font-semibold text-slate-400 mb-1">Quarry Site</label>
-            <select
-              value={selectedSiteId}
-              onChange={(e) => setSelectedSiteId(e.target.value)}
-              className="w-full text-xs px-3 py-2 rounded-xl bg-slate-900 border border-slate-700 text-slate-200 focus:border-amber-500 focus:ring-1 focus:ring-amber-500 outline-none"
-            >
-              <option value="">All Sites</option>
-              {sites.map((s) => (
-                <option key={s.id} value={s.id}>
-                  {s.siteName}
-                </option>
-              ))}
-            </select>
-          </div>
+        <CustomSelect
+          value={selectedCategoryId}
+          onChange={setSelectedCategoryId}
+          placeholder="All Categories"
+          options={filterCategoryOptions}
+        />
 
-          <div>
-            <label className="block text-xs font-semibold text-slate-400 mb-1">Category</label>
-            <select
-              value={selectedCategoryId}
-              onChange={(e) => setSelectedCategoryId(e.target.value)}
-              className="w-full text-xs px-3 py-2 rounded-xl bg-slate-900 border border-slate-700 text-slate-200 focus:border-amber-500 focus:ring-1 focus:ring-amber-500 outline-none"
-            >
-              <option value="">All Categories</option>
-              {categories.map((c) => (
-                <option key={c.id} value={c.id}>
-                  {c.name}
-                </option>
-              ))}
-            </select>
-          </div>
+        <CustomSelect
+          value={selectedMachineryId}
+          onChange={setSelectedMachineryId}
+          placeholder="All Machines"
+          options={filterMachineryOptions}
+        />
 
-          <div>
-            <label className="block text-xs font-semibold text-slate-400 mb-1">Machinery</label>
-            <select
-              value={selectedMachineryId}
-              onChange={(e) => setSelectedMachineryId(e.target.value)}
-              className="w-full text-xs px-3 py-2 rounded-xl bg-slate-900 border border-slate-700 text-slate-200 focus:border-amber-500 focus:ring-1 focus:ring-amber-500 outline-none"
-            >
-              <option value="">All Machines</option>
-              {machinery.map((m) => (
-                <option key={m.id} value={m.id}>
-                  {m.name} {m.code ? `(${m.code})` : ''}
-                </option>
-              ))}
-            </select>
-          </div>
+        <CustomSelect
+          value={selectedPaymentMode}
+          onChange={setSelectedPaymentMode}
+          placeholder="All Payment Modes"
+          options={filterPaymentModeOptions}
+          searchable={false}
+        />
+      </FilterBar>
 
-          <div>
-            <label className="block text-xs font-semibold text-slate-400 mb-1">Payment Mode</label>
-            <select
-              value={selectedPaymentMode}
-              onChange={(e) => setSelectedPaymentMode(e.target.value)}
-              className="w-full text-xs px-3 py-2 rounded-xl bg-slate-900 border border-slate-700 text-slate-200 focus:border-amber-500 focus:ring-1 focus:ring-amber-500 outline-none"
-            >
-              <option value="">All Payment Modes</option>
-              {PAYMENT_MODES.map((pm) => (
-                <option key={pm.value} value={pm.value}>
-                  {pm.label}
-                </option>
-              ))}
-            </select>
-          </div>
 
-          <div>
-            <label className="block text-xs font-semibold text-slate-400 mb-1">From Date</label>
-            <input
-              type="date"
-              value={startDate}
-              onChange={(e) => setStartDate(e.target.value)}
-              className="w-full text-xs px-3 py-2 rounded-xl bg-slate-900 border border-slate-700 text-slate-200 focus:border-amber-500 focus:ring-1 focus:ring-amber-500 outline-none"
-            />
-          </div>
-
-          <div>
-            <label className="block text-xs font-semibold text-slate-400 mb-1">To Date</label>
-            <input
-              type="date"
-              value={endDate}
-              onChange={(e) => setEndDate(e.target.value)}
-              className="w-full text-xs px-3 py-2 rounded-xl bg-slate-900 border border-slate-700 text-slate-200 focus:border-amber-500 focus:ring-1 focus:ring-amber-500 outline-none"
-            />
-          </div>
-        </div>
-      </Card>
 
       {/* Expenses Ledger Table */}
       <div className="overflow-hidden rounded-2xl border border-slate-800 bg-slate-900/60 backdrop-blur-md shadow-xl">
@@ -568,28 +626,14 @@ export const ExpensesPage: React.FC = () => {
           <div className="p-12 text-center text-slate-400 animate-pulse">Loading expenses ledger...</div>
         ) : error ? (
           <div className="p-8 text-center text-rose-400 font-semibold">{error}</div>
-        ) : expenses.length === 0 ? (
-          <div className="p-12 text-center space-y-3">
-            <DollarSign className="w-12 h-12 text-slate-600 mx-auto" />
-            <h4 className="text-base font-bold text-slate-200">No expenses recorded</h4>
-            <p className="text-xs text-slate-400 max-w-sm mx-auto">
-              Start recording quarry expenses, diesel consumption, labour wages, or heavy machinery rental logs.
-            </p>
-            <div className="pt-2 flex justify-center gap-3">
-              <button
-                onClick={() => openCreateModal('GENERAL')}
-                className="px-4 py-2 bg-amber-500 hover:bg-amber-400 text-slate-950 text-xs font-bold rounded-xl transition cursor-pointer shadow-md"
-              >
-                + Add General Expense
-              </button>
-              <button
-                onClick={() => openCreateModal('MACHINERY')}
-                className="px-4 py-2 bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-bold rounded-xl border border-slate-700 transition cursor-pointer"
-              >
-                + Log Machine Hours
-              </button>
-            </div>
-          </div>
+        ) : filteredExpenses.length === 0 ? (
+          <EmptyState
+            icon={<DollarSign className="w-8 h-8 text-slate-500" />}
+            title="No expenses recorded"
+            description="Start recording quarry expenses, diesel consumption, labour wages, or heavy machinery rental logs."
+            actionText="+ Add General Expense"
+            onAction={() => openCreateModal('GENERAL')}
+          />
         ) : (
           <div className="overflow-x-auto">
             <table className="w-full text-left text-sm text-slate-300">
@@ -605,10 +649,10 @@ export const ExpensesPage: React.FC = () => {
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-800/60">
-                {expenses.map((exp) => {
+                {filteredExpenses.map((exp) => {
                   const pmConfig = PAYMENT_MODES.find((p) => p.value === exp.paymentMode) || PAYMENT_MODES[0];
                   return (
-                    <tr key={exp.id} className="hover:bg-slate-800/40 transition">
+                    <tr key={exp.id} className="hover:bg-slate-800/40 transition content-visibility-auto">
                       <td className="px-4 py-3.5 whitespace-nowrap">
                         <div className="font-bold text-white">{exp.date.slice(0, 10)}</div>
                         <div className="text-xs text-slate-400 mt-0.5 flex items-center gap-1">
@@ -635,7 +679,7 @@ export const ExpensesPage: React.FC = () => {
                               {exp.startTime} - {exp.closingTime} ({exp.totalHours} hrs)
                             </span>
                             {exp.rentPerHour && (
-                              <span className="text-slate-400">@ {formatCurrency(exp.rentPerHour)}/hr</span>
+                              <span className="text-slate-400">@ {formatINR(exp.rentPerHour)}/hr</span>
                             )}
                             {exp.startMeterReading && exp.endMeterReading && (
                               <span className="text-slate-500 font-mono">
@@ -667,19 +711,18 @@ export const ExpensesPage: React.FC = () => {
 
                       <td className="px-4 py-3.5 whitespace-nowrap text-right text-xs">
                         {exp.advanceAmount && Number(exp.advanceAmount) > 0 ? (
-                          <span className="font-bold text-amber-400">{formatCurrency(exp.advanceAmount)}</span>
+                          <span className="font-bold text-amber-400">{formatINR(exp.advanceAmount)}</span>
                         ) : (
                           <span className="text-slate-600">—</span>
                         )}
                       </td>
 
                       <td className="px-4 py-3.5 whitespace-nowrap text-right font-black text-white text-base">
-                        {formatCurrency(exp.amount)}
+                        {formatINR(exp.amount)}
                       </td>
 
                       <td className="px-4 py-3.5 whitespace-nowrap text-right">
                         <div className="flex items-center justify-end gap-1.5">
-                          {/* Edit button with 2-hour window check for Site Boy */}
                           {(() => {
                             const isSiteBoy = user?.role === 'SITE_BOY';
                             const isOlderThan2Hours =
@@ -698,24 +741,28 @@ export const ExpensesPage: React.FC = () => {
                             }
 
                             return (
-                              <button
+                              <Button
+                                variant="ghost"
+                                size="icon"
                                 onClick={() => openEditModal(exp)}
-                                className="p-1.5 text-slate-400 hover:text-amber-400 hover:bg-slate-800 rounded-lg transition cursor-pointer"
+                                className="text-slate-400 hover:text-amber-400"
                                 title="Edit Record"
                               >
                                 <Edit2 className="w-4 h-4" />
-                              </button>
+                              </Button>
                             );
                           })()}
 
                           {(user?.role === 'OWNER' || user?.role === 'SUPER_ADMIN') && (
-                            <button
+                            <Button
+                              variant="ghost"
+                              size="icon"
                               onClick={() => setDeletingExpenseId(exp.id)}
-                              className="p-1.5 text-slate-400 hover:text-rose-400 hover:bg-slate-800 rounded-lg transition cursor-pointer"
+                              className="text-slate-400 hover:text-rose-400"
                               title="Delete Record"
                             >
                               <Trash2 className="w-4 h-4" />
-                            </button>
+                            </Button>
                           )}
                         </div>
                       </td>
@@ -730,331 +777,312 @@ export const ExpensesPage: React.FC = () => {
 
       {/* Record / Edit Expense Modal */}
       {isModalOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/80 backdrop-blur-sm p-4 overflow-y-auto animate-fade-in">
-          <div className="bg-slate-900 border border-slate-800 text-slate-100 rounded-2xl shadow-2xl max-w-xl w-full p-6 space-y-5 my-8 relative">
-            <div className="flex items-center justify-between pb-3 border-b border-slate-800">
-              <h3 className="text-lg font-bold text-white flex items-center gap-2">
-                <Sparkles className="w-5 h-5 text-amber-400" />
-                {editingExpense ? 'Edit Expense Record' : 'Record New Expense'}
-              </h3>
+        <Modal
+          isOpen={isModalOpen}
+          onClose={() => setIsModalOpen(false)}
+          title={editingExpense ? 'Edit Expense Record' : 'Record New Expense'}
+          icon={<Sparkles className="w-5 h-5 text-amber-400" />}
+          maxWidth="xl"
+        >
+          {/* Mode Switcher */}
+          {!editingExpense && (
+            <div className="flex p-1 bg-slate-950 rounded-xl border border-slate-800">
               <button
-                onClick={() => setIsModalOpen(false)}
-                className="p-1 text-slate-400 hover:text-white rounded-lg transition"
+                type="button"
+                onClick={() => setEntryMode('GENERAL')}
+                className={`flex-1 py-2 text-xs font-bold rounded-lg transition cursor-pointer ${
+                  entryMode === 'GENERAL'
+                    ? 'bg-amber-500 text-slate-950 shadow-md shadow-amber-500/20 font-black'
+                    : 'text-slate-400 hover:text-white'
+                }`}
               >
-                <X className="w-5 h-5" />
+                General Site Expense
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  if (machinery.length === 0) {
+                    setShowNoMachineryModal(true);
+                  } else {
+                    setEntryMode('MACHINERY');
+                  }
+                }}
+                className={`flex-1 py-2 text-xs font-bold rounded-lg transition cursor-pointer ${
+                  entryMode === 'MACHINERY'
+                    ? 'bg-amber-500 text-slate-950 shadow-md shadow-amber-500/20 font-black'
+                    : 'text-slate-400 hover:text-white'
+                }`}
+              >
+                Heavy Machinery / Hitachi Log
               </button>
             </div>
+          )}
 
-            {/* Mode Switcher */}
-            {!editingExpense && (
-              <div className="flex p-1 bg-slate-950 rounded-xl border border-slate-800">
-                <button
-                  type="button"
-                  onClick={() => setEntryMode('GENERAL')}
-                  className={`flex-1 py-2 text-xs font-bold rounded-lg transition ${
-                    entryMode === 'GENERAL'
-                      ? 'bg-amber-500 text-slate-950 shadow-md shadow-amber-500/20'
-                      : 'text-slate-400 hover:text-white'
-                  }`}
-                >
-                  General Site Expense
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setEntryMode('MACHINERY')}
-                  className={`flex-1 py-2 text-xs font-bold rounded-lg transition ${
-                    entryMode === 'MACHINERY'
-                      ? 'bg-amber-500 text-slate-950 shadow-md shadow-amber-500/20'
-                      : 'text-slate-400 hover:text-white'
-                  }`}
-                >
-                  Heavy Machinery / Hitachi Log
-                </button>
-              </div>
-            )}
+          {formError && (
+            <div className="p-3 bg-rose-500/10 border border-rose-500/30 text-rose-400 text-xs rounded-xl flex items-center gap-2">
+              <AlertCircle className="w-4 h-4 shrink-0" />
+              <span>{formError}</span>
+            </div>
+          )}
 
-            {formError && (
-              <div className="p-3 bg-rose-500/10 border border-rose-500/30 text-rose-400 text-xs rounded-xl flex items-center gap-2">
-                <AlertCircle className="w-4 h-4 shrink-0" />
-                <span>{formError}</span>
-              </div>
-            )}
+          <form onSubmit={handleSaveExpense} className="space-y-4">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <CustomSelect
+                label="Quarry Site"
+                required
+                disabled={user?.role === 'SITE_BOY'}
+                value={formSiteId}
+                onChange={setFormSiteId}
+                options={modalSiteOptions}
+              />
 
-            <form onSubmit={handleSaveExpense} className="space-y-4">
+              <DateInput
+                label="Date"
+                value={formDate}
+                onChange={setFormDate}
+                clearable={false}
+              />
+            </div>
+
+            {entryMode === 'GENERAL' ? (
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                <div>
-                  <label className="block text-xs font-semibold text-slate-300 mb-1">
-                    Quarry Site <span className="text-rose-400">*</span>
-                  </label>
-                  <select
-                    value={formSiteId}
-                    onChange={(e) => setFormSiteId(e.target.value)}
-                    required
-                    disabled={user?.role === 'SITE_BOY'}
-                    className="w-full text-sm px-3.5 py-2.5 rounded-xl bg-slate-950 border border-slate-700 text-white focus:border-amber-500 focus:ring-1 focus:ring-amber-500 outline-none disabled:opacity-60 disabled:cursor-not-allowed"
-                  >
-                    {sites.map((s) => (
-                      <option key={s.id} value={s.id}>
-                        {s.siteName}
-                      </option>
-                    ))}
-                  </select>
-                </div>
+                <CustomSelect
+                  label="Expense Category"
+                  required
+                  value={formCategoryId}
+                  onChange={setFormCategoryId}
+                  options={modalCategoryOptions}
+                />
 
-                <div>
-                  <label className="block text-xs font-semibold text-slate-300 mb-1">
-                    Date <span className="text-rose-400">*</span>
-                  </label>
-                  <input
-                    type="date"
-                    value={formDate}
-                    onChange={(e) => setFormDate(e.target.value)}
+                <Input
+                  label="Amount (₹)"
+                  type="number"
+                  step="0.01"
+                  min="0.01"
+                  placeholder="e.g. 5000"
+                  value={formAmount}
+                  onChange={(e) => setFormAmount(e.target.value)}
+                  leftIcon={<span className="font-bold text-slate-500">₹</span>}
+                  required
+                  className="font-bold text-emerald-400"
+                />
+              </div>
+            ) : (
+              <div className="space-y-4">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  <CustomSelect
+                    label="Heavy Machinery"
                     required
-                    className="w-full text-sm px-3.5 py-2.5 rounded-xl bg-slate-950 border border-slate-700 text-white focus:border-amber-500 focus:ring-1 focus:ring-amber-500 outline-none"
+                    value={formMachineryId}
+                    onChange={handleMachineChange}
+                    options={modalMachineryOptions}
+                  />
+
+
+                  <Input
+                    label="Rent Rate per Hour (₹)"
+                    type="number"
+                    step="0.01"
+                    min="0"
+                    placeholder="e.g. 2500"
+                    value={formRentPerHour}
+                    onChange={(e) => setFormRentPerHour(e.target.value)}
+                    leftIcon={<span className="font-bold text-slate-500">₹</span>}
+                    required
+                    className="font-bold text-emerald-400"
                   />
                 </div>
-              </div>
 
-              {entryMode === 'GENERAL' ? (
+                {/* Primary Hour Meter Reading Inputs */}
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                  <div>
-                    <label className="block text-xs font-semibold text-slate-300 mb-1">
-                      Expense Category <span className="text-rose-400">*</span>
-                    </label>
-                    <select
-                      value={formCategoryId}
-                      onChange={(e) => setFormCategoryId(e.target.value)}
-                      required
-                      className="w-full text-sm px-3.5 py-2.5 rounded-xl bg-slate-950 border border-slate-700 text-white focus:border-amber-500 focus:ring-1 focus:ring-amber-500 outline-none"
-                    >
-                      {categories.map((c) => (
-                        <option key={c.id} value={c.id}>
-                          {c.name}
-                        </option>
-                      ))}
-                    </select>
-                  </div>
+                  <Input
+                    label="Start Meter Reading"
+                    type="number"
+                    step="0.1"
+                    placeholder="e.g. 1420.0"
+                    value={formStartMeter}
+                    onChange={(e) => setFormStartMeter(e.target.value)}
+                    leftIcon={<Gauge className="w-3.5 h-3.5 text-amber-400" />}
+                    required
+                    className="font-mono font-bold"
+                  />
 
-                  <div>
-                    <label className="block text-xs font-semibold text-slate-300 mb-1">
-                      Amount (₹) <span className="text-rose-400">*</span>
-                    </label>
-                    <input
-                      type="number"
-                      step="0.01"
-                      min="0.01"
-                      placeholder="e.g. 5000"
-                      value={formAmount}
-                      onChange={(e) => setFormAmount(e.target.value)}
-                      required
-                      className="w-full text-sm px-3.5 py-2.5 rounded-xl bg-slate-950 border border-slate-700 text-white font-bold focus:border-amber-500 focus:ring-1 focus:ring-amber-500 outline-none"
-                    />
-                  </div>
+                  <Input
+                    label="End Meter Reading"
+                    type="number"
+                    step="0.1"
+                    placeholder="e.g. 1428.5"
+                    value={formEndMeter}
+                    onChange={(e) => setFormEndMeter(e.target.value)}
+                    leftIcon={<Gauge className="w-3.5 h-3.5 text-amber-400" />}
+                    required
+                    className="font-mono font-bold"
+                  />
                 </div>
-              ) : (
-                /* Machinery / Hitachi Log Form */
-                <div className="space-y-4">
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                    <div>
-                      <label className="block text-xs font-semibold text-slate-300 mb-1">
-                        Heavy Machinery <span className="text-rose-400">*</span>
-                      </label>
-                      <select
-                        value={formMachineryId}
-                        onChange={(e) => handleMachineChange(e.target.value)}
-                        required
-                        className="w-full text-sm px-3.5 py-2.5 rounded-xl bg-slate-950 border border-slate-700 text-white focus:border-amber-500 focus:ring-1 focus:ring-amber-500 outline-none"
-                      >
-                        {machinery.map((m) => (
-                          <option key={m.id} value={m.id}>
-                            {m.name} {m.code ? `(${m.code})` : ''}
-                          </option>
-                        ))}
-                      </select>
-                    </div>
 
-                    <div>
-                      <label className="block text-xs font-semibold text-slate-300 mb-1">
-                        Rent Rate per Hour (₹) <span className="text-rose-400">*</span>
-                      </label>
-                      <input
-                        type="number"
-                        step="0.01"
-                        min="0"
-                        placeholder="e.g. 2500"
-                        value={formRentPerHour}
-                        onChange={(e) => setFormRentPerHour(e.target.value)}
-                        required
-                        className="w-full text-sm px-3.5 py-2.5 rounded-xl bg-slate-950 border border-slate-700 text-white font-bold focus:border-amber-500 focus:ring-1 focus:ring-amber-500 outline-none"
-                      />
-                    </div>
-                  </div>
-
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                    <div>
-                      <label className="block text-xs font-semibold text-slate-300 mb-1">
-                        Start Time <span className="text-rose-400">*</span>
-                      </label>
-                      <input
-                        type="text"
-                        placeholder="e.g. 08:00 AM or 22:00"
-                        value={formStartTime}
-                        onChange={(e) => setFormStartTime(e.target.value)}
-                        required
-                        className="w-full text-sm px-3.5 py-2.5 rounded-xl bg-slate-950 border border-slate-700 text-white focus:border-amber-500 focus:ring-1 focus:ring-amber-500 outline-none"
-                      />
-                    </div>
-
-                    <div>
-                      <label className="block text-xs font-semibold text-slate-300 mb-1">
-                        Closing Time <span className="text-rose-400">*</span>
-                      </label>
-                      <input
-                        type="text"
-                        placeholder="e.g. 05:30 PM or 04:30 AM"
-                        value={formClosingTime}
-                        onChange={(e) => setFormClosingTime(e.target.value)}
-                        required
-                        className="w-full text-sm px-3.5 py-2.5 rounded-xl bg-slate-950 border border-slate-700 text-white focus:border-amber-500 focus:ring-1 focus:ring-amber-500 outline-none"
-                      />
-                    </div>
-                  </div>
-
-                  {/* Live Calculation Preview */}
-                  {liveMachineryCalculation && (
-                    <div className="p-3.5 bg-gradient-to-r from-amber-500/10 via-slate-950 to-slate-950 border border-amber-500/30 rounded-xl flex items-center justify-between">
-                      <div className="space-y-0.5">
-                        <div className="text-xs font-bold text-white flex items-center gap-1.5">
-                          <Clock className="w-3.5 h-3.5 text-amber-400" />
-                          <span>
-                            Working Duration: <strong className="text-amber-400">{liveMachineryCalculation.hours} hrs</strong>
-                          </span>
-                          {liveMachineryCalculation.isOvernight && (
-                            <span className="px-1.5 py-0.2 rounded text-[10px] bg-purple-500/20 text-purple-300 font-bold border border-purple-500/30">
-                              Overnight
-                            </span>
-                          )}
-                        </div>
-                        <div className="text-[11px] text-slate-400">
-                          {liveMachineryCalculation.hours} hrs × {formatCurrency(liveMachineryCalculation.rentRate)}
-                        </div>
-                      </div>
-                      <div className="text-right">
-                        <span className="text-[11px] text-slate-400 font-medium block">Total Rent</span>
-                        <span className="text-base font-black text-amber-400">
-                          {formatCurrency(liveMachineryCalculation.totalRent)}
+                {/* Live Calculation Preview */}
+                {liveMachineryCalculation && (
+                  <div className="p-3.5 bg-gradient-to-r from-amber-500/10 via-slate-950 to-slate-950 border border-amber-500/30 rounded-xl flex items-center justify-between">
+                    <div className="space-y-0.5">
+                      <div className="text-xs font-bold text-white flex items-center gap-1.5">
+                        <Gauge className="w-3.5 h-3.5 text-amber-400" />
+                        <span>
+                          Total Machine Hours: <strong className="text-amber-400">{liveMachineryCalculation.hours} hrs</strong>
+                        </span>
+                        <span className="px-1.5 py-0.2 rounded text-[10px] bg-slate-800 text-slate-300 font-bold border border-slate-700">
+                          {liveMachineryCalculation.calculationSource === 'METER' ? 'Meter Diff' : 'Time Diff'}
                         </span>
                       </div>
+                      <div className="text-[11px] text-slate-400">
+                        {liveMachineryCalculation.hours} hrs × {formatINR(liveMachineryCalculation.rentRate)}/hr
+                      </div>
                     </div>
-                  )}
-
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                    <div>
-                      <label className="block text-xs font-semibold text-slate-300 mb-1">Start Meter Reading</label>
-                      <input
-                        type="number"
-                        step="0.1"
-                        placeholder="e.g. 1420.5"
-                        value={formStartMeter}
-                        onChange={(e) => setFormStartMeter(e.target.value)}
-                        className="w-full text-sm px-3.5 py-2.5 rounded-xl bg-slate-950 border border-slate-700 text-white focus:border-amber-500 focus:ring-1 focus:ring-amber-500 outline-none"
-                      />
-                    </div>
-
-                    <div>
-                      <label className="block text-xs font-semibold text-slate-300 mb-1">End Meter Reading</label>
-                      <input
-                        type="number"
-                        step="0.1"
-                        placeholder="e.g. 1429.5"
-                        value={formEndMeter}
-                        onChange={(e) => setFormEndMeter(e.target.value)}
-                        className="w-full text-sm px-3.5 py-2.5 rounded-xl bg-slate-950 border border-slate-700 text-white focus:border-amber-500 focus:ring-1 focus:ring-amber-500 outline-none"
-                      />
+                    <div className="text-right">
+                      <span className="text-[11px] text-slate-400 font-medium block">Machine Rental Expense</span>
+                      <span className="text-base font-black text-amber-400">
+                        {formatINR(liveMachineryCalculation.totalRent)}
+                      </span>
                     </div>
                   </div>
+                )}
 
-                  <div>
-                    <label className="block text-xs font-semibold text-slate-300 mb-1">
-                      Operator / Diesel Cash Advance (₹)
-                    </label>
-                    <input
-                      type="number"
-                      step="0.01"
-                      min="0"
-                      placeholder="e.g. 2000"
-                      value={formAdvanceAmount}
-                      onChange={(e) => setFormAdvanceAmount(e.target.value)}
-                      className="w-full text-sm px-3.5 py-2.5 rounded-xl bg-slate-950 border border-slate-700 text-amber-400 font-bold focus:border-amber-500 focus:ring-1 focus:ring-amber-500 outline-none"
-                    />
-                  </div>
-                </div>
-              )}
+                {/* Advance Amount */}
+                <Input
+                  label="Operator / Diesel Cash Advance (₹)"
+                  type="number"
+                  step="0.01"
+                  min="0"
+                  placeholder="e.g. 2000"
+                  value={formAdvanceAmount}
+                  onChange={(e) => setFormAdvanceAmount(e.target.value)}
+                  leftIcon={<span className="font-bold text-slate-500">₹</span>}
+                  className="font-bold text-amber-400"
+                />
 
-              {/* Payment Mode Selector */}
-              <div>
-                <label className="block text-xs font-semibold text-slate-300 mb-1.5">Payment Mode</label>
-                <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
-                  {PAYMENT_MODES.map((pm) => (
-                    <button
-                      type="button"
-                      key={pm.value}
-                      onClick={() => setFormPaymentMode(pm.value)}
-                      className={`px-3 py-2 text-xs font-bold rounded-xl border text-center transition cursor-pointer ${
-                        formPaymentMode === pm.value
-                          ? `${pm.badgeClass} ring-2 ring-amber-500 font-black shadow-md`
-                          : 'bg-slate-950 text-slate-400 border-slate-800 hover:bg-slate-800'
-                      }`}
-                    >
-                      {pm.label}
-                    </button>
-                  ))}
-                </div>
-              </div>
-
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                <div>
-                  <label className="block text-xs font-semibold text-slate-300 mb-1">Paid To / Operator / Vendor</label>
-                  <input
+                {/* Optional Time Window Inputs */}
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-1 border-t border-slate-800/60">
+                  <Input
+                    label="Shift Start Time (Optional)"
                     type="text"
-                    placeholder="e.g. Suresh (Driver)"
-                    value={formPaidTo}
-                    onChange={(e) => setFormPaidTo(e.target.value)}
-                    className="w-full text-sm px-3.5 py-2.5 rounded-xl bg-slate-950 border border-slate-700 text-white focus:border-amber-500 focus:ring-1 focus:ring-amber-500 outline-none"
+                    placeholder="e.g. 08:00 AM"
+                    value={formStartTime}
+                    onChange={(e) => setFormStartTime(e.target.value)}
+                    className="text-xs"
                   />
-                </div>
 
-                <div>
-                  <label className="block text-xs font-semibold text-slate-300 mb-1">Remarks / Invoice Notes</label>
-                  <input
+                  <Input
+                    label="Shift Closing Time (Optional)"
                     type="text"
-                    placeholder="e.g. Diesel 50L for generator"
-                    value={formRemarks}
-                    onChange={(e) => setFormRemarks(e.target.value)}
-                    className="w-full text-sm px-3.5 py-2.5 rounded-xl bg-slate-950 border border-slate-700 text-white focus:border-amber-500 focus:ring-1 focus:ring-amber-500 outline-none"
+                    placeholder="e.g. 05:30 PM"
+                    value={formClosingTime}
+                    onChange={(e) => setFormClosingTime(e.target.value)}
+                    className="text-xs"
                   />
                 </div>
               </div>
+            )}
 
-              <div className="flex items-center justify-end gap-3 pt-3 border-t border-slate-800">
-                <button
-                  type="button"
-                  onClick={() => setIsModalOpen(false)}
-                  className="px-4 py-2 text-xs font-bold text-slate-400 hover:text-white rounded-xl transition cursor-pointer"
-                >
-                  Cancel
-                </button>
-                <button
-                  type="submit"
-                  disabled={isSubmitting}
-                  className="px-5 py-2.5 text-xs font-bold text-slate-950 bg-amber-500 hover:bg-amber-400 rounded-xl shadow-lg shadow-amber-500/20 transition cursor-pointer disabled:opacity-50"
-                >
-                  {isSubmitting ? 'Saving...' : editingExpense ? 'Update Expense' : 'Save Expense Record'}
-                </button>
+            {/* Payment Mode Selector */}
+            <div>
+              <label className="block text-xs font-semibold text-slate-300 mb-1.5">Payment Mode</label>
+              <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
+                {PAYMENT_MODES.map((pm) => (
+                  <button
+                    type="button"
+                    key={pm.value}
+                    onClick={() => setFormPaymentMode(pm.value)}
+                    className={`px-3 py-2 text-xs font-bold rounded-xl border text-center transition cursor-pointer ${
+                      formPaymentMode === pm.value
+                        ? `${pm.badgeClass} ring-2 ring-amber-500 font-black shadow-md`
+                        : 'bg-slate-950 text-slate-400 border-slate-800 hover:bg-slate-800'
+                    }`}
+                  >
+                    {pm.label}
+                  </button>
+                ))}
               </div>
-            </form>
+            </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <Input
+                label="Paid To / Operator / Vendor"
+                type="text"
+                placeholder="e.g. Suresh (Driver)"
+                value={formPaidTo}
+                onChange={(e) => setFormPaidTo(e.target.value)}
+              />
+
+              <Input
+                label="Remarks / Invoice Notes"
+                type="text"
+                placeholder="e.g. Diesel 50L for generator"
+                value={formRemarks}
+                onChange={(e) => setFormRemarks(e.target.value)}
+              />
+            </div>
+
+            <div className="flex items-center justify-end gap-3 pt-3 border-t border-slate-800">
+              <Button
+                variant="secondary"
+                size="md"
+                onClick={() => setIsModalOpen(false)}
+              >
+                Cancel
+              </Button>
+              <Button
+                type="submit"
+                variant="primary"
+                size="md"
+                loading={isSubmitting}
+                loadingText="Saving..."
+              >
+                {editingExpense ? 'Update Expense' : 'Save Expense Record'}
+              </Button>
+            </div>
+          </form>
+        </Modal>
+      )}
+
+      {/* No Machinery Available Prompt Modal */}
+      {showNoMachineryModal && (
+        <Modal
+          isOpen={showNoMachineryModal}
+          onClose={() => setShowNoMachineryModal(false)}
+          title="No Machinery Registered"
+          icon={<Truck className="w-5 h-5 text-amber-400" />}
+          maxWidth="sm"
+        >
+          <div className="text-center space-y-3 py-2">
+            <div className="w-12 h-12 rounded-2xl bg-amber-500/10 border border-amber-500/20 text-amber-400 flex items-center justify-center mx-auto">
+              <Truck className="w-6 h-6" />
+            </div>
+            <p className="text-xs text-slate-400 leading-relaxed">
+              You do not have any heavy machinery units (Excavator, JCB, Loader) configured in Master Data yet. Register your machinery first to start recording meter readings and hourly logs.
+            </p>
           </div>
-        </div>
+          <div className="flex items-center gap-3 pt-3 border-t border-slate-800">
+            <Button
+              variant="secondary"
+              size="md"
+              fullWidth
+              onClick={() => setShowNoMachineryModal(false)}
+            >
+              Cancel
+            </Button>
+            <Button
+              variant="primary"
+              size="md"
+              fullWidth
+              leftIcon={<Plus className="w-4 h-4" />}
+              onClick={() => {
+                setShowNoMachineryModal(false);
+                navigate('/masters?tab=machinery');
+              }}
+            >
+              Add Machinery
+            </Button>
+          </div>
+        </Modal>
       )}
 
       {/* Delete Confirmation Modal */}

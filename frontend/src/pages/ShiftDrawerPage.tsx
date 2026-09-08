@@ -1,4 +1,5 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
+
 import {
   Wallet,
   ArrowDownRight,
@@ -18,11 +19,24 @@ import {
   HelpCircle,
   Coins,
 } from 'lucide-react';
-import { Card } from '../components/common/Card';
-import { ConfirmModal } from '../components/common/ConfirmModal';
-import { CustomSelect } from '../components/common/CustomSelect';
+import {
+  Button,
+  Input,
+  Textarea,
+  DateInput,
+  CustomSelect,
+  Badge,
+  Modal,
+  TabBar,
+  Card,
+  PageHeader,
+  MetricCard,
+  EmptyState,
+} from '../components/common';
 import { useAuth } from '../context/AuthContext';
+import { useToast } from '../context/ToastContext';
 import { useMasterCache } from '../context/MasterCacheContext';
+import { formatINR } from '../utils/formatters';
 import {
   CurrentDrawerResponse,
   ShiftReconciliationRecord,
@@ -31,9 +45,11 @@ import {
   approveShiftApi,
   getShiftsHistoryApi,
 } from '../api/shifts';
+import { queryCache } from '../utils/queryCache';
 
 export const ShiftDrawerPage: React.FC = () => {
   const { user } = useAuth();
+  const toast = useToast();
   const cache = useMasterCache();
   const isSiteBoy = user?.role === 'SITE_BOY';
   const isOwner = user?.role === 'OWNER' || user?.role === 'SUPER_ADMIN';
@@ -57,16 +73,34 @@ export const ShiftDrawerPage: React.FC = () => {
   const [activeTab, setActiveTab] = useState<'drawer' | 'history'>('drawer');
 
   // Shift Close Form State
+  const [openingCashInput, setOpeningCashInput] = useState<string>('');
   const [actualHandoverCash, setActualHandoverCash] = useState<string>('');
   const [shiftType, setShiftType] = useState<string>('DAY');
   const [remarks, setRemarks] = useState<string>('');
   const [submitting, setSubmitting] = useState(false);
-  const [notification, setNotification] = useState<{
-    type: 'success' | 'error';
-    message: string;
-  } | null>(null);
+
+  // Memoized Select Options for 0ms Rendering
+  const activeSiteOptions = useMemo(
+    () =>
+      activeSites.map((s) => ({
+        value: s.id,
+        label: s.siteName,
+        subLabel: s.location || undefined,
+      })),
+    [activeSites]
+  );
+
+  const shiftWindowOptions = useMemo(
+    () => [
+      { value: 'DAY', label: 'Day Shift (06:00 AM – 06:00 PM)' },
+      { value: 'NIGHT', label: 'Night Shift (06:00 PM – 06:00 AM)' },
+      { value: 'GENERAL', label: 'Full Day / General Shift' },
+    ],
+    []
+  );
 
   // Approve Modal
+
   const [approvingShift, setApprovingShift] = useState<ShiftReconciliationRecord | null>(null);
   const [approveRemarks, setApproveRemarks] = useState('');
   const [approving, setApproving] = useState(false);
@@ -80,10 +114,12 @@ export const ShiftDrawerPage: React.FC = () => {
       const res = await getCurrentDrawerApi(siteId, date);
       setDrawerData(res);
       if (res.existingShift) {
+        setOpeningCashInput(String(res.existingShift.openingCash));
         setActualHandoverCash(String(res.existingShift.actualHandoverCash));
         setRemarks(res.existingShift.remarks || '');
         setShiftType(res.existingShift.shiftType || 'DAY');
       } else {
+        setOpeningCashInput(String(res.openingCash || 0));
         setActualHandoverCash('');
         setRemarks('');
       }
@@ -120,17 +156,23 @@ export const ShiftDrawerPage: React.FC = () => {
       fetchHistory();
     }
   }, [activeTab]);
+  const effectiveOpeningCash = openingCashInput !== '' && !isNaN(Number(openingCashInput))
+    ? Number(openingCashInput)
+    : Number(drawerData?.openingCash || 0);
 
-  const showToast = (type: 'success' | 'error', message: string) => {
-    setNotification({ type, message });
-    setTimeout(() => setNotification(null), 4000);
-  };
+  const liveCashInflows = Number(drawerData?.cashInflows || 0);
+  const liveCashOutflows = Number(drawerData?.cashOutflows || 0);
+  const liveExpectedCash = effectiveOpeningCash + liveCashInflows - liveCashOutflows;
+
+  const countedNum = actualHandoverCash ? Number(actualHandoverCash) : null;
+  const discrepancy =
+    countedNum !== null ? countedNum - liveExpectedCash : null;
 
   // Submit Shift Handover
   const handleCloseShift = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!actualHandoverCash || isNaN(Number(actualHandoverCash))) {
-      showToast('error', 'Please enter a valid actual counted cash amount.');
+      toast.error('Please enter a valid actual counted cash amount.');
       return;
     }
 
@@ -140,14 +182,16 @@ export const ShiftDrawerPage: React.FC = () => {
         siteId: selectedSiteId,
         date: selectedDate,
         shiftType,
+        openingCash: effectiveOpeningCash,
         actualHandoverCash: Number(actualHandoverCash),
         remarks: remarks.trim() || undefined,
       });
-      showToast('success', 'Shift cash drawer recorded and submitted for owner approval!');
+      queryCache.invalidate('dashboard_');
+      toast.success('Shift cash drawer recorded and submitted for owner approval!');
       await fetchDrawer(selectedSiteId, selectedDate);
       if (activeTab === 'history') fetchHistory();
     } catch (err: any) {
-      showToast('error', err.message || 'Failed to submit shift handover');
+      toast.error(err.message || 'Failed to submit shift handover');
     } finally {
       setSubmitting(false);
     }
@@ -159,87 +203,38 @@ export const ShiftDrawerPage: React.FC = () => {
     try {
       setApproving(true);
       await approveShiftApi(approvingShift.id, approveRemarks.trim() || undefined);
-      showToast('success', `Shift on ${new Date(approvingShift.date).toLocaleDateString()} approved successfully`);
+      queryCache.invalidate('dashboard_');
+      toast.success(`Shift on ${new Date(approvingShift.date).toLocaleDateString()} approved successfully`);
       setApprovingShift(null);
       setApproveRemarks('');
       await fetchDrawer(selectedSiteId, selectedDate);
       await fetchHistory();
     } catch (err: any) {
-      showToast('error', err.message || 'Failed to approve shift handover');
+      toast.error(err.message || 'Failed to approve shift handover');
     } finally {
       setApproving(false);
     }
   };
 
-  const countedNum = actualHandoverCash ? Number(actualHandoverCash) : null;
-  const discrepancy =
-    countedNum !== null && drawerData ? countedNum - drawerData.expectedCash : null;
-
   return (
     <div className="space-y-6">
-      {/* Toast Notification */}
-      {notification && (
-        <div
-          className={`flex items-center gap-2.5 p-4 rounded-2xl text-sm font-semibold animate-fade-in shadow-xl ${
-            notification.type === 'success'
-              ? 'bg-emerald-500/10 border border-emerald-500/30 text-emerald-400'
-              : 'bg-rose-500/10 border border-rose-500/30 text-rose-400'
-          }`}
-        >
-          {notification.type === 'success' ? (
-            <CheckCircle2 className="w-5 h-5 shrink-0" />
-          ) : (
-            <AlertTriangle className="w-5 h-5 shrink-0" />
-          )}
-          <span>{notification.message}</span>
-        </div>
-      )}
-
       {/* Header & Site/Date Controls */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-        <div>
-          <div className="flex items-center gap-2.5">
-            <h1 className="text-xl sm:text-2xl font-black text-white tracking-tight flex items-center gap-2.5">
-              <Wallet className="w-6 h-6 text-amber-400" />
-              Daily Shift Cash Drawer
-            </h1>
-            {isSiteBoy && (
-              <span className="px-2.5 py-0.5 rounded-full bg-blue-500/10 border border-blue-500/30 text-blue-400 text-xs font-bold flex items-center gap-1">
-                <Lock className="w-3 h-3" /> Site Supervisor
-              </span>
-            )}
-          </div>
-          <p className="text-xs sm:text-sm text-slate-400 mt-1">
-            Reconcile daily cash collections, field disbursements, machine advances, and register handovers.
-          </p>
-        </div>
-
-        {/* Tab Switcher */}
-        <div className="flex items-center p-1 bg-slate-900 border border-slate-800 rounded-2xl self-start sm:self-auto">
-          <button
-            type="button"
-            onClick={() => setActiveTab('drawer')}
-            className={`px-4 py-2 rounded-xl text-xs sm:text-sm font-bold transition-all cursor-pointer ${
-              activeTab === 'drawer'
-                ? 'bg-amber-500 text-slate-950 shadow-md shadow-amber-500/20'
-                : 'text-slate-400 hover:text-white'
-            }`}
-          >
-            Live Cash Drawer
-          </button>
-          <button
-            type="button"
-            onClick={() => setActiveTab('history')}
-            className={`px-4 py-2 rounded-xl text-xs sm:text-sm font-bold transition-all cursor-pointer ${
-              activeTab === 'history'
-                ? 'bg-amber-500 text-slate-950 shadow-md shadow-amber-500/20'
-                : 'text-slate-400 hover:text-white'
-            }`}
-          >
-            Reconciliation History
-          </button>
-        </div>
-      </div>
+      <PageHeader
+        title="Daily Shift Cash Drawer"
+        subtitle="Reconcile daily cash collections, field disbursements, machine advances, and register handovers."
+        icon={<Wallet className="w-6 h-6 text-amber-400" />}
+        siteBadge={isSiteBoy ? 'Gate Supervisor' : undefined}
+        actions={
+          <TabBar
+            activeTab={activeTab}
+            onChange={(tab) => setActiveTab(tab as 'drawer' | 'history')}
+            tabs={[
+              { id: 'drawer', label: 'Live Cash Drawer', icon: Wallet },
+              { id: 'history', label: 'Reconciliation History', icon: FileSpreadsheet },
+            ]}
+          />
+        }
+      />
 
       {/* Filter Bar */}
       <Card variant="glass" className="p-4 border border-slate-800 bg-slate-900/80">
@@ -261,29 +256,20 @@ export const ShiftDrawerPage: React.FC = () => {
               <CustomSelect
                 value={selectedSiteId}
                 onChange={setSelectedSiteId}
-                options={activeSites.map((s) => ({
-                  value: s.id,
-                  label: s.siteName,
-                  subLabel: s.location || undefined,
-                }))}
+                options={activeSiteOptions}
                 placeholder="Select Quarry Site"
               />
             )}
+
           </div>
 
           {/* Date Selector */}
-          <div>
-            <label className="block text-xs font-bold text-slate-300 uppercase tracking-wider mb-1.5 flex items-center gap-1.5">
-              <Calendar className="w-3.5 h-3.5 text-amber-400" />
-              Shift Date
-            </label>
-            <input
-              type="date"
-              value={selectedDate}
-              onChange={(e) => setSelectedDate(e.target.value)}
-              className="w-full h-11 px-4 rounded-2xl bg-slate-950 border border-slate-800 text-white text-xs sm:text-sm font-bold focus:border-amber-500 focus:outline-none transition-all"
-            />
-          </div>
+          <DateInput
+            label="Shift Date"
+            value={selectedDate}
+            onChange={setSelectedDate}
+            clearable={false}
+          />
 
           {/* Quick Stats Banner */}
           <div className="sm:col-span-2 lg:col-span-1 flex items-center justify-between p-3 rounded-2xl bg-slate-950/60 border border-slate-800/80">
@@ -331,81 +317,74 @@ export const ShiftDrawerPage: React.FC = () => {
 
           {/* 4 Financial KPI Cards */}
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-            {/* 1. Opening Cash */}
-            <Card variant="glass" className="p-5 border border-slate-800 bg-slate-900/80 relative overflow-hidden">
-              <div className="flex items-center justify-between">
-                <span className="text-xs font-bold text-slate-400 uppercase tracking-wider">
-                  Opening Cash
-                </span>
-                <div className="w-8 h-8 rounded-xl bg-slate-800 text-slate-300 flex items-center justify-center">
-                  <Coins className="w-4 h-4" />
-                </div>
-              </div>
-              <div className="mt-3">
-                <div className="text-xl sm:text-2xl font-black text-white">
-                  ₹{Number(drawerData?.openingCash || 0).toLocaleString('en-IN', { minimumFractionDigits: 2 })}
-                </div>
-                <p className="text-[11px] text-slate-500 mt-1">Carried forward from previous shift</p>
-              </div>
-            </Card>
+            <MetricCard
+              label="Opening Cash"
+              value={formatINR(effectiveOpeningCash, { decimals: 2 })}
+              subLabel="Carried forward / start float"
+              icon={<Coins className="w-5 h-5 text-slate-300" />}
+              variant="default"
+            />
+            <MetricCard
+              label="Spot Cash Inflow"
+              value={`+${formatINR(drawerData?.cashInflows || 0, { decimals: 2 })}`}
+              subLabel={`${drawerData?.cashLoadsCount || 0} Cash Loads`}
+              icon={<ArrowDownRight className="w-5 h-5 text-emerald-400" />}
+              variant="emerald"
+            />
+            <MetricCard
+              label="Cash Outflows"
+              value={`-${formatINR(drawerData?.cashOutflows || 0, { decimals: 2 })}`}
+              subLabel={`${drawerData?.expensesCount || 0} Expense Entries`}
+              icon={<ArrowUpRight className="w-5 h-5 text-rose-400" />}
+              variant="rose"
+            />
+            <MetricCard
+              label="Expected in Drawer"
+              value={formatINR(liveExpectedCash, { decimals: 2 })}
+              subLabel="Opening + Inflow - Outflow"
+              icon={<Calculator className="w-5 h-5 text-amber-400" />}
+              variant="amber"
+            />
+          </div>
 
-            {/* 2. Spot Cash Loads Inflow */}
-            <Card variant="glass" className="p-5 border border-slate-800 bg-slate-900/80 relative overflow-hidden">
-              <div className="flex items-center justify-between">
-                <span className="text-xs font-bold text-emerald-400 uppercase tracking-wider flex items-center gap-1">
-                  <ArrowDownRight className="w-4 h-4" /> Spot Cash Inflow
-                </span>
-                <span className="px-2 py-0.5 rounded-full bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 text-xs font-bold">
-                  {drawerData?.cashLoadsCount || 0} Loads
-                </span>
+          {/* Visual Cash Flow Equation Strip */}
+          <div className="p-4 sm:p-5 rounded-3xl bg-slate-900/90 border border-slate-800/90 shadow-xl flex flex-col md:flex-row items-center justify-between gap-3 text-center md:text-left">
+            <div className="flex flex-wrap items-center justify-center md:justify-start gap-2 sm:gap-3 text-xs sm:text-sm font-bold">
+              {/* Float */}
+              <div className="px-3.5 py-2 rounded-2xl bg-slate-950 border border-slate-800">
+                <span className="text-[10px] uppercase tracking-wider text-slate-400 block">Opening Float</span>
+                <span className="text-white font-black font-mono">₹{effectiveOpeningCash.toLocaleString('en-IN')}</span>
               </div>
-              <div className="mt-3">
-                <div className="text-xl sm:text-2xl font-black text-emerald-400">
-                  +₹{Number(drawerData?.cashInflows || 0).toLocaleString('en-IN', { minimumFractionDigits: 2 })}
-                </div>
-                <p className="text-[11px] text-slate-500 mt-1">Cash collected from gate tippers</p>
-              </div>
-            </Card>
 
-            {/* 3. Cash Disbursements Outflow */}
-            <Card variant="glass" className="p-5 border border-slate-800 bg-slate-900/80 relative overflow-hidden">
-              <div className="flex items-center justify-between">
-                <span className="text-xs font-bold text-rose-400 uppercase tracking-wider flex items-center gap-1">
-                  <ArrowUpRight className="w-4 h-4" /> Cash Outflows
-                </span>
-                <span className="px-2 py-0.5 rounded-full bg-rose-500/10 border border-rose-500/20 text-rose-400 text-xs font-bold">
-                  {drawerData?.expensesCount || 0} Entries
-                </span>
-              </div>
-              <div className="mt-3">
-                <div className="text-xl sm:text-2xl font-black text-rose-400">
-                  -₹{Number(drawerData?.cashOutflows || 0).toLocaleString('en-IN', { minimumFractionDigits: 2 })}
-                </div>
-                <p className="text-[11px] text-slate-500 mt-1">
-                  Expenses (₹{Number(drawerData?.generalExpensesOutflow || 0).toLocaleString('en-IN')}) + Machine Adv (₹{Number(drawerData?.machineryAdvanceOutflow || 0).toLocaleString('en-IN')})
-                </p>
-              </div>
-            </Card>
+              <span className="text-emerald-400 font-extrabold text-base">＋</span>
 
-            {/* 4. Net Expected In Drawer */}
-            <Card variant="glass" className="p-5 border border-amber-500/30 bg-gradient-to-br from-slate-900 via-slate-900 to-amber-950/30 relative overflow-hidden ring-1 ring-amber-500/20">
-              <div className="flex items-center justify-between">
-                <span className="text-xs font-bold text-amber-400 uppercase tracking-wider flex items-center gap-1">
-                  <Calculator className="w-4 h-4" /> Expected In Drawer
-                </span>
-                <span className="px-2 py-0.5 rounded-full bg-amber-500/20 text-amber-300 text-[10px] font-extrabold uppercase">
-                  Net Formula
-                </span>
+              {/* Inflow */}
+              <div className="px-3.5 py-2 rounded-2xl bg-emerald-950/40 border border-emerald-500/30">
+                <span className="text-[10px] uppercase tracking-wider text-emerald-400 block">Gate Cash Inflows</span>
+                <span className="text-emerald-300 font-black font-mono">₹{liveCashInflows.toLocaleString('en-IN')}</span>
               </div>
-              <div className="mt-3">
-                <div className="text-xl sm:text-2xl font-black text-amber-400">
-                  ₹{Number(drawerData?.expectedCash || 0).toLocaleString('en-IN', { minimumFractionDigits: 2 })}
-                </div>
-                <p className="text-[11px] text-amber-300/60 mt-1 font-mono">
-                  Opening + Inflow - Outflow
-                </p>
+
+              <span className="text-rose-400 font-extrabold text-base">－</span>
+
+              {/* Outflow */}
+              <div className="px-3.5 py-2 rounded-2xl bg-rose-950/40 border border-rose-500/30">
+                <span className="text-[10px] uppercase tracking-wider text-rose-400 block">Field Expenses</span>
+                <span className="text-rose-300 font-black font-mono">₹{liveCashOutflows.toLocaleString('en-IN')}</span>
               </div>
-            </Card>
+
+              <span className="text-amber-400 font-extrabold text-base">＝</span>
+
+              {/* Expected */}
+              <div className="px-4 py-2 rounded-2xl bg-amber-500/15 border border-amber-500/40 ring-1 ring-amber-500/30">
+                <span className="text-[10px] uppercase tracking-wider text-amber-300 block font-extrabold">Expected in Hand</span>
+                <span className="text-amber-400 font-black font-mono text-sm sm:text-base">₹{liveExpectedCash.toLocaleString('en-IN')}</span>
+              </div>
+            </div>
+
+            <div className="text-[11px] text-slate-400 md:text-right">
+              <span className="font-semibold text-slate-300">Daily Balance Equation</span>
+              <p className="text-slate-500">Auto-updated with live gate dispatches & expense receipts</p>
+            </div>
           </div>
 
           {/* Shift Handover Action Box */}
@@ -420,7 +399,7 @@ export const ShiftDrawerPage: React.FC = () => {
                       {drawerData?.existingShift ? 'Shift Handover Record' : 'Close Shift & Handover Cash'}
                     </h2>
                     <p className="text-xs text-slate-400 mt-0.5">
-                      Enter the physically counted cash amount in hand to compute reconciliation discrepancy.
+                      Verify opening float and enter physically counted cash in hand to compute reconciliation discrepancy.
                     </p>
                   </div>
                   {drawerData?.existingShift && (
@@ -438,42 +417,46 @@ export const ShiftDrawerPage: React.FC = () => {
 
                 <form onSubmit={handleCloseShift} className="space-y-4">
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                    {/* Actual Counted Cash Input */}
-                    <div>
-                      <label className="block text-xs font-bold text-slate-300 uppercase tracking-wider mb-1.5 flex items-center justify-between">
-                        <span>Actual Counted Cash In Hand *</span>
-                        <span className="text-[11px] text-amber-400 lowercase font-mono">₹ in notes/coins</span>
-                      </label>
-                      <input
-                        type="number"
-                        min="0"
-                        step="0.01"
-                        required
-                        disabled={drawerData?.existingShift?.isApproved}
-                        placeholder="e.g. 45000"
-                        value={actualHandoverCash}
-                        onChange={(e) => setActualHandoverCash(e.target.value)}
-                        className="w-full h-12 px-4 rounded-2xl bg-slate-950 border border-slate-800 text-white font-black text-lg focus:border-amber-500 focus:ring-1 focus:ring-amber-500/30 focus:outline-none transition-all disabled:opacity-60"
-                      />
-                    </div>
+                    {/* Opening Cash Balance Float Input */}
+                    <Input
+                      label="Opening Cash Balance (₹) *"
+                      type="number"
+                      min="0"
+                      step="0.01"
+                      required
+                      disabled={drawerData?.existingShift?.isApproved}
+                      placeholder="e.g. 5000"
+                      value={openingCashInput}
+                      onChange={(e) => setOpeningCashInput(e.target.value)}
+                      leftIcon={<Coins className="w-3.5 h-3.5 text-amber-400" />}
+                      className="font-black text-lg"
+                    />
 
-                    {/* Shift Type */}
-                    <div>
-                      <label className="block text-xs font-bold text-slate-300 uppercase tracking-wider mb-1.5">
-                        Shift Window
-                      </label>
-                      <CustomSelect
-                        value={shiftType}
-                        onChange={setShiftType}
-                        disabled={drawerData?.existingShift?.isApproved}
-                        options={[
-                          { value: 'DAY', label: 'Day Shift (06:00 AM – 06:00 PM)' },
-                          { value: 'NIGHT', label: 'Night Shift (06:00 PM – 06:00 AM)' },
-                          { value: 'GENERAL', label: 'Full Day / General Shift' },
-                        ]}
-                      />
-                    </div>
+                    {/* Actual Counted Cash Input */}
+                    <Input
+                      label="Actual Counted Cash In Hand *"
+                      type="number"
+                      min="0"
+                      step="0.01"
+                      required
+                      disabled={drawerData?.existingShift?.isApproved}
+                      placeholder="e.g. 45000"
+                      value={actualHandoverCash}
+                      onChange={(e) => setActualHandoverCash(e.target.value)}
+                      leftIcon={<Wallet className="w-3.5 h-3.5 text-emerald-400" />}
+                      className="font-black text-lg"
+                    />
                   </div>
+
+                  {/* Shift Type */}
+                  <CustomSelect
+                    label="Shift Window"
+                    value={shiftType}
+                    onChange={setShiftType}
+                    disabled={drawerData?.existingShift?.isApproved}
+                    options={shiftWindowOptions}
+                  />
+
 
                   {/* Discrepancy Live Metric Callout */}
                   {discrepancy !== null && (
@@ -501,7 +484,7 @@ export const ShiftDrawerPage: React.FC = () => {
                               : 'Cash Surplus / Excess Detected'}
                           </div>
                           <div className="text-[11px] opacity-80 mt-0.5">
-                            Expected: ₹{Number(drawerData?.expectedCash || 0).toLocaleString('en-IN')} | Counted: ₹{Number(countedNum).toLocaleString('en-IN')}
+                            Expected: ₹{liveExpectedCash.toLocaleString('en-IN')} | Counted: ₹{Number(countedNum).toLocaleString('en-IN')}
                           </div>
                         </div>
                       </div>
@@ -515,31 +498,28 @@ export const ShiftDrawerPage: React.FC = () => {
                   )}
 
                   {/* Remarks */}
-                  <div>
-                    <label className="block text-xs font-bold text-slate-300 uppercase tracking-wider mb-1.5">
-                      Handover Remarks / Explanations
-                    </label>
-                    <textarea
-                      rows={2}
-                      disabled={drawerData?.existingShift?.isApproved}
-                      placeholder="e.g. Handed over ₹45,000 cash to Shamsu (Co-Partner) at gate close."
-                      value={remarks}
-                      onChange={(e) => setRemarks(e.target.value)}
-                      className="w-full p-3.5 rounded-2xl bg-slate-950 border border-slate-800 text-white text-sm focus:border-amber-500 focus:ring-1 focus:ring-amber-500/30 focus:outline-none transition-all disabled:opacity-60 resize-none"
-                    />
-                  </div>
+                  <Textarea
+                    label="Handover Remarks / Explanations"
+                    rows={2}
+                    disabled={drawerData?.existingShift?.isApproved}
+                    placeholder="e.g. Handed over ₹45,000 cash to Shamsu (Co-Partner) at gate close."
+                    value={remarks}
+                    onChange={(e) => setRemarks(e.target.value)}
+                  />
 
                   {/* Submit Button */}
                   {!drawerData?.existingShift?.isApproved && (
                     <div className="pt-2 flex items-center justify-end">
-                      <button
+                      <Button
                         type="submit"
                         disabled={submitting || !actualHandoverCash}
-                        className="flex items-center gap-2 px-6 py-3 rounded-2xl bg-amber-500 hover:bg-amber-400 text-slate-950 font-bold text-sm shadow-xl shadow-amber-500/20 disabled:opacity-50 transition-all active:scale-95 cursor-pointer"
+                        variant="primary"
+                        size="lg"
+                        loading={submitting}
+                        loadingText="Submitting..."
                       >
-                        {submitting && <RefreshCw className="w-4 h-4 animate-spin" />}
                         {drawerData?.existingShift ? 'Update Shift Handover' : 'Submit Shift Handover'}
-                      </button>
+                      </Button>
                     </div>
                   )}
                 </form>
@@ -652,13 +632,11 @@ export const ShiftDrawerPage: React.FC = () => {
                 <span>Loading shift audit history...</span>
               </div>
             ) : history.length === 0 ? (
-              <div className="p-8 text-center text-slate-400">
-                <Wallet className="w-8 h-8 mx-auto mb-2 text-slate-600" />
-                <p className="font-semibold text-slate-300">No Shift Records Found</p>
-                <p className="text-xs text-slate-500 mt-1">
-                  Daily drawer handovers will appear here once gate supervisors record day-end reconciliations.
-                </p>
-              </div>
+              <EmptyState
+                icon={<Wallet className="w-8 h-8 text-slate-600" />}
+                title="No Shift Records Found"
+                description="Daily drawer handovers will appear here once gate supervisors record day-end reconciliations."
+              />
             ) : (
               <div className="overflow-x-auto">
                 <table className="w-full text-left text-sm">
@@ -777,13 +755,14 @@ export const ShiftDrawerPage: React.FC = () => {
 
       {/* Approve Modal */}
       {approvingShift && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-md animate-fade-in">
-          <div className="w-full max-w-md bg-slate-900 border border-slate-800 rounded-3xl shadow-2xl overflow-hidden p-6 space-y-4">
-            <h3 className="font-bold text-white text-base flex items-center gap-2">
-              <Check className="w-5 h-5 text-emerald-400" />
-              Approve Shift Reconciliation
-            </h3>
-
+        <Modal
+          isOpen={!!approvingShift}
+          onClose={() => setApprovingShift(null)}
+          title="Approve Shift Reconciliation"
+          icon={<Check className="w-5 h-5 text-emerald-400" />}
+          maxWidth="md"
+        >
+          <div className="space-y-4">
             <p className="text-xs text-slate-300">
               Confirm approval for shift on{' '}
               <strong className="text-white">
@@ -817,39 +796,34 @@ export const ShiftDrawerPage: React.FC = () => {
               </div>
             </div>
 
-            <div>
-              <label className="block text-xs font-bold text-slate-300 uppercase tracking-wider mb-1">
-                Approval Note (Optional)
-              </label>
-              <input
-                type="text"
-                placeholder="e.g. Verified by Shamsu, cash deposited into bank"
-                value={approveRemarks}
-                onChange={(e) => setApproveRemarks(e.target.value)}
-                className="w-full h-11 px-3.5 rounded-xl bg-slate-950 border border-slate-800 text-white text-xs focus:border-emerald-500 focus:outline-none"
-              />
-            </div>
+            <Input
+              label="Approval Note (Optional)"
+              placeholder="e.g. Verified by Shamsu, cash deposited into bank"
+              value={approveRemarks}
+              onChange={(e) => setApproveRemarks(e.target.value)}
+            />
 
-            <div className="pt-2 flex items-center justify-end gap-2.5">
-              <button
-                type="button"
+            <div className="pt-3 border-t border-slate-800 flex items-center justify-end gap-2.5">
+              <Button
+                variant="secondary"
+                size="md"
                 onClick={() => setApprovingShift(null)}
-                className="px-4 py-2 rounded-xl text-xs font-semibold text-slate-400 hover:text-white"
               >
                 Cancel
-              </button>
-              <button
-                type="button"
-                disabled={approving}
+              </Button>
+              <Button
+                variant="success"
+                size="md"
+                loading={approving}
+                loadingText="Approving..."
+                leftIcon={<Check className="w-4 h-4" />}
                 onClick={handleApproveShift}
-                className="flex items-center gap-2 px-5 py-2.5 rounded-xl bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-bold text-xs shadow-lg shadow-emerald-500/20 disabled:opacity-50"
               >
-                {approving && <RefreshCw className="w-3.5 h-3.5 animate-spin" />}
                 Confirm Approval
-              </button>
+              </Button>
             </div>
           </div>
-        </div>
+        </Modal>
       )}
     </div>
   );

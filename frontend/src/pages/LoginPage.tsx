@@ -8,11 +8,9 @@ import {
   LogIn,
   AlertCircle,
   KeyRound,
-  CheckCircle2,
-  X,
 } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
-import { Card } from '../components/common/Card';
+import { Card, Input, Button, Modal } from '../components/common';
 
 export const LoginPage: React.FC = () => {
   const [mobile, setMobile] = useState('');
@@ -27,8 +25,6 @@ export const LoginPage: React.FC = () => {
   const { login } = useAuth();
   const navigate = useNavigate();
   const location = useLocation();
-
-  const from = (location.state as { from?: { pathname: string } })?.from?.pathname || '/';
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -51,8 +47,10 @@ export const LoginPage: React.FC = () => {
       // Customer User -> Always Loads Cockpit ('/loads')
       if (authUser.role === 'SUPER_ADMIN') {
         navigate('/admin/users', { replace: true });
-      } else {
+      } else if (authUser.role === 'SITE_BOY') {
         navigate('/loads', { replace: true });
+      } else {
+        navigate('/dashboard', { replace: true });
       }
     } catch (err: any) {
       setError(err?.message || 'Login failed. Please verify your credentials.');
@@ -88,7 +86,7 @@ export const LoginPage: React.FC = () => {
 
           {/* Error Message */}
           {error && (
-            <div className="p-3.5 rounded-xl bg-rose-950/80 border border-rose-800/70 text-rose-300 text-xs flex items-start gap-2.5 shadow-sm animate-fade-in">
+            <div className="p-3.5 rounded-2xl bg-rose-950/80 border border-rose-800/70 text-rose-300 text-xs flex items-start gap-2.5 shadow-sm animate-fade-in">
               <AlertCircle className="w-4 h-4 text-rose-400 shrink-0 mt-0.5" />
               <span>{error}</span>
             </div>
@@ -96,36 +94,24 @@ export const LoginPage: React.FC = () => {
 
           <form onSubmit={handleSubmit} className="space-y-4">
             {/* Mobile / Username Field */}
-            <div className="space-y-1.5">
-              <label
-                htmlFor="mobile-input"
-                className="text-xs font-semibold text-slate-300 uppercase tracking-wider block"
-              >
-                Mobile Number / Email
-              </label>
-              <div className="relative">
-                <div className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none text-slate-500">
-                  <Phone className="w-4 h-4" />
-                </div>
-                <input
-                  id="mobile-input"
-                  type="text"
-                  placeholder="Enter mobile number or email"
-                  value={mobile}
-                  onChange={(e) => setMobile(e.target.value)}
-                  disabled={submitting}
-                  className="w-full pl-10 pr-4 py-2.5 rounded-xl bg-slate-900/90 border border-slate-700/80 focus:border-amber-400 focus:ring-1 focus:ring-amber-400 text-sm text-white placeholder-slate-500 transition-all outline-none"
-                  autoComplete="username"
-                />
-              </div>
-            </div>
+            <Input
+              id="mobile-input"
+              label="Mobile Number / Email"
+              type="text"
+              placeholder="Enter mobile number or email"
+              value={mobile}
+              onChange={(e) => setMobile(e.target.value)}
+              disabled={submitting}
+              leftIcon={<Phone className="w-4 h-4" />}
+              autoComplete="username"
+            />
 
             {/* Password Field */}
             <div className="space-y-1.5">
               <div className="flex items-center justify-between">
                 <label
                   htmlFor="password-input"
-                  className="text-xs font-semibold text-slate-300 uppercase tracking-wider block"
+                  className="text-xs font-semibold text-slate-300 block select-none"
                 >
                   Password
                 </label>
@@ -137,45 +123,47 @@ export const LoginPage: React.FC = () => {
                   Forgot Password?
                 </button>
               </div>
-              <div className="relative">
-                <div className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none text-slate-500">
-                  <Lock className="w-4 h-4" />
-                </div>
-                <input
-                  id="password-input"
-                  type={showPassword ? 'text' : 'password'}
-                  placeholder="Enter your password"
-                  value={password}
-                  onChange={(e) => setPassword(e.target.value)}
-                  disabled={submitting}
-                  className="w-full pl-10 pr-10 py-2.5 rounded-xl bg-slate-900/90 border border-slate-700/80 focus:border-amber-400 focus:ring-1 focus:ring-amber-400 text-sm text-white placeholder-slate-500 transition-all outline-none"
-                  autoComplete="current-password"
-                />
-                <button
-                  type="button"
-                  onClick={() => setShowPassword(!showPassword)}
-                  className="absolute inset-y-0 right-0 pr-3.5 flex items-center text-slate-400 hover:text-slate-200 cursor-pointer"
-                  title={showPassword ? 'Hide password' : 'Show password'}
-                >
-                  {showPassword ? (
-                    <EyeOff className="w-4 h-4" />
-                  ) : (
-                    <Eye className="w-4 h-4" />
-                  )}
-                </button>
-              </div>
+
+              <Input
+                id="password-input"
+                type={showPassword ? 'text' : 'password'}
+                placeholder="Enter your password"
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                disabled={submitting}
+                leftIcon={<Lock className="w-4 h-4" />}
+                rightSlot={
+                  <button
+                    type="button"
+                    onClick={() => setShowPassword(!showPassword)}
+                    className="text-slate-400 hover:text-slate-200 cursor-pointer"
+                    title={showPassword ? 'Hide password' : 'Show password'}
+                  >
+                    {showPassword ? (
+                      <EyeOff className="w-4 h-4" />
+                    ) : (
+                      <Eye className="w-4 h-4" />
+                    )}
+                  </button>
+                }
+                autoComplete="current-password"
+              />
             </div>
 
             {/* Submit Button */}
-            <button
+            <Button
               id="login-submit-btn"
               type="submit"
-              disabled={submitting}
-              className="w-full mt-6 py-3.5 rounded-xl bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-400 hover:to-amber-500 active:scale-[0.99] text-slate-950 font-bold text-sm shadow-lg shadow-amber-500/20 flex items-center justify-center gap-2 cursor-pointer transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+              variant="primary"
+              size="lg"
+              fullWidth
+              loading={submitting}
+              loadingText="Authenticating..."
+              leftIcon={<LogIn className="w-4 h-4" />}
+              className="mt-6 shadow-lg shadow-amber-500/20"
             >
-              <LogIn className="w-4 h-4" />
-              {submitting ? 'Authenticating...' : 'Sign In'}
-            </button>
+              Sign In
+            </Button>
           </form>
         </Card>
 
@@ -188,48 +176,32 @@ export const LoginPage: React.FC = () => {
       {/* ========================================================================= */}
       {/*                       ACCOUNT RECOVERY SUPPORT MODAL                      */}
       {/* ========================================================================= */}
-      {showForgotModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/80 backdrop-blur-sm p-4 animate-fade-in">
-          <Card variant="highlight" className="w-full max-w-md p-6 space-y-4 relative border border-slate-800 shadow-2xl">
-            <button
-              onClick={() => setShowForgotModal(false)}
-              className="absolute right-4 top-4 text-slate-400 hover:text-white cursor-pointer"
-            >
-              <X className="w-5 h-5" />
-            </button>
-
-            <div className="flex items-center gap-2.5 border-b border-slate-800 pb-3">
-              <div className="p-2 rounded-xl bg-amber-500/10 text-amber-400 border border-amber-500/20">
-                <KeyRound className="w-5 h-5" />
-              </div>
-              <div>
-                <h2 className="text-lg font-bold text-white">Account Password Recovery</h2>
-                <p className="text-xs text-slate-400">Security notice for quarry customer accounts.</p>
-              </div>
-            </div>
-
-            <div className="space-y-3 text-xs sm:text-sm text-slate-300 leading-relaxed bg-slate-900/60 p-4 rounded-2xl border border-slate-800/80">
-              <p>
-                To protect quarry dispatch and financial ledger security, password resets are controlled centrally.
-              </p>
-              <p>
-                Please contact your <span className="text-amber-400 font-bold">Quarry Administrator</span> or <span className="text-white font-bold">VLMS Support (+91 99999 99999)</span> to reset your account password.
-              </p>
-            </div>
-
-            <div className="flex justify-end pt-2">
-              <button
-                type="button"
-                onClick={() => setShowForgotModal(false)}
-                className="px-5 py-2 rounded-xl bg-amber-500 hover:bg-amber-400 text-slate-950 font-bold text-sm cursor-pointer"
-              >
-                Understood
-              </button>
-            </div>
-          </Card>
+      <Modal
+        isOpen={showForgotModal}
+        onClose={() => setShowForgotModal(false)}
+        title="Account Password Recovery"
+        description="Security notice for quarry customer accounts."
+        icon={<KeyRound className="w-5 h-5" />}
+        maxWidth="md"
+        footer={
+          <Button
+            variant="primary"
+            size="sm"
+            onClick={() => setShowForgotModal(false)}
+          >
+            Understood
+          </Button>
+        }
+      >
+        <div className="space-y-3 text-xs sm:text-sm text-slate-300 leading-relaxed bg-slate-900/60 p-4 rounded-2xl border border-slate-800/80">
+          <p>
+            To protect quarry dispatch and financial ledger security, password resets are controlled centrally.
+          </p>
+          <p>
+            Please contact your <span className="text-amber-400 font-bold">Quarry Administrator</span> or <span className="text-white font-bold">VLMS Support (+91 99999 99999)</span> to reset your account password.
+          </p>
         </div>
-      )}
+      </Modal>
     </div>
   );
 };
-

@@ -12,11 +12,19 @@ import {
   Calendar,
   Sparkles,
   Info,
-  X,
 } from 'lucide-react';
-import { Card } from '../common/Card';
-import { ConfirmModal } from '../common/ConfirmModal';
-import { CustomSelect } from '../common/CustomSelect';
+import {
+  Card,
+  ConfirmModal,
+  CustomSelect,
+  Modal,
+  Input,
+  DateInput,
+  Button,
+  Badge,
+  EmptyState,
+  Checkbox,
+} from '../common';
 import { useMasterCache } from '../../context/MasterCacheContext';
 import {
   CoPartner,
@@ -402,18 +410,15 @@ export const TeamManagement: React.FC = () => {
               Partners can access dashboard and financial reports for their assigned sites.
             </p>
           </div>
-          <button
-            onClick={openCreateCoPartner}
+          <Button
+            variant="primary"
+            size="sm"
+            leftIcon={<UserPlus className="w-4 h-4" />}
             disabled={cpQuota.active >= cpQuota.max}
-            className={`flex items-center gap-2 px-4 py-2.5 rounded-2xl text-xs sm:text-sm font-bold transition-all ${
-              cpQuota.active >= cpQuota.max
-                ? 'bg-slate-800 text-slate-500 cursor-not-allowed border border-slate-700'
-                : 'bg-amber-500 hover:bg-amber-400 text-slate-950 shadow-lg shadow-amber-500/20 active:scale-95'
-            }`}
+            onClick={openCreateCoPartner}
           >
-            <UserPlus className="w-4 h-4" />
             Add Co-Partner
-          </button>
+          </Button>
         </div>
 
         <Card variant="glass" className="overflow-hidden border border-slate-800 bg-slate-900/60 p-0">
@@ -423,12 +428,14 @@ export const TeamManagement: React.FC = () => {
               <span>Loading team members...</span>
             </div>
           ) : data.coPartners.length === 0 ? (
-            <div className="p-8 text-center text-slate-400">
-              <Users className="w-8 h-8 mx-auto mb-2 text-slate-600" />
-              <p className="font-semibold text-slate-300">No Co-Partners Added Yet</p>
-              <p className="text-xs text-slate-500 mt-1">
-                Add your quarry business partners to grant them site-specific report access and dividend shares.
-              </p>
+            <div className="p-6">
+              <EmptyState
+                icon={<Users className="w-8 h-8 text-amber-400" />}
+                title="No Co-Partners Added Yet"
+                description="Add your quarry business partners to grant them site-specific report access and dividend shares."
+                actionText={cpQuota.active < cpQuota.max ? "Add Co-Partner" : undefined}
+                onAction={cpQuota.active < cpQuota.max ? openCreateCoPartner : undefined}
+              />
             </div>
           ) : (
             <div className="overflow-x-auto">
@@ -484,34 +491,32 @@ export const TeamManagement: React.FC = () => {
                           </div>
                         </td>
                         <td className="p-4">
-                          <span
-                            className={`px-2.5 py-1 text-xs font-bold rounded-full border ${
-                              partner.isActive
-                                ? 'bg-emerald-500/10 border-emerald-500/30 text-emerald-400'
-                                : 'bg-slate-800 border-slate-700 text-slate-500'
-                            }`}
-                          >
+                          <Badge variant={partner.isActive ? "emerald" : "slate"} size="sm">
                             {partner.isActive ? 'Active' : 'Inactive'}
-                          </span>
+                          </Badge>
                         </td>
                         <td className="p-4 text-right">
-                          <div className="flex items-center justify-end gap-2">
-                            <button
+                          <div className="flex items-center justify-end gap-1">
+                            <Button
+                              variant="ghost"
+                              size="icon"
                               onClick={() => openEditCoPartner(partner)}
-                              className="p-2 rounded-xl text-slate-400 hover:text-amber-400 hover:bg-slate-800/80 transition-colors"
+                              className="p-1.5 text-slate-400 hover:text-amber-400 min-h-[32px] min-w-[32px]"
                               title="Edit Shares & Details"
                             >
-                              <Edit2 className="w-4 h-4" />
-                            </button>
-                            <button
+                              <Edit2 className="w-3.5 h-3.5" />
+                            </Button>
+                            <Button
+                              variant="ghost"
+                              size="icon"
                               onClick={() =>
                                 confirmDelete(partner.id, displayName, 'Co-Partner')
                               }
-                              className="p-2 rounded-xl text-slate-400 hover:text-rose-400 hover:bg-slate-800/80 transition-colors"
+                              className="p-1.5 text-slate-400 hover:text-rose-400 min-h-[32px] min-w-[32px]"
                               title="Deactivate Account"
                             >
-                              <Trash2 className="w-4 h-4" />
-                            </button>
+                              <Trash2 className="w-3.5 h-3.5" />
+                            </Button>
                           </div>
                         </td>
                       </tr>
@@ -536,18 +541,15 @@ export const TeamManagement: React.FC = () => {
               Supervisors can enter loads, expenses, and close shift registers strictly for their 1 assigned quarry site.
             </p>
           </div>
-          <button
-            onClick={openCreateSiteBoy}
+          <Button
+            variant="secondary"
+            size="sm"
+            leftIcon={<UserPlus className="w-4 h-4" />}
             disabled={sbQuota.active >= sbQuota.max}
-            className={`flex items-center gap-2 px-4 py-2.5 rounded-2xl text-xs sm:text-sm font-bold transition-all ${
-              sbQuota.active >= sbQuota.max
-                ? 'bg-slate-800 text-slate-500 cursor-not-allowed border border-slate-700'
-                : 'bg-blue-600 hover:bg-blue-500 text-white shadow-lg shadow-blue-500/20 active:scale-95'
-            }`}
+            onClick={openCreateSiteBoy}
           >
-            <UserPlus className="w-4 h-4" />
             Add Site Boy
-          </button>
+          </Button>
         </div>
 
         <Card variant="glass" className="overflow-hidden border border-slate-800 bg-slate-900/60 p-0">
@@ -557,12 +559,14 @@ export const TeamManagement: React.FC = () => {
               <span>Loading supervisors...</span>
             </div>
           ) : data.siteBoys.length === 0 ? (
-            <div className="p-8 text-center text-slate-400">
-              <UserCheck className="w-8 h-8 mx-auto mb-2 text-slate-600" />
-              <p className="font-semibold text-slate-300">No Site Supervisors Added Yet</p>
-              <p className="text-xs text-slate-500 mt-1">
-                Add gate boys to record trucks, manage daily cash drawers, and track machine hours on-site.
-              </p>
+            <div className="p-6">
+              <EmptyState
+                icon={<UserCheck className="w-8 h-8 text-blue-400" />}
+                title="No Site Supervisors Added Yet"
+                description="Add gate boys to record trucks, manage daily cash drawers, and track machine hours on-site."
+                actionText={sbQuota.active < sbQuota.max ? "Add Site Boy" : undefined}
+                onAction={sbQuota.active < sbQuota.max ? openCreateSiteBoy : undefined}
+              />
             </div>
           ) : (
             <div className="overflow-x-auto">
@@ -608,34 +612,32 @@ export const TeamManagement: React.FC = () => {
                           )}
                         </td>
                         <td className="p-4">
-                          <span
-                            className={`px-2.5 py-1 text-xs font-bold rounded-full border ${
-                              sb.isActive
-                                ? 'bg-emerald-500/10 border-emerald-500/30 text-emerald-400'
-                                : 'bg-slate-800 border-slate-700 text-slate-500'
-                            }`}
-                          >
+                          <Badge variant={sb.isActive ? "emerald" : "slate"} size="sm">
                             {sb.isActive ? 'Active' : 'Inactive'}
-                          </span>
+                          </Badge>
                         </td>
                         <td className="p-4 text-right">
-                          <div className="flex items-center justify-end gap-2">
-                            <button
+                          <div className="flex items-center justify-end gap-1">
+                            <Button
+                              variant="ghost"
+                              size="icon"
                               onClick={() => openEditSiteBoy(sb)}
-                              className="p-2 rounded-xl text-slate-400 hover:text-blue-400 hover:bg-slate-800/80 transition-colors"
+                              className="p-1.5 text-slate-400 hover:text-blue-400 min-h-[32px] min-w-[32px]"
                               title="Edit Assignment & Details"
                             >
-                              <Edit2 className="w-4 h-4" />
-                            </button>
-                            <button
+                              <Edit2 className="w-3.5 h-3.5" />
+                            </Button>
+                            <Button
+                              variant="ghost"
+                              size="icon"
                               onClick={() =>
                                 confirmDelete(sb.id, displayName, 'Site Boy')
                               }
-                              className="p-2 rounded-xl text-slate-400 hover:text-rose-400 hover:bg-slate-800/80 transition-colors"
+                              className="p-1.5 text-slate-400 hover:text-rose-400 min-h-[32px] min-w-[32px]"
                               title="Deactivate Account"
                             >
-                              <Trash2 className="w-4 h-4" />
-                            </button>
+                              <Trash2 className="w-3.5 h-3.5" />
+                            </Button>
                           </div>
                         </td>
                       </tr>
@@ -649,317 +651,250 @@ export const TeamManagement: React.FC = () => {
       </div>
 
       {/* Co-Partner Modal */}
-      {coPartnerModalOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-md animate-fade-in">
-          <div className="w-full max-w-lg bg-slate-900 border border-slate-800 rounded-3xl shadow-2xl overflow-hidden flex flex-col max-h-[90vh]">
-            <div className="px-6 py-4 border-b border-slate-800 flex items-center justify-between bg-slate-950/40">
-              <h3 className="font-bold text-white text-base flex items-center gap-2">
-                <Users className="w-5 h-5 text-amber-400" />
-                {editingCoPartner ? 'Edit Co-Partner & Site Shares' : 'Onboard New Co-Partner'}
-              </h3>
-              <button
-                onClick={() => setCoPartnerModalOpen(false)}
-                className="p-1 rounded-lg text-slate-400 hover:text-white hover:bg-slate-800 transition-colors"
-              >
-                <X className="w-5 h-5" />
-              </button>
+      <Modal
+        isOpen={coPartnerModalOpen}
+        onClose={() => setCoPartnerModalOpen(false)}
+        title={editingCoPartner ? 'Edit Co-Partner & Site Shares' : 'Onboard New Co-Partner'}
+        maxWidth="lg"
+      >
+        <form onSubmit={handleCoPartnerSubmit} className="space-y-4">
+          {cpError && (
+            <div className="p-3.5 rounded-2xl bg-rose-500/10 border border-rose-500/30 text-rose-400 text-xs flex items-center gap-2 font-medium">
+              <AlertTriangle className="w-4 h-4 shrink-0" />
+              <span>{cpError}</span>
+            </div>
+          )}
+
+          {activeSites.length === 0 && (
+            <div className="p-3.5 rounded-2xl bg-amber-500/10 border border-amber-500/30 text-amber-400 text-xs flex items-center gap-2">
+              <Info className="w-4 h-4 shrink-0" />
+              <span>No active quarry sites available. Please add at least 1 site in the Sites tab first.</span>
+            </div>
+          )}
+
+          <Input
+            label="Partner Full Name"
+            required
+            placeholder="e.g. Shamsu"
+            value={cpName}
+            onChange={(e) => setCpName(e.target.value)}
+          />
+
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <Input
+              label="Mobile Number (Login)"
+              required
+              disabled={!!editingCoPartner}
+              placeholder="10-digit mobile"
+              value={cpMobile}
+              onChange={(e) => setCpMobile(e.target.value.replace(/\D/g, '').slice(0, 10))}
+            />
+            <Input
+              label={`Password ${editingCoPartner ? '(Optional)' : '*'}`}
+              type="password"
+              required={!editingCoPartner}
+              placeholder={editingCoPartner ? 'Keep current password' : 'Min 6 characters'}
+              value={cpPassword}
+              onChange={(e) => setCpPassword(e.target.value)}
+            />
+          </div>
+
+          {/* Site Assignment & Percentage Share Matrix */}
+          <div className="pt-2 border-t border-slate-800/80">
+            <div className="flex items-center justify-between mb-2.5">
+              <label className="block text-xs font-bold text-slate-300 uppercase tracking-wider">
+                Assigned Quarry Sites & Equity Share *
+              </label>
+              <span className="text-[11px] text-slate-400">Total ≤ 100% per site</span>
             </div>
 
-            <form onSubmit={handleCoPartnerSubmit} className="p-6 space-y-4 overflow-y-auto">
-              {cpError && (
-                <div className="p-3.5 rounded-2xl bg-rose-500/10 border border-rose-500/30 text-rose-400 text-xs flex items-center gap-2 font-medium">
-                  <AlertTriangle className="w-4 h-4 shrink-0" />
-                  <span>{cpError}</span>
-                </div>
-              )}
+            <div className="space-y-2 max-h-52 overflow-y-auto pr-1">
+              {cpSiteShares.map((share, idx) => {
+                const siteObj = activeSites.find((s) => s.id === share.siteId);
+                return (
+                  <div
+                    key={share.siteId}
+                    className={`p-3 rounded-2xl border transition-all ${
+                      share.isActive
+                        ? 'bg-slate-950/80 border-amber-500/30 ring-1 ring-amber-500/10'
+                        : 'bg-slate-950/30 border-slate-800/60 opacity-60'
+                    }`}
+                  >
+                    <div className="flex items-center justify-between gap-3">
+                      <Checkbox
+                        label={`${siteObj?.siteName || 'Quarry Site'}${siteObj?.location ? ` (${siteObj.location})` : ''}`}
+                        checked={share.isActive}
+                        onChange={(checked) => {
+                          setCpSiteShares((prev) =>
+                            prev.map((s, i) =>
+                              i === idx
+                                ? {
+                                    ...s,
+                                    isActive: checked,
+                                    sharePercentage: checked && s.sharePercentage === 0 ? 25 : s.sharePercentage,
+                                  }
+                                : s
+                            )
+                          );
+                        }}
+                      />
 
-              {activeSites.length === 0 && (
-                <div className="p-3.5 rounded-2xl bg-amber-500/10 border border-amber-500/30 text-amber-400 text-xs flex items-center gap-2">
-                  <Info className="w-4 h-4 shrink-0" />
-                  <span>No active quarry sites available. Please add at least 1 site in the Sites tab first.</span>
-                </div>
-              )}
-
-              <div>
-                <label className="block text-xs font-bold text-slate-300 uppercase tracking-wider mb-1.5">
-                  Partner Full Name *
-                </label>
-                <input
-                  type="text"
-                  required
-                  placeholder="e.g. Shamsu"
-                  value={cpName}
-                  onChange={(e) => setCpName(e.target.value)}
-                  className="w-full h-11 px-4 rounded-xl bg-slate-950 border border-slate-800 text-white text-sm focus:border-amber-500 focus:ring-1 focus:ring-amber-500/30 focus:outline-none transition-all"
-                />
-              </div>
-
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                <div>
-                  <label className="block text-xs font-bold text-slate-300 uppercase tracking-wider mb-1.5">
-                    Mobile Number (Login) *
-                  </label>
-                  <input
-                    type="tel"
-                    required
-                    disabled={!!editingCoPartner}
-                    placeholder="10-digit mobile"
-                    value={cpMobile}
-                    onChange={(e) => setCpMobile(e.target.value.replace(/\D/g, '').slice(0, 10))}
-                    className="w-full h-11 px-4 rounded-xl bg-slate-950 border border-slate-800 text-white text-sm focus:border-amber-500 focus:ring-1 focus:ring-amber-500/30 focus:outline-none disabled:opacity-50 disabled:cursor-not-allowed transition-all font-mono"
-                  />
-                </div>
-                <div>
-                  <label className="block text-xs font-bold text-slate-300 uppercase tracking-wider mb-1.5">
-                    Password {editingCoPartner ? '(Optional)' : '*'}
-                  </label>
-                  <input
-                    type="password"
-                    required={!editingCoPartner}
-                    placeholder={editingCoPartner ? 'Keep current password' : 'Min 6 characters'}
-                    value={cpPassword}
-                    onChange={(e) => setCpPassword(e.target.value)}
-                    className="w-full h-11 px-4 rounded-xl bg-slate-950 border border-slate-800 text-white text-sm focus:border-amber-500 focus:ring-1 focus:ring-amber-500/30 focus:outline-none transition-all"
-                  />
-                </div>
-              </div>
-
-              {/* Site Assignment & Percentage Share Matrix */}
-              <div className="pt-2 border-t border-slate-800/80">
-                <div className="flex items-center justify-between mb-2.5">
-                  <label className="block text-xs font-bold text-slate-300 uppercase tracking-wider">
-                    Assigned Quarry Sites & Equity Share *
-                  </label>
-                  <span className="text-[11px] text-slate-400">Total ≤ 100% per site</span>
-                </div>
-
-                <div className="space-y-2 max-h-52 overflow-y-auto pr-1">
-                  {cpSiteShares.map((share, idx) => {
-                    const siteObj = activeSites.find((s) => s.id === share.siteId);
-                    return (
-                      <div
-                        key={share.siteId}
-                        className={`p-3 rounded-2xl border transition-all ${
-                          share.isActive
-                            ? 'bg-slate-950/80 border-amber-500/30 ring-1 ring-amber-500/10'
-                            : 'bg-slate-950/30 border-slate-800/60 opacity-60'
-                        }`}
-                      >
-                        <div className="flex items-center justify-between gap-3">
-                          <label className="flex items-center gap-2.5 cursor-pointer select-none">
-                            <input
-                              type="checkbox"
-                              checked={share.isActive}
-                              onChange={(e) => {
-                                const checked = e.target.checked;
-                                setCpSiteShares((prev) =>
-                                  prev.map((s, i) =>
-                                    i === idx
-                                      ? {
-                                          ...s,
-                                          isActive: checked,
-                                          sharePercentage: checked && s.sharePercentage === 0 ? 25 : s.sharePercentage,
-                                        }
-                                      : s
-                                  )
-                                );
-                              }}
-                              className="w-4 h-4 rounded text-amber-500 focus:ring-amber-500 focus:ring-offset-slate-900 accent-amber-500"
-                            />
-                            <div>
-                              <span className="font-bold text-white text-sm">
-                                {siteObj?.siteName || 'Quarry Site'}
-                              </span>
-                              {siteObj?.location && (
-                                <span className="text-slate-500 text-xs ml-1.5">({siteObj.location})</span>
-                              )}
-                            </div>
-                          </label>
-
-                          {share.isActive && (
-                            <div className="flex items-center bg-slate-900 border border-slate-800 rounded-xl px-2.5 py-1 w-24">
-                              <input
-                                type="number"
-                                min="0.1"
-                                max="100"
-                                step="0.01"
-                                value={share.sharePercentage || ''}
-                                onChange={(e) => {
-                                  const val = parseFloat(e.target.value) || 0;
-                                  setCpSiteShares((prev) =>
-                                    prev.map((s, i) => (i === idx ? { ...s, sharePercentage: val } : s))
-                                  );
-                                }}
-                                className="w-full bg-transparent text-right text-amber-400 font-bold text-sm focus:outline-none"
-                              />
-                              <span className="text-slate-500 text-xs ml-1 font-bold">%</span>
-                            </div>
-                          )}
+                      {share.isActive && (
+                        <div className="w-28">
+                          <Input
+                            type="number"
+                            min="0.1"
+                            max="100"
+                            step="0.01"
+                            value={share.sharePercentage || ''}
+                            onChange={(e) => {
+                              const val = parseFloat(e.target.value) || 0;
+                              setCpSiteShares((prev) =>
+                                prev.map((s, i) => (i === idx ? { ...s, sharePercentage: val } : s))
+                              );
+                            }}
+                            rightSlot={<span className="text-slate-500 text-xs font-bold">%</span>}
+                            className="text-right text-amber-400 font-bold"
+                          />
                         </div>
+                      )}
+                    </div>
 
-                        {share.isActive && (
-                          <div className="mt-2.5 flex items-center justify-between text-[11px] text-slate-400 pt-2 border-t border-slate-900">
-                            <span className="flex items-center gap-1.5 text-slate-400">
-                              <Calendar className="w-3.5 h-3.5 text-amber-400" />
-                              Effective from:
-                            </span>
-                            <input
-                              type="date"
-                              value={share.effectiveFrom}
-                              onChange={(e) => {
-                                const val = e.target.value;
-                                setCpSiteShares((prev) =>
-                                  prev.map((s, i) => (i === idx ? { ...s, effectiveFrom: val } : s))
-                                );
-                              }}
-                              className="px-2.5 py-1 rounded-lg bg-slate-900 border border-slate-800 text-slate-200 text-xs focus:outline-none focus:border-amber-500"
-                            />
-                          </div>
-                        )}
+                    {share.isActive && (
+                      <div className="mt-2.5 flex items-center justify-between text-[11px] text-slate-400 pt-2 border-t border-slate-900 gap-2">
+                        <span className="flex items-center gap-1.5 text-slate-400 shrink-0">
+                          <Calendar className="w-3.5 h-3.5 text-amber-400" />
+                          Effective from:
+                        </span>
+                        <div className="w-40">
+                          <DateInput
+                            value={share.effectiveFrom}
+                            onChange={(val) => {
+                              setCpSiteShares((prev) =>
+                                prev.map((s, i) => (i === idx ? { ...s, effectiveFrom: val } : s))
+                              );
+                            }}
+                            clearable={false}
+                          />
+                        </div>
                       </div>
-                    );
-                  })}
-                </div>
-              </div>
-
-              <div className="pt-4 border-t border-slate-800 flex items-center justify-end gap-3">
-                <button
-                  type="button"
-                  onClick={() => setCoPartnerModalOpen(false)}
-                  className="px-4 py-2.5 rounded-2xl text-xs sm:text-sm font-semibold text-slate-400 hover:text-white hover:bg-slate-800 transition-colors"
-                >
-                  Cancel
-                </button>
-                <button
-                  type="submit"
-                  disabled={cpSubmitting || activeSites.length === 0}
-                  className="flex items-center gap-2 px-5 py-2.5 rounded-2xl bg-amber-500 hover:bg-amber-400 text-slate-950 font-bold text-xs sm:text-sm shadow-lg shadow-amber-500/20 disabled:opacity-50 transition-all active:scale-95"
-                >
-                  {cpSubmitting && <RefreshCw className="w-4 h-4 animate-spin" />}
-                  {editingCoPartner ? 'Save Changes' : 'Create Partner'}
-                </button>
-              </div>
-            </form>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
           </div>
-        </div>
-      )}
+
+          <div className="pt-4 border-t border-slate-800 flex items-center justify-end gap-3">
+            <Button
+              type="button"
+              variant="ghost"
+              size="sm"
+              onClick={() => setCoPartnerModalOpen(false)}
+            >
+              Cancel
+            </Button>
+            <Button
+              type="submit"
+              variant="primary"
+              size="sm"
+              loading={cpSubmitting}
+              disabled={activeSites.length === 0}
+            >
+              {editingCoPartner ? 'Save Changes' : 'Create Partner'}
+            </Button>
+          </div>
+        </form>
+      </Modal>
 
       {/* Site Boy Modal */}
-      {siteBoyModalOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-md animate-fade-in">
-          <div className="w-full max-w-md bg-slate-900 border border-slate-800 rounded-3xl shadow-2xl overflow-hidden flex flex-col max-h-[90vh]">
-            <div className="px-6 py-4 border-b border-slate-800 flex items-center justify-between bg-slate-950/40">
-              <h3 className="font-bold text-white text-base flex items-center gap-2">
-                <UserCheck className="w-5 h-5 text-blue-400" />
-                {editingSiteBoy ? 'Edit Site Supervisor' : 'Onboard Site Supervisor'}
-              </h3>
-              <button
-                onClick={() => setSiteBoyModalOpen(false)}
-                className="p-1 rounded-lg text-slate-400 hover:text-white hover:bg-slate-800 transition-colors"
-              >
-                <X className="w-5 h-5" />
-              </button>
+      <Modal
+        isOpen={siteBoyModalOpen}
+        onClose={() => setSiteBoyModalOpen(false)}
+        title={editingSiteBoy ? 'Edit Site Supervisor' : 'Onboard Site Supervisor'}
+        maxWidth="md"
+      >
+        <form onSubmit={handleSiteBoySubmit} className="space-y-4">
+          {sbError && (
+            <div className="p-3.5 rounded-2xl bg-rose-500/10 border border-rose-500/30 text-rose-400 text-xs flex items-center gap-2 font-medium">
+              <AlertTriangle className="w-4 h-4 shrink-0" />
+              <span>{sbError}</span>
             </div>
+          )}
 
-            <form onSubmit={handleSiteBoySubmit} className="p-6 space-y-4 overflow-y-auto">
-              {sbError && (
-                <div className="p-3.5 rounded-2xl bg-rose-500/10 border border-rose-500/30 text-rose-400 text-xs flex items-center gap-2 font-medium">
-                  <AlertTriangle className="w-4 h-4 shrink-0" />
-                  <span>{sbError}</span>
-                </div>
-              )}
+          {activeSites.length === 0 && (
+            <div className="p-3.5 rounded-2xl bg-amber-500/10 border border-amber-500/30 text-amber-400 text-xs flex items-center gap-2">
+              <Info className="w-4 h-4 shrink-0" />
+              <span>No active quarry sites available. Please add at least 1 site in the Sites tab first.</span>
+            </div>
+          )}
 
-              {activeSites.length === 0 && (
-                <div className="p-3.5 rounded-2xl bg-amber-500/10 border border-amber-500/30 text-amber-400 text-xs flex items-center gap-2">
-                  <Info className="w-4 h-4 shrink-0" />
-                  <span>No active quarry sites available. Please add at least 1 site in the Sites tab first.</span>
-                </div>
-              )}
+          <Input
+            label="Supervisor Name"
+            required
+            placeholder="e.g. Manu"
+            value={sbName}
+            onChange={(e) => setSbName(e.target.value)}
+          />
 
-              <div>
-                <label className="block text-xs font-bold text-slate-300 uppercase tracking-wider mb-1.5">
-                  Supervisor Name *
-                </label>
-                <input
-                  type="text"
-                  required
-                  placeholder="e.g. Manu"
-                  value={sbName}
-                  onChange={(e) => setSbName(e.target.value)}
-                  className="w-full h-11 px-4 rounded-xl bg-slate-950 border border-slate-800 text-white text-sm focus:border-blue-500 focus:ring-1 focus:ring-blue-500/30 focus:outline-none transition-all"
-                />
-              </div>
+          <Input
+            label="Mobile Number (Login)"
+            required
+            disabled={!!editingSiteBoy}
+            placeholder="10-digit mobile"
+            value={sbMobile}
+            onChange={(e) => setSbMobile(e.target.value.replace(/\D/g, '').slice(0, 10))}
+          />
 
-              <div>
-                <label className="block text-xs font-bold text-slate-300 uppercase tracking-wider mb-1.5">
-                  Mobile Number (Login) *
-                </label>
-                <input
-                  type="tel"
-                  required
-                  disabled={!!editingSiteBoy}
-                  placeholder="10-digit mobile"
-                  value={sbMobile}
-                  onChange={(e) => setSbMobile(e.target.value.replace(/\D/g, '').slice(0, 10))}
-                  className="w-full h-11 px-4 rounded-xl bg-slate-950 border border-slate-800 text-white text-sm focus:border-blue-500 focus:ring-1 focus:ring-blue-500/30 focus:outline-none disabled:opacity-50 disabled:cursor-not-allowed transition-all font-mono"
-                />
-              </div>
+          <Input
+            label={`Password ${editingSiteBoy ? '(Optional)' : '*'}`}
+            type="password"
+            required={!editingSiteBoy}
+            placeholder={editingSiteBoy ? 'Keep current password' : 'Min 6 characters'}
+            value={sbPassword}
+            onChange={(e) => setSbPassword(e.target.value)}
+          />
 
-              <div>
-                <label className="block text-xs font-bold text-slate-300 uppercase tracking-wider mb-1.5">
-                  Password {editingSiteBoy ? '(Optional)' : '*'}
-                </label>
-                <input
-                  type="password"
-                  required={!editingSiteBoy}
-                  placeholder={editingSiteBoy ? 'Keep current password' : 'Min 6 characters'}
-                  value={sbPassword}
-                  onChange={(e) => setSbPassword(e.target.value)}
-                  className="w-full h-11 px-4 rounded-xl bg-slate-950 border border-slate-800 text-white text-sm focus:border-blue-500 focus:ring-1 focus:ring-blue-500/30 focus:outline-none transition-all"
-                />
-              </div>
-
-              <div>
-                <label className="block text-xs font-bold text-slate-300 uppercase tracking-wider mb-1.5">
-                  Assigned Quarry Site (Strictly Locked) *
-                </label>
-                <CustomSelect
-                  value={sbSiteId}
-                  onChange={setSbSiteId}
-                  options={activeSites.map((s) => ({
-                    value: s.id,
-                    label: s.siteName,
-                    subLabel: s.location || undefined,
-                  }))}
-                  placeholder="Select Quarry Site"
-                />
-                <p className="text-[11px] text-slate-400 mt-1.5 flex items-center gap-1">
-                  <Info className="w-3.5 h-3.5 text-blue-400 shrink-0" />
-                  Site supervisors can only record loads and expenses for their assigned quarry site.
-                </p>
-              </div>
-
-              <div className="pt-4 border-t border-slate-800 flex items-center justify-end gap-3">
-                <button
-                  type="button"
-                  onClick={() => setSiteBoyModalOpen(false)}
-                  className="px-4 py-2.5 rounded-2xl text-xs sm:text-sm font-semibold text-slate-400 hover:text-white hover:bg-slate-800 transition-colors"
-                >
-                  Cancel
-                </button>
-                <button
-                  type="submit"
-                  disabled={sbSubmitting || activeSites.length === 0}
-                  className="flex items-center gap-2 px-5 py-2.5 rounded-2xl bg-blue-600 hover:bg-blue-500 text-white font-bold text-xs sm:text-sm shadow-lg shadow-blue-500/20 disabled:opacity-50 transition-all active:scale-95"
-                >
-                  {sbSubmitting && <RefreshCw className="w-4 h-4 animate-spin" />}
-                  {editingSiteBoy ? 'Save Changes' : 'Create Supervisor'}
-                </button>
-              </div>
-            </form>
+          <div>
+            <CustomSelect
+              label="Assigned Quarry Site (Strictly Locked)"
+              required
+              value={sbSiteId}
+              onChange={setSbSiteId}
+              options={activeSites.map((s) => ({
+                value: s.id,
+                label: s.siteName,
+                subLabel: s.location || undefined,
+              }))}
+              placeholder="Select Quarry Site"
+            />
+            <p className="text-[11px] text-slate-400 mt-1.5 flex items-center gap-1">
+              <Info className="w-3.5 h-3.5 text-blue-400 shrink-0" />
+              Site supervisors can only record loads and expenses for their assigned quarry site.
+            </p>
           </div>
-        </div>
-      )}
+
+          <div className="pt-4 border-t border-slate-800 flex items-center justify-end gap-3">
+            <Button
+              type="button"
+              variant="ghost"
+              size="sm"
+              onClick={() => setSiteBoyModalOpen(false)}
+            >
+              Cancel
+            </Button>
+            <Button
+              type="submit"
+              variant="secondary"
+              size="sm"
+              loading={sbSubmitting}
+              disabled={activeSites.length === 0}
+            >
+              {editingSiteBoy ? 'Save Changes' : 'Create Supervisor'}
+            </Button>
+          </div>
+        </form>
+      </Modal>
 
       {/* Deactivate Confirmation Modal */}
       <ConfirmModal

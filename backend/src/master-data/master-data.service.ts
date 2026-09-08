@@ -1,16 +1,26 @@
 import { Injectable } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { AuthUser } from '../auth/decorators/current-user.decorator';
-
+import { MasterCacheService } from '../common/cache/master-cache.service';
 import { DEFAULT_EXPENSE_CATEGORIES } from '../expenses/expense-categories.service';
 
 @Injectable()
 export class MasterDataService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly cacheService: MasterCacheService,
+  ) {}
 
   async getBundle(user: AuthUser) {
     const ownerId = user.ownerId;
     const isOwner = user.role === 'OWNER';
+    const siteScopeKey = isOwner ? 'ALL' : (user.assignedSiteIds || []).sort().join(',');
+    const cacheKey = `master_bundle:${ownerId}:${user.role}:${siteScopeKey}`;
+
+    const cached = this.cacheService.get<any>(cacheKey);
+    if (cached) {
+      return cached;
+    }
 
     const siteWhere: any = {
       userId: ownerId,
@@ -104,7 +114,7 @@ export class MasterDataService {
       });
     }
 
-    return {
+    const result = {
       sites,
       vehicles,
       vehicleTypes,
@@ -114,5 +124,8 @@ export class MasterDataService {
       expenseCategories,
       machinery,
     };
+
+    this.cacheService.set(cacheKey, result);
+    return result;
   }
 }

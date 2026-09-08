@@ -9,10 +9,14 @@ import { PrismaService } from '../prisma/prisma.service';
 import { CreateRateDto } from './dto/create-rate.dto';
 import { UpdateRateDto } from './dto/update-rate.dto';
 import { LookupRateDto } from './dto/lookup-rate.dto';
+import { MasterCacheService } from '../common/cache/master-cache.service';
 
 @Injectable()
 export class RatesService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly cacheService: MasterCacheService,
+  ) {}
 
   async create(userId: string, dto: CreateRateDto) {
     // 1. Verify site exists and belongs to user
@@ -63,7 +67,7 @@ export class RatesService {
       );
     }
 
-    return this.prisma.rate.create({
+    const created = await this.prisma.rate.create({
       data: {
         siteId: dto.siteId,
         vehicleTypeId: dto.vehicleTypeId,
@@ -76,6 +80,9 @@ export class RatesService {
         materialType: true,
       },
     });
+
+    this.cacheService.invalidateTenant(userId);
+    return created;
   }
 
   async findAll(userId: string, siteId?: string) {
@@ -96,6 +103,12 @@ export class RatesService {
   }
 
   async lookup(userId: string, query: LookupRateDto) {
+    const cacheKey = `rate_lookup:${userId}:${query.siteId}:${query.vehicleTypeId}:${query.materialTypeId}`;
+    const cached = this.cacheService.get<any>(cacheKey);
+    if (cached) {
+      return cached;
+    }
+
     // 1. Verify site belongs to user
     const site = await this.prisma.site.findUnique({
       where: { id: query.siteId },
@@ -128,6 +141,7 @@ export class RatesService {
       );
     }
 
+    this.cacheService.set(cacheKey, rate);
     return rate;
   }
 
@@ -155,7 +169,7 @@ export class RatesService {
   async update(userId: string, id: string, dto: UpdateRateDto) {
     await this.findOne(userId, id);
 
-    return this.prisma.rate.update({
+    const updated = await this.prisma.rate.update({
       where: { id },
       data: {
         amount: dto.amount,
@@ -166,6 +180,9 @@ export class RatesService {
         materialType: true,
       },
     });
+
+    this.cacheService.invalidateTenant(userId);
+    return updated;
   }
 
   async remove(userId: string, id: string) {
@@ -180,8 +197,11 @@ export class RatesService {
       );
     }
 
-    return this.prisma.rate.delete({
+    const deleted = await this.prisma.rate.delete({
       where: { id },
     });
+
+    this.cacheService.invalidateTenant(userId);
+    return deleted;
   }
 }

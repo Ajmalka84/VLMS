@@ -16,6 +16,7 @@ export interface CurrentDrawerResponse {
   existingShift: {
     id: string;
     shiftType: string;
+    openingCash: number;
     actualHandoverCash: number;
     discrepancy: number;
     remarks: string | null;
@@ -31,6 +32,7 @@ export interface CreateShiftReconciliationDto {
   siteId?: string;
   date: string;
   shiftType?: string;
+  openingCash?: number;
   actualHandoverCash: number;
   remarks?: string;
 }

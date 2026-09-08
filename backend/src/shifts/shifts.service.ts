@@ -10,6 +10,7 @@ import { AuthUser } from '../auth/decorators/current-user.decorator';
 import { CreateShiftReconciliationDto } from './dto/create-shift-reconciliation.dto';
 import { QueryShiftsDto } from './dto/query-shifts.dto';
 import { ApproveShiftDto } from './dto/approve-shift.dto';
+import { buildDateRangeFilter } from '../common/utils/query-builder.util';
 
 @Injectable()
 export class ShiftsService {
@@ -70,52 +71,37 @@ export class ShiftsService {
 
     const openingCash = previousShift ? Number(previousShift.actualHandoverCash) : 0;
 
-    // 2. Query all cash loads on target date
-    const cashLoads = await this.prisma.load.findMany({
+    // 2. Query cash loads (inflows) via PostgreSQL SQL aggregation
+    const loadAgg = await this.prisma.load.aggregate({
       where: {
         siteId,
         date: targetDate,
         paymentType: 'CASH',
         deletedAt: null,
       },
-      select: {
-        id: true,
-        amount: true,
-        vehicle: { select: { vehicleNumber: true } },
-      },
+      _sum: { amount: true },
+      _count: { id: true },
     });
 
-    const cashInflows = cashLoads.reduce((sum, l) => sum + Number(l.amount), 0);
-    const cashLoadsCount = cashLoads.length;
+    const cashInflows = Number(loadAgg._sum?.amount || 0);
+    const cashLoadsCount = Number(loadAgg._count?.id || 0);
 
-    // 3. Query all cash expenses & machine advances on target date
-    const cashExpenses = await this.prisma.expense.findMany({
+    // 3. Query cash expenses & machine advances (outflows) via PostgreSQL SQL aggregation
+    const expenseAgg = await this.prisma.expense.aggregate({
       where: {
         siteId,
         date: targetDate,
         paymentMode: 'CASH_DRAWER',
         deletedAt: null,
       },
-      select: {
-        id: true,
-        amount: true,
-        advanceAmount: true,
-        category: { select: { name: true } },
-        machinery: { select: { name: true } },
-      },
+      _sum: { amount: true, advanceAmount: true },
+      _count: { id: true },
     });
 
-    let generalExpensesOutflow = 0;
-    let machineryAdvanceOutflow = 0;
-
-    for (const exp of cashExpenses) {
-      generalExpensesOutflow += Number(exp.amount);
-      if (exp.advanceAmount) {
-        machineryAdvanceOutflow += Number(exp.advanceAmount);
-      }
-    }
-
+    const generalExpensesOutflow = Number(expenseAgg._sum?.amount || 0);
+    const machineryAdvanceOutflow = Number(expenseAgg._sum?.advanceAmount || 0);
     const cashOutflows = generalExpensesOutflow + machineryAdvanceOutflow;
+    const expensesCount = Number(expenseAgg._count?.id || 0);
     const expectedCash = openingCash + cashInflows - cashOutflows;
 
     // 4. Check if today's shift is already recorded / submitted
@@ -141,12 +127,13 @@ export class ShiftsService {
       cashOutflows,
       generalExpensesOutflow,
       machineryAdvanceOutflow,
-      expensesCount: cashExpenses.length,
+      expensesCount,
       expectedCash,
       existingShift: existingShift
         ? {
             id: existingShift.id,
             shiftType: existingShift.shiftType,
+            openingCash: Number(existingShift.openingCash),
             actualHandoverCash: Number(existingShift.actualHandoverCash),
             discrepancy: Number(existingShift.discrepancy),
             remarks: existingShift.remarks,
@@ -180,18 +167,21 @@ export class ShiftsService {
       throw new BadRequestException('This shift handover has already been approved and locked by the owner.');
     }
 
+    const effectiveOpeningCash =
+      dto.openingCash !== undefined ? Number(dto.openingCash) : drawer.openingCash;
+    const expectedCash = effectiveOpeningCash + drawer.cashInflows - drawer.cashOutflows;
     const actualHandover = Number(dto.actualHandoverCash);
-    const discrepancy = actualHandover - drawer.expectedCash;
+    const discrepancy = actualHandover - expectedCash;
 
     const shiftData = {
       siteId,
       supervisorUserId: user.id,
       date: targetDate,
       shiftType: dto.shiftType || 'DAY',
-      openingCash: new Prisma.Decimal(drawer.openingCash),
+      openingCash: new Prisma.Decimal(effectiveOpeningCash),
       cashInflows: new Prisma.Decimal(drawer.cashInflows),
       cashOutflows: new Prisma.Decimal(drawer.cashOutflows),
-      expectedCash: new Prisma.Decimal(drawer.expectedCash),
+      expectedCash: new Prisma.Decimal(expectedCash),
       actualHandoverCash: new Prisma.Decimal(actualHandover),
       discrepancy: new Prisma.Decimal(discrepancy),
       remarks: dto.remarks || null,
@@ -269,14 +259,9 @@ export class ShiftsService {
       where.siteId = query.siteId;
     }
 
-    if (query.startDate || query.endDate) {
-      where.date = {};
-      if (query.startDate) {
-        where.date.gte = new Date(`${query.startDate}T00:00:00.000Z`);
-      }
-      if (query.endDate) {
-        where.date.lte = new Date(`${query.endDate}T23:59:59.999Z`);
-      }
+    const dateFilter = buildDateRangeFilter(query.startDate, query.endDate);
+    if (dateFilter) {
+      where.date = dateFilter;
     }
 
     if (query.isApproved !== undefined) {

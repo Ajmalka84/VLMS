@@ -118,7 +118,8 @@ export interface QuerySettlementParams {
 }
 
 export async function getContractorsSummaryApi(
-  params: QueryContractorsSummaryParams = {}
+  params: QueryContractorsSummaryParams = {},
+  options?: { signal?: AbortSignal }
 ): Promise<ContractorsSummaryResponse> {
   const query = new URLSearchParams();
   if (params.startDate) query.append('startDate', params.startDate);
@@ -129,12 +130,14 @@ export async function getContractorsSummaryApi(
 
   const qs = query.toString();
   return apiClient<ContractorsSummaryResponse>(
-    `/reports/contractors-summary${qs ? `?${qs}` : ''}`
+    `/reports/contractors-summary${qs ? `?${qs}` : ''}`,
+    { signal: options?.signal }
   );
 }
 
 export async function getSettlementReportApi(
-  params: QuerySettlementParams
+  params: QuerySettlementParams,
+  options?: { signal?: AbortSignal }
 ): Promise<SettlementReportResponse> {
   const query = new URLSearchParams();
   query.append('contractorId', params.contractorId);
@@ -145,7 +148,8 @@ export async function getSettlementReportApi(
   if (params.customerId) query.append('customerId', params.customerId);
 
   return apiClient<SettlementReportResponse>(
-    `/reports/settlement?${query.toString()}`
+    `/reports/settlement?${query.toString()}`,
+    { signal: options?.signal }
   );
 }
 
@@ -211,7 +215,8 @@ export interface QueryCashflowParams {
 }
 
 export async function getCashflowReportApi(
-  params: QueryCashflowParams = {}
+  params: QueryCashflowParams = {},
+  options?: { signal?: AbortSignal }
 ): Promise<CashflowReportResponse> {
   const query = new URLSearchParams();
   if (params.startDate) query.append('startDate', params.startDate);
@@ -221,7 +226,8 @@ export async function getCashflowReportApi(
 
   const qs = query.toString();
   return apiClient<CashflowReportResponse>(
-    `/reports/cashflow${qs ? `?${qs}` : ''}`
+    `/reports/cashflow${qs ? `?${qs}` : ''}`,
+    { signal: options?.signal }
   );
 }
 
@@ -289,7 +295,8 @@ export interface QueryPartnerSettlementParams {
 }
 
 export async function getPartnerSettlementReportApi(
-  params: QueryPartnerSettlementParams = {}
+  params: QueryPartnerSettlementParams = {},
+  options?: { signal?: AbortSignal }
 ): Promise<PartnerSettlementResponse> {
   const query = new URLSearchParams();
   if (params.partnerId) query.append('partnerId', params.partnerId);
@@ -300,7 +307,8 @@ export async function getPartnerSettlementReportApi(
 
   const qs = query.toString();
   return apiClient<PartnerSettlementResponse>(
-    `/reports/partner-settlement${qs ? `?${qs}` : ''}`
+    `/reports/partner-settlement${qs ? `?${qs}` : ''}`,
+    { signal: options?.signal }
   );
 }
 
@@ -378,7 +386,8 @@ export interface QueryMachinerySettlementParams {
 }
 
 export async function getMachinerySettlementReportApi(
-  params: QueryMachinerySettlementParams = {}
+  params: QueryMachinerySettlementParams = {},
+  options?: { signal?: AbortSignal }
 ): Promise<MachinerySettlementResponse> {
   const query = new URLSearchParams();
   if (params.machineryId) query.append('machineryId', params.machineryId);
@@ -389,7 +398,8 @@ export async function getMachinerySettlementReportApi(
 
   const qs = query.toString();
   return apiClient<MachinerySettlementResponse>(
-    `/reports/machinery-settlement${qs ? `?${qs}` : ''}`
+    `/reports/machinery-settlement${qs ? `?${qs}` : ''}`,
+    { signal: options?.signal }
   );
 }
 

@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Plus, Edit2, Trash2, Truck, AlertCircle, Phone, User, CheckCircle2, Power, X } from 'lucide-react';
+import { Plus, Edit2, Trash2, Truck, Phone, User, CheckCircle2, Power } from 'lucide-react';
 import {
   fetchMachineryApi,
   createMachineryApi,
@@ -7,17 +7,8 @@ import {
   deleteMachineryApi,
   Machinery,
 } from '../../api/expenses';
-import { Card } from '../common/Card';
-import { ConfirmModal } from '../common/ConfirmModal';
-
-function formatCurrency(amount: number | string | undefined | null) {
-  const num = Number(amount || 0);
-  return new Intl.NumberFormat('en-IN', {
-    style: 'currency',
-    currency: 'INR',
-    maximumFractionDigits: 2,
-  }).format(num);
-}
+import { Card, ConfirmModal, Modal, Input, Button, EmptyState, Badge } from '../common';
+import { formatINR } from '../../utils/formatters';
 
 export const MachineryManagement: React.FC = () => {
   const [machineryList, setMachineryList] = useState<Machinery[]>([]);
@@ -119,7 +110,7 @@ export const MachineryManagement: React.FC = () => {
     }
   };
 
-  const toggleActive = async (m: Machinery) => {
+  const handleToggleActive = async (m: Machinery) => {
     try {
       await updateMachineryApi(m.id, { isActive: !m.isActive });
       await loadMachinery();
@@ -135,133 +126,142 @@ export const MachineryManagement: React.FC = () => {
       setDeletingMachine(null);
       await loadMachinery();
     } catch (err: any) {
-      alert(err.message || 'Failed to delete machinery.');
+      alert(err.message || 'Failed to delete machine');
     }
   };
 
   return (
-    <div className="space-y-6 animate-fade-in">
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+    <div className="space-y-4">
+      {/* Top Action Bar */}
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-slate-900/60 p-4 rounded-2xl border border-slate-800">
         <div>
-          <h2 className="text-lg font-bold text-white flex items-center gap-2">
+          <h3 className="text-base font-bold text-white flex items-center gap-2">
             <Truck className="w-5 h-5 text-amber-400" />
-            Heavy Machinery Registry
-          </h2>
+            Heavy Machinery Fleet (Excavators / Loaders)
+          </h3>
           <p className="text-xs text-slate-400 mt-0.5">
-            Register Excavators, JCBs, Breakers, and Cranes with default hourly rental rates.
+            Register on-site equipment, standard hourly rental tariffs, and vendor contacts.
           </p>
         </div>
-        <button
+
+        <Button
+          variant="primary"
+          size="sm"
           onClick={openCreateModal}
-          className="inline-flex items-center gap-2 px-4 py-2 bg-amber-500 hover:bg-amber-400 text-slate-950 text-xs font-bold rounded-xl transition shadow-lg shadow-amber-500/20 cursor-pointer select-none touch-manipulation"
+          leftIcon={<Plus className="w-4 h-4" />}
         >
-          <Plus className="w-4 h-4" />
           Add Machinery
-        </button>
+        </Button>
       </div>
 
+      {/* Content */}
       {isLoading ? (
-        <div className="p-12 text-center text-slate-400 animate-pulse">Loading machinery fleet...</div>
-      ) : error ? (
-        <div className="p-8 text-center text-rose-400 font-semibold">{error}</div>
-      ) : machineryList.length === 0 ? (
-        <div className="p-12 text-center bg-slate-900/60 rounded-2xl border border-slate-800 shadow-xl space-y-3">
-          <Truck className="w-12 h-12 text-slate-600 mx-auto" />
-          <h4 className="text-base font-bold text-slate-200">No heavy machinery registered</h4>
-          <p className="text-xs text-slate-400 max-w-sm mx-auto">
-            Register your Hitachi, CAT, JCB excavators and breakers to track hourly operating costs.
-          </p>
-          <button
-            onClick={openCreateModal}
-            className="px-4 py-2 bg-amber-500 hover:bg-amber-400 text-slate-950 text-xs font-bold rounded-xl transition cursor-pointer shadow-md"
-          >
-            + Add First Machine
-          </button>
+        <div className="p-12 text-center text-xs text-slate-400 font-semibold animate-pulse">
+          Loading heavy machinery...
         </div>
+      ) : error ? (
+        <div className="p-4 bg-rose-500/10 border border-rose-500/30 text-rose-400 text-xs rounded-2xl flex items-center gap-2">
+          <span>{error}</span>
+        </div>
+      ) : machineryList.length === 0 ? (
+        <EmptyState
+          icon={<Truck className="w-8 h-8 text-amber-400" />}
+          title="No Heavy Machinery Configured"
+          description="Register excavators, JCBs, and loaders to enable hourly working logs and vendor billing."
+          actionText="Add Heavy Machine"
+          onAction={openCreateModal}
+          actionIcon={<Plus className="w-4 h-4" />}
+        />
       ) : (
-        <div className="overflow-hidden rounded-2xl border border-slate-800 bg-slate-900/60 backdrop-blur-md shadow-xl">
-          <table className="w-full text-left text-sm text-slate-300">
-            <thead className="bg-slate-950/80 text-[11px] uppercase font-bold tracking-wider text-slate-400 border-b border-slate-800">
+        <div className="rounded-2xl border border-slate-800 bg-slate-900/50 overflow-hidden shadow-xl">
+          <table className="w-full text-left text-xs text-slate-300">
+            <thead className="bg-slate-950/80 text-[10px] uppercase font-bold text-slate-400 border-b border-slate-800">
               <tr>
-                <th className="px-4 py-3.5">Machine Name & Code</th>
-                <th className="px-4 py-3.5 text-right">Default Rent / Hr</th>
-                <th className="px-4 py-3.5">Vendor / Owner</th>
-                <th className="px-4 py-3.5">Status</th>
-                <th className="px-4 py-3.5 text-right">Actions</th>
+                <th className="px-4 py-3">Machine Name</th>
+                <th className="px-4 py-3">Code / Tag</th>
+                <th className="px-4 py-3">Standard Hourly Rate</th>
+                <th className="px-4 py-3">Vendor / Owner</th>
+                <th className="px-4 py-3">Status</th>
+                <th className="px-4 py-3 text-right">Actions</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-800/60">
               {machineryList.map((m) => (
                 <tr key={m.id} className="hover:bg-slate-800/40 transition">
-                  <td className="px-4 py-3.5 font-bold text-white">
-                    <div className="flex items-center gap-2.5">
-                      <div className="w-8 h-8 rounded-xl bg-amber-500/10 border border-amber-500/20 flex items-center justify-center text-amber-400">
-                        <Truck className="w-4 h-4" />
-                      </div>
-                      <div>
-                        <span>{m.name}</span>
-                        {m.code && (
-                          <span className="ml-2 px-1.5 py-0.5 rounded text-[10px] bg-slate-800 text-slate-300 font-mono border border-slate-700">
-                            {m.code}
-                          </span>
-                        )}
-                      </div>
+                  <td className="px-4 py-3 font-bold text-white">
+                    <div className="flex items-center gap-2">
+                      <Truck className="w-4 h-4 text-amber-400 shrink-0" />
+                      <span>{m.name}</span>
                     </div>
                   </td>
-
-                  <td className="px-4 py-3.5 text-right font-black text-amber-400 text-base">
-                    {m.defaultRentPerHour ? formatCurrency(m.defaultRentPerHour) : '—'}
+                  <td className="px-4 py-3 font-mono font-bold text-slate-300">
+                    {m.code ? (
+                      <span className="px-2 py-0.5 rounded-lg bg-slate-800 border border-slate-700 text-amber-300">
+                        {m.code}
+                      </span>
+                    ) : (
+                      <span className="text-slate-500">—</span>
+                    )}
                   </td>
-
-                  <td className="px-4 py-3.5 text-xs text-slate-300">
-                    {m.vendorName ? (
-                      <div>
-                        <div className="font-bold text-slate-100 flex items-center gap-1.5">
-                          <User className="w-3.5 h-3.5 text-slate-500" />
-                          {m.vendorName}
+                  <td className="px-4 py-3 font-mono font-bold text-emerald-400">
+                    {m.defaultRentPerHour ? `${formatINR(m.defaultRentPerHour)} / hr` : '—'}
+                  </td>
+                  <td className="px-4 py-3">
+                    {m.vendorName || m.vendorMobile ? (
+                      <div className="space-y-0.5">
+                        <div className="text-white font-medium flex items-center gap-1">
+                          <User className="w-3 h-3 text-slate-400" />
+                          <span>{m.vendorName || 'Vendor'}</span>
                         </div>
                         {m.vendorMobile && (
-                          <div className="text-slate-400 flex items-center gap-1.5 mt-0.5">
+                          <div className="text-slate-400 text-[10px] flex items-center gap-1 font-mono">
                             <Phone className="w-3 h-3 text-slate-500" />
-                            {m.vendorMobile}
+                            <span>{m.vendorMobile}</span>
                           </div>
                         )}
                       </div>
                     ) : (
-                      <span className="text-slate-500 font-medium">Own Machinery</span>
+                      <span className="text-slate-500">In-house / Direct</span>
                     )}
                   </td>
-
-                  <td className="px-4 py-3.5">
+                  <td className="px-4 py-3">
                     <button
-                      onClick={() => toggleActive(m)}
-                      className={`inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-bold border transition cursor-pointer ${
-                        m.isActive
-                          ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/30 hover:bg-emerald-500/20'
-                          : 'bg-slate-800 text-slate-500 border-slate-700 hover:bg-slate-700'
-                      }`}
+                      type="button"
+                      onClick={() => handleToggleActive(m)}
+                      className="cursor-pointer group"
+                      title={m.isActive ? 'Click to deactivate' : 'Click to activate'}
                     >
-                      <Power className="w-3 h-3" />
-                      {m.isActive ? 'Active' : 'Inactive'}
+                      {m.isActive ? (
+                        <Badge variant="emerald" size="sm" dot>
+                          Active
+                        </Badge>
+                      ) : (
+                        <Badge variant="slate" size="sm">
+                          Inactive
+                        </Badge>
+                      )}
                     </button>
                   </td>
-
-                  <td className="px-4 py-3.5 text-right">
+                  <td className="px-4 py-3 text-right">
                     <div className="flex items-center justify-end gap-1.5">
-                      <button
+                      <Button
+                        variant="ghost"
+                        size="icon"
                         onClick={() => openEditModal(m)}
-                        className="p-1.5 text-slate-400 hover:text-amber-400 hover:bg-slate-800 rounded-lg transition"
                         title="Edit Machine"
+                        className="p-1.5 text-slate-400 hover:text-amber-400 min-h-[32px] min-w-[32px]"
                       >
-                        <Edit2 className="w-4 h-4" />
-                      </button>
-                      <button
+                        <Edit2 className="w-3.5 h-3.5" />
+                      </Button>
+                      <Button
+                        variant="ghost"
+                        size="icon"
                         onClick={() => setDeletingMachine(m)}
-                        className="p-1.5 text-slate-400 hover:text-rose-400 hover:bg-slate-800 rounded-lg transition"
                         title="Delete Machine"
+                        className="p-1.5 text-slate-400 hover:text-rose-400 min-h-[32px] min-w-[32px]"
                       >
-                        <Trash2 className="w-4 h-4" />
-                      </button>
+                        <Trash2 className="w-3.5 h-3.5" />
+                      </Button>
                     </div>
                   </td>
                 </tr>
@@ -272,113 +272,82 @@ export const MachineryManagement: React.FC = () => {
       )}
 
       {/* Modal */}
-      {isModalOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/80 backdrop-blur-sm p-4 animate-fade-in">
-          <div className="bg-slate-900 border border-slate-800 text-slate-100 rounded-2xl shadow-2xl max-w-md w-full p-6 space-y-4 relative">
-            <div className="flex items-center justify-between pb-3 border-b border-slate-800">
-              <h3 className="text-base font-bold text-white">
-                {editingMachine ? 'Edit Heavy Machinery' : 'Register Heavy Machinery'}
-              </h3>
-              <button
-                onClick={() => setIsModalOpen(false)}
-                className="p-1 text-slate-400 hover:text-white rounded-lg transition"
-              >
-                <X className="w-5 h-5" />
-              </button>
-            </div>
+      <Modal
+        isOpen={isModalOpen}
+        onClose={() => setIsModalOpen(false)}
+        title={editingMachine ? 'Edit Heavy Machinery' : 'Register Heavy Machinery'}
+        description="Configure unit details and standard rental charges."
+        icon={<Truck className="w-5 h-5 text-amber-400" />}
+        maxWidth="md"
+        footer={
+          <>
+            <Button
+              variant="secondary"
+              size="sm"
+              onClick={() => setIsModalOpen(false)}
+            >
+              Cancel
+            </Button>
+            <Button
+              variant="primary"
+              size="sm"
+              type="submit"
+              onClick={handleSave}
+              loading={isSubmitting}
+              loadingText="Saving..."
+            >
+              {editingMachine ? 'Update Machine' : 'Save Machinery'}
+            </Button>
+          </>
+        }
+      >
+        <form onSubmit={handleSave} className="space-y-3">
+          <Input
+            label="Machine Name / Model"
+            placeholder="e.g. Hitachi EX 210 Excavator"
+            value={name}
+            onChange={(e) => setName(e.target.value)}
+            error={formError || undefined}
+            required
+          />
 
-            {formError && (
-              <div className="p-3 bg-rose-500/10 border border-rose-500/30 text-rose-400 text-xs rounded-xl flex items-center gap-2">
-                <AlertCircle className="w-4 h-4 shrink-0" />
-                <span>{formError}</span>
-              </div>
-            )}
+          <div className="grid grid-cols-2 gap-3">
+            <Input
+              label="Machine Code / Tag"
+              placeholder="e.g. HIT-01"
+              value={code}
+              onChange={(e) => setCode(e.target.value)}
+            />
 
-            <form onSubmit={handleSave} className="space-y-3">
-              <div>
-                <label className="block text-xs font-semibold text-slate-300 mb-1">
-                  Machine Name / Model <span className="text-rose-400">*</span>
-                </label>
-                <input
-                  type="text"
-                  placeholder="e.g. Hitachi EX 210 Excavator"
-                  value={name}
-                  onChange={(e) => setName(e.target.value)}
-                  required
-                  className="w-full text-sm px-3.5 py-2.5 rounded-xl bg-slate-950 border border-slate-700 text-white focus:border-amber-500 focus:ring-1 focus:ring-amber-500 outline-none"
-                />
-              </div>
-
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className="block text-xs font-semibold text-slate-300 mb-1">Machine Code / Tag</label>
-                  <input
-                    type="text"
-                    placeholder="e.g. HIT-01"
-                    value={code}
-                    onChange={(e) => setCode(e.target.value)}
-                    className="w-full text-sm px-3.5 py-2.5 rounded-xl bg-slate-950 border border-slate-700 text-white focus:border-amber-500 focus:ring-1 focus:ring-amber-500 outline-none"
-                  />
-                </div>
-
-                <div>
-                  <label className="block text-xs font-semibold text-slate-300 mb-1">Default Rent / Hr (₹)</label>
-                  <input
-                    type="number"
-                    step="0.01"
-                    min="0"
-                    placeholder="e.g. 2500"
-                    value={defaultRentPerHour}
-                    onChange={(e) => setDefaultRentPerHour(e.target.value)}
-                    className="w-full text-sm px-3.5 py-2.5 rounded-xl bg-slate-950 border border-slate-700 text-white font-bold focus:border-amber-500 focus:ring-1 focus:ring-amber-500 outline-none"
-                  />
-                </div>
-              </div>
-
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className="block text-xs font-semibold text-slate-300 mb-1">Vendor / Owner Name</label>
-                  <input
-                    type="text"
-                    placeholder="e.g. ABC Earthmovers"
-                    value={vendorName}
-                    onChange={(e) => setVendorName(e.target.value)}
-                    className="w-full text-sm px-3.5 py-2.5 rounded-xl bg-slate-950 border border-slate-700 text-white focus:border-amber-500 focus:ring-1 focus:ring-amber-500 outline-none"
-                  />
-                </div>
-
-                <div>
-                  <label className="block text-xs font-semibold text-slate-300 mb-1">Vendor Mobile</label>
-                  <input
-                    type="tel"
-                    placeholder="e.g. 9847000000"
-                    value={vendorMobile}
-                    onChange={(e) => setVendorMobile(e.target.value)}
-                    className="w-full text-sm px-3.5 py-2.5 rounded-xl bg-slate-950 border border-slate-700 text-white focus:border-amber-500 focus:ring-1 focus:ring-amber-500 outline-none"
-                  />
-                </div>
-              </div>
-
-              <div className="flex items-center justify-end gap-3 pt-2 border-t border-slate-800">
-                <button
-                  type="button"
-                  onClick={() => setIsModalOpen(false)}
-                  className="px-4 py-2 text-xs font-bold text-slate-400 hover:text-white rounded-xl transition cursor-pointer"
-                >
-                  Cancel
-                </button>
-                <button
-                  type="submit"
-                  disabled={isSubmitting}
-                  className="px-5 py-2 text-xs font-bold text-slate-950 bg-amber-500 hover:bg-amber-400 rounded-xl transition shadow-lg shadow-amber-500/20 cursor-pointer disabled:opacity-50"
-                >
-                  {isSubmitting ? 'Saving...' : 'Save Machinery'}
-                </button>
-              </div>
-            </form>
+            <Input
+              label="Default Rent / Hr (₹)"
+              type="number"
+              step="0.01"
+              min="0"
+              placeholder="e.g. 2500"
+              value={defaultRentPerHour}
+              onChange={(e) => setDefaultRentPerHour(e.target.value)}
+            />
           </div>
-        </div>
-      )}
+
+          <div className="grid grid-cols-2 gap-3">
+            <Input
+              label="Vendor / Owner Name"
+              placeholder="e.g. ABC Earthmovers"
+              value={vendorName}
+              onChange={(e) => setVendorName(e.target.value)}
+            />
+
+            <Input
+              label="Vendor Mobile"
+              type="tel"
+              placeholder="e.g. 9847000000"
+              value={vendorMobile}
+              onChange={(e) => setVendorMobile(e.target.value)}
+            />
+          </div>
+        </form>
+      </Modal>
 
       {/* Delete Modal */}
       {deletingMachine && (

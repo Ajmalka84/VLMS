@@ -7,6 +7,7 @@ import {
 import { PrismaService } from '../prisma/prisma.service';
 import { CreateExpenseCategoryDto } from './dto/create-expense-category.dto';
 import { UpdateExpenseCategoryDto } from './dto/update-expense-category.dto';
+import { MasterCacheService } from '../common/cache/master-cache.service';
 
 export const DEFAULT_EXPENSE_CATEGORIES = [
   'Diesel',
@@ -20,7 +21,10 @@ export const DEFAULT_EXPENSE_CATEGORIES = [
 
 @Injectable()
 export class ExpenseCategoriesService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly cacheService: MasterCacheService,
+  ) {}
 
   async listCategories(ownerId: string) {
     let categories = await this.prisma.expenseCategory.findMany({
@@ -76,13 +80,16 @@ export class ExpenseCategoriesService {
       throw new ConflictException(`Expense category "${trimmedName}" already exists`);
     }
 
-    return this.prisma.expenseCategory.create({
+    const created = await this.prisma.expenseCategory.create({
       data: {
         userId: ownerId,
         name: trimmedName,
         isDefault: false,
       },
     });
+
+    this.cacheService.invalidateTenant(ownerId);
+    return created;
   }
 
   async updateCategory(ownerId: string, id: string, dto: UpdateExpenseCategoryDto) {
@@ -107,10 +114,13 @@ export class ExpenseCategoriesService {
       throw new ConflictException(`Expense category "${trimmedName}" already exists`);
     }
 
-    return this.prisma.expenseCategory.update({
+    const updated = await this.prisma.expenseCategory.update({
       where: { id },
       data: { name: trimmedName },
     });
+
+    this.cacheService.invalidateTenant(ownerId);
+    return updated;
   }
 
   async deleteCategory(ownerId: string, id: string) {
@@ -136,6 +146,7 @@ export class ExpenseCategoriesService {
       where: { id },
     });
 
+    this.cacheService.invalidateTenant(ownerId);
     return {
       id,
       message: `Expense category "${category.name}" deleted successfully`,

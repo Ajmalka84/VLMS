@@ -9,10 +9,14 @@ import { PrismaService } from '../prisma/prisma.service';
 import { CreateSiteDto } from './dto/create-site.dto';
 import { UpdateSiteDto } from './dto/update-site.dto';
 import { AuthUser } from '../auth/decorators/current-user.decorator';
+import { MasterCacheService } from '../common/cache/master-cache.service';
 
 @Injectable()
 export class SitesService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly cacheService: MasterCacheService,
+  ) {}
 
   async create(user: AuthUser, dto: CreateSiteDto) {
     const ownerId = user.ownerId;
@@ -31,7 +35,7 @@ export class SitesService {
       );
     }
 
-    return this.prisma.site.create({
+    const created = await this.prisma.site.create({
       data: {
         userId: ownerId,
         siteName: cleanSiteName,
@@ -39,6 +43,9 @@ export class SitesService {
         pincode: dto.pincode.trim(),
       },
     });
+
+    this.cacheService.invalidateTenant(ownerId);
+    return created;
   }
 
   async findAll(user: AuthUser) {
@@ -162,6 +169,7 @@ export class SitesService {
       }
     }
 
+    this.cacheService.invalidateTenant(ownerId);
     return updatedSite;
   }
 
@@ -178,8 +186,11 @@ export class SitesService {
       );
     }
 
-    return this.prisma.site.delete({
+    const deleted = await this.prisma.site.delete({
       where: { id },
     });
+
+    this.cacheService.invalidateTenant(user.ownerId);
+    return deleted;
   }
 }

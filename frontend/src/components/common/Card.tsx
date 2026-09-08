@@ -6,7 +6,7 @@ interface CardProps extends React.HTMLAttributes<HTMLDivElement> {
   className?: string;
 }
 
-export const Card: React.FC<CardProps> = ({
+export const Card: React.FC<CardProps> = React.memo(({
   children,
   variant = 'glass',
   className = '',
@@ -27,4 +27,6 @@ export const Card: React.FC<CardProps> = ({
       {children}
     </div>
   );
-};
+});
+
+Card.displayName = 'Card';

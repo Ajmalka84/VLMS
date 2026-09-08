@@ -8,10 +8,14 @@ import { Prisma } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { CreateMachineryDto } from './dto/create-machinery.dto';
 import { UpdateMachineryDto } from './dto/update-machinery.dto';
+import { MasterCacheService } from '../common/cache/master-cache.service';
 
 @Injectable()
 export class MachineryService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly cacheService: MasterCacheService,
+  ) {}
 
   async listMachinery(ownerId: string, includeInactive = false) {
     const where: any = { userId: ownerId };
@@ -51,7 +55,7 @@ export class MachineryService {
       throw new ConflictException(`Machinery "${trimmedName}" already registered`);
     }
 
-    return this.prisma.machinery.create({
+    const created = await this.prisma.machinery.create({
       data: {
         userId: ownerId,
         name: trimmedName,
@@ -62,6 +66,9 @@ export class MachineryService {
         isActive: true,
       },
     });
+
+    this.cacheService.invalidateTenant(ownerId);
+    return created;
   }
 
   async updateMachinery(ownerId: string, id: string, dto: UpdateMachineryDto) {
@@ -99,10 +106,13 @@ export class MachineryService {
       data.isActive = dto.isActive;
     }
 
-    return this.prisma.machinery.update({
+    const updated = await this.prisma.machinery.update({
       where: { id },
       data,
     });
+
+    this.cacheService.invalidateTenant(ownerId);
+    return updated;
   }
 
   async deleteMachinery(ownerId: string, id: string) {
@@ -122,6 +132,7 @@ export class MachineryService {
       where: { id },
     });
 
+    this.cacheService.invalidateTenant(ownerId);
     return {
       id,
       message: `Machinery "${machine.name}" deleted successfully`,

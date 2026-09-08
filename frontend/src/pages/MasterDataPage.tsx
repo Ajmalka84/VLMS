@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import {
   MapPin,
@@ -10,82 +10,108 @@ import {
   Edit2,
   Trash2,
   Search,
-  CheckCircle2,
   AlertTriangle,
-  RefreshCw,
   X,
   Phone,
-  Building2,
-  ChevronRight,
-  Shield,
-  Zap,
   Power,
+  Zap,
   Users,
 } from 'lucide-react';
-import { Card } from '../components/common/Card';
-import { ConfirmModal } from '../components/common/ConfirmModal';
-import { CustomSelect } from '../components/common/CustomSelect';
+import {
+  Card,
+  ConfirmModal,
+  CustomSelect,
+  PageHeader,
+  Button,
+  TabBar,
+  SearchBar,
+  Modal,
+  Input,
+  Badge,
+  EmptyState,
+} from '../components/common';
 import { TeamManagement } from '../components/team/TeamManagement';
 import { ExpenseCategoriesManagement } from '../components/expenses/ExpenseCategoriesManagement';
 import { MachineryManagement } from '../components/expenses/MachineryManagement';
 import { useAuth } from '../context/AuthContext';
+import { useToast } from '../context/ToastContext';
+import { formatINR } from '../utils/formatters';
 import {
   Site,
   Vehicle,
-  Contractor,
-  Rate,
   VehicleType,
   MaterialType,
-  getSitesApi,
+  Contractor,
+  Rate,
   createSiteApi,
   updateSiteApi,
-  getVehiclesApi,
   createVehicleApi,
   updateVehicleApi,
   deleteVehicleApi,
-  getContractorsApi,
-  createContractorApi,
-  updateContractorApi,
-  deleteContractorApi,
-  getRatesApi,
-  createRateApi,
-  updateRateApi,
-  deleteRateApi,
-  getVehicleTypesApi,
   createVehicleTypeApi,
   updateVehicleTypeApi,
   deleteVehicleTypeApi,
-  getMaterialTypesApi,
   createMaterialTypeApi,
   updateMaterialTypeApi,
   deleteMaterialTypeApi,
+  createContractorApi,
+  updateContractorApi,
+  deleteContractorApi,
+  createRateApi,
+  updateRateApi,
+  deleteRateApi,
 } from '../api/masterData';
 import { useMasterCache } from '../context/MasterCacheContext';
 
-type CustomerTab = 'sites' | 'vehicles' | 'contractors' | 'rates' | 'team' | 'expense-categories' | 'machinery';
-type AdminTab = 'vehicle-types' | 'material-types';
+type CustomerTab =
+  | 'sites'
+  | 'vehicles'
+  | 'vehicle-types'
+  | 'material-types'
+  | 'contractors'
+  | 'rates'
+  | 'team'
+  | 'expense-categories'
+  | 'machinery';
 
 export const MasterDataPage: React.FC = () => {
   const { user } = useAuth();
-  const isSuperAdmin = user?.role === 'SUPER_ADMIN';
+  const toast = useToast();
   const isSiteBoy = user?.role === 'SITE_BOY';
   const cache = useMasterCache();
 
   const [searchParams, setSearchParams] = useSearchParams();
   const tabFromUrl = searchParams.get('tab') as CustomerTab | null;
 
-  const validCustomerTabs = isSiteBoy
-    ? ['vehicles', 'contractors']
-    : ['sites', 'vehicles', 'contractors', 'rates', 'team', 'expense-categories', 'machinery'];
+  const validCustomerTabs: CustomerTab[] = isSiteBoy
+    ? [
+        'vehicles',
+        'vehicle-types',
+        'material-types',
+        'contractors',
+        'rates',
+        'expense-categories',
+        'machinery',
+      ]
+    : [
+        'sites',
+        'vehicles',
+        'vehicle-types',
+        'material-types',
+        'contractors',
+        'rates',
+        'team',
+        'expense-categories',
+        'machinery',
+      ];
 
   const [customerTab, setCustomerTab] = useState<CustomerTab>(
     tabFromUrl && validCustomerTabs.includes(tabFromUrl)
       ? tabFromUrl
       : isSiteBoy
       ? 'vehicles'
-      : 'sites'
+      : 'sites',
   );
-  const [adminTab, setAdminTab] = useState<AdminTab>('vehicle-types');
 
   useEffect(() => {
     const t = searchParams.get('tab') as CustomerTab | null;
@@ -100,25 +126,16 @@ export const MasterDataPage: React.FC = () => {
     setSearch('');
   };
 
-  // Super Admin Local Master Data State (for global types)
-  const [adminVehicleTypes, setAdminVehicleTypes] = useState<VehicleType[]>([]);
-  const [adminMaterialTypes, setAdminMaterialTypes] = useState<MaterialType[]>([]);
-  const [adminLoading, setAdminLoading] = useState(false);
-
-  // Unified Data Accessors (Customer uses cached bundle; Admin uses admin state)
-  const sites = isSuperAdmin ? [] : cache.sites;
-  const vehicles = isSuperAdmin ? [] : cache.vehicles;
-  const contractors = isSuperAdmin ? [] : cache.contractors;
-  const rates = isSuperAdmin ? [] : cache.rates;
-  const vehicleTypes = isSuperAdmin ? adminVehicleTypes : cache.vehicleTypes;
-  const materialTypes = isSuperAdmin ? adminMaterialTypes : cache.materialTypes;
-  const loading = isSuperAdmin ? adminLoading : (!cache.isInitialized || cache.isLoading);
+  // Data Accessors from Tenant Master Cache Bundle
+  const sites = cache.sites;
+  const vehicles = cache.vehicles;
+  const vehicleTypes = cache.vehicleTypes;
+  const materialTypes = cache.materialTypes;
+  const contractors = cache.contractors;
+  const rates = cache.rates;
+  const loading = !cache.isInitialized || cache.isLoading;
 
   const [search, setSearch] = useState('');
-  const [notification, setNotification] = useState<{
-    type: 'success' | 'error';
-    message: string;
-  } | null>(null);
 
   // Modals state
   const [modalMode, setModalMode] = useState<
@@ -126,14 +143,14 @@ export const MasterDataPage: React.FC = () => {
     | 'site-edit'
     | 'vehicle-add'
     | 'vehicle-edit'
-    | 'contractor-add'
-    | 'contractor-edit'
-    | 'rate-add'
-    | 'rate-edit'
     | 'vtype-add'
     | 'vtype-edit'
     | 'mtype-add'
     | 'mtype-edit'
+    | 'contractor-add'
+    | 'contractor-edit'
+    | 'rate-add'
+    | 'rate-edit'
     | null
   >(null);
 
@@ -142,6 +159,8 @@ export const MasterDataPage: React.FC = () => {
   // Form states
   const [siteForm, setSiteForm] = useState({ siteName: '', location: '', pincode: '' });
   const [vehicleForm, setVehicleForm] = useState({ vehicleNumber: '', vehicleTypeId: '' });
+  const [vtypeForm, setVtypeForm] = useState({ name: '' });
+  const [mtypeForm, setMtypeForm] = useState({ name: '' });
   const [contractorForm, setContractorForm] = useState({ name: '', mobile: '' });
   const [rateForm, setRateForm] = useState({
     siteId: '',
@@ -149,54 +168,24 @@ export const MasterDataPage: React.FC = () => {
     materialTypeId: '',
     amount: '',
   });
-  const [vtypeForm, setVtypeForm] = useState({ name: '' });
-  const [mtypeForm, setMtypeForm] = useState({ name: '' });
   const [submitting, setSubmitting] = useState(false);
   const [formError, setFormError] = useState<string | null>(null);
 
-  const showNotify = (type: 'success' | 'error', message: string) => {
-    setNotification({ type, message });
-    setTimeout(() => setNotification(null), 4000);
-  };
-
-  const adminFetchingRef = useRef(false);
-
   const loadAllData = async (force = false) => {
-    if (isSuperAdmin) {
-      if (adminFetchingRef.current && !force) return;
-      adminFetchingRef.current = true;
-      setAdminLoading(true);
-      try {
-        const [vtypes, mtypes] = await Promise.all([
-          getVehicleTypesApi(),
-          getMaterialTypesApi(),
-        ]);
-        setAdminVehicleTypes(vtypes);
-        setAdminMaterialTypes(mtypes);
-      } catch (err: any) {
-        showNotify('error', err.message || 'Failed to load master data');
-      } finally {
-        setAdminLoading(false);
-        adminFetchingRef.current = false;
-      }
-    } else {
-      try {
-        await cache.refreshMasterData(force);
-      } catch (err: any) {
-        showNotify('error', err.message || 'Failed to load master data');
-      }
+    try {
+      await cache.refreshMasterData(force);
+    } catch (err: any) {
+      toast.error(err.message || 'Failed to load master data');
     }
   };
 
   useEffect(() => {
-    if (isSuperAdmin) {
-      void loadAllData();
-    } else if (!cache.isInitialized) {
+    if (!cache.isInitialized) {
       void cache.refreshMasterData();
     }
-  }, [isSuperAdmin, cache.isInitialized]);
+  }, [cache.isInitialized]);
 
-  // ----------------- MODAL HANDLERS -----------------
+  // ----------------- MODAL OPENERS -----------------
   const openSiteModal = (site?: Site) => {
     setFormError(null);
     if (site) {
@@ -223,6 +212,32 @@ export const MasterDataPage: React.FC = () => {
         vehicleTypeId: vehicleTypes[0]?.id || '',
       });
       setModalMode('vehicle-add');
+    }
+  };
+
+  const openVTypeModal = (vt?: VehicleType) => {
+    setFormError(null);
+    if (vt) {
+      setActiveItem(vt);
+      setVtypeForm({ name: vt.name });
+      setModalMode('vtype-edit');
+    } else {
+      setActiveItem(null);
+      setVtypeForm({ name: '' });
+      setModalMode('vtype-add');
+    }
+  };
+
+  const openMTypeModal = (mt?: MaterialType) => {
+    setFormError(null);
+    if (mt) {
+      setActiveItem(mt);
+      setMtypeForm({ name: mt.name });
+      setModalMode('mtype-edit');
+    } else {
+      setActiveItem(null);
+      setMtypeForm({ name: '' });
+      setModalMode('mtype-add');
     }
   };
 
@@ -262,32 +277,6 @@ export const MasterDataPage: React.FC = () => {
     }
   };
 
-  const openVTypeModal = (vt?: VehicleType) => {
-    setFormError(null);
-    if (vt) {
-      setActiveItem(vt);
-      setVtypeForm({ name: vt.name });
-      setModalMode('vtype-edit');
-    } else {
-      setActiveItem(null);
-      setVtypeForm({ name: '' });
-      setModalMode('vtype-add');
-    }
-  };
-
-  const openMTypeModal = (mt?: MaterialType) => {
-    setFormError(null);
-    if (mt) {
-      setActiveItem(mt);
-      setMtypeForm({ name: mt.name });
-      setModalMode('mtype-edit');
-    } else {
-      setActiveItem(null);
-      setMtypeForm({ name: '' });
-      setModalMode('mtype-add');
-    }
-  };
-
   // ----------------- SUBMIT HANDLERS -----------------
   const handleSiteSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -297,7 +286,7 @@ export const MasterDataPage: React.FC = () => {
     if (!cleanSiteName || cleanSiteName.length < 2) {
       const msg = 'Site name must be at least 2 characters.';
       setFormError(msg);
-      showNotify('error', msg);
+      toast.error(msg);
       return;
     }
 
@@ -305,7 +294,7 @@ export const MasterDataPage: React.FC = () => {
     if (!cleanLocation || cleanLocation.length < 2) {
       const msg = 'Location must be at least 2 characters.';
       setFormError(msg);
-      showNotify('error', msg);
+      toast.error(msg);
       return;
     }
 
@@ -313,7 +302,7 @@ export const MasterDataPage: React.FC = () => {
     if (!/^[1-9][0-9]{5}$/.test(cleanPincode)) {
       const msg = 'Pincode must be a valid 6-digit Indian postal code (e.g. 682001).';
       setFormError(msg);
-      showNotify('error', msg);
+      toast.error(msg);
       return;
     }
 
@@ -325,7 +314,7 @@ export const MasterDataPage: React.FC = () => {
     if (isDuplicate) {
       const msg = `A site named "${cleanSiteName}" already exists in your account.`;
       setFormError(msg);
-      showNotify('error', msg);
+      toast.error(msg);
       return;
     }
 
@@ -333,18 +322,18 @@ export const MasterDataPage: React.FC = () => {
     try {
       if (modalMode === 'site-add') {
         await createSiteApi({ siteName: cleanSiteName, location: cleanLocation, pincode: cleanPincode });
-        showNotify('success', 'Site added successfully!');
+        toast.success('Site added successfully!');
       } else {
         await updateSiteApi(activeItem.id, { siteName: cleanSiteName, location: cleanLocation, pincode: cleanPincode });
-        showNotify('success', 'Site updated successfully!');
+        toast.success('Site updated successfully!');
       }
       setModalMode(null);
       setFormError(null);
-      void loadAllData();
+      void loadAllData(true);
     } catch (err: any) {
       const msg = err.message || 'Action failed';
       setFormError(msg);
-      showNotify('error', msg);
+      toast.error(msg);
     } finally {
       setSubmitting(false);
     }
@@ -363,13 +352,12 @@ export const MasterDataPage: React.FC = () => {
     const nextStatus = site.isActive === false ? true : false;
     try {
       await updateSiteApi(site.id, { isActive: nextStatus });
-      showNotify(
-        'success',
+      toast.info(
         `Quarry Site "${site.siteName}" is now ${nextStatus ? 'Active' : 'Inactive (Archived)'}`,
       );
-      void loadAllData();
+      void loadAllData(true);
     } catch (err: any) {
-      showNotify('error', err.message || 'Failed to update site status');
+      toast.error(err.message || 'Failed to update site status');
     }
   };
 
@@ -379,16 +367,16 @@ export const MasterDataPage: React.FC = () => {
 
     const cleanVehicleNumber = vehicleForm.vehicleNumber.replace(/[^a-zA-Z0-9]/g, '').toUpperCase();
     if (!cleanVehicleNumber || cleanVehicleNumber.length < 4 || cleanVehicleNumber.length > 15) {
-      const msg = 'Vehicle number must contain 4 to 15 alphanumeric characters (letters and numbers only, no spaces or dashes).';
+      const msg = 'Vehicle number must contain 4 to 15 alphanumeric characters.';
       setFormError(msg);
-      showNotify('error', msg);
+      toast.error(msg);
       return;
     }
 
     if (!vehicleForm.vehicleTypeId) {
       const msg = 'Please select a valid vehicle category.';
       setFormError(msg);
-      showNotify('error', msg);
+      toast.error(msg);
       return;
     }
 
@@ -400,7 +388,7 @@ export const MasterDataPage: React.FC = () => {
     if (isDuplicate) {
       const msg = `Vehicle "${cleanVehicleNumber}" is already registered in your fleet.`;
       setFormError(msg);
-      showNotify('error', msg);
+      toast.error(msg);
       return;
     }
 
@@ -408,18 +396,18 @@ export const MasterDataPage: React.FC = () => {
     try {
       if (modalMode === 'vehicle-add') {
         await createVehicleApi({ vehicleNumber: cleanVehicleNumber, vehicleTypeId: vehicleForm.vehicleTypeId });
-        showNotify('success', 'Vehicle registered successfully!');
+        toast.success('Vehicle registered successfully!');
       } else {
         await updateVehicleApi(activeItem.id, { vehicleNumber: cleanVehicleNumber, vehicleTypeId: vehicleForm.vehicleTypeId });
-        showNotify('success', 'Vehicle updated successfully!');
+        toast.success('Vehicle updated successfully!');
       }
       setModalMode(null);
       setFormError(null);
-      void loadAllData();
+      void loadAllData(true);
     } catch (err: any) {
       const msg = err.message || 'Action failed';
       setFormError(msg);
-      showNotify('error', msg);
+      toast.error(msg);
     } finally {
       setSubmitting(false);
     }
@@ -435,10 +423,140 @@ export const MasterDataPage: React.FC = () => {
         try {
           setConfirmState(null);
           await deleteVehicleApi(id);
-          showNotify('success', `Vehicle "${num}" deleted`);
-          void loadAllData();
+          toast.info(`Vehicle "${num}" deleted`);
+          void loadAllData(true);
         } catch (err: any) {
-          showNotify('error', err.message || 'Delete failed');
+          toast.error(err.message || 'Delete failed');
+        }
+      },
+    });
+  };
+
+  // ----------------- VEHICLE TYPES CRUD HANDLERS -----------------
+  const handleVTypeSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setFormError(null);
+
+    const cleanName = vtypeForm.name.trim();
+    if (!cleanName || cleanName.length < 2) {
+      const msg = 'Category name must be at least 2 characters.';
+      setFormError(msg);
+      toast.error(msg);
+      return;
+    }
+
+    const isDuplicate = vehicleTypes.some(
+      (vt) =>
+        vt.name.trim().toLowerCase() === cleanName.toLowerCase() &&
+        (modalMode === 'vtype-add' || vt.id !== activeItem?.id),
+    );
+    if (isDuplicate) {
+      const msg = `Vehicle category "${cleanName}" already exists in your account.`;
+      setFormError(msg);
+      toast.error(msg);
+      return;
+    }
+
+    setSubmitting(true);
+    try {
+      if (modalMode === 'vtype-add') {
+        await createVehicleTypeApi({ name: cleanName });
+        toast.success('Vehicle category added successfully!');
+      } else {
+        await updateVehicleTypeApi(activeItem.id, { name: cleanName });
+        toast.success('Vehicle category updated successfully!');
+      }
+      setModalMode(null);
+      setFormError(null);
+      void loadAllData(true);
+    } catch (err: any) {
+      const msg = err.message || 'Action failed';
+      setFormError(msg);
+      toast.error(msg);
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  const handleDeleteVType = (id: string, name: string) => {
+    setConfirmState({
+      isOpen: true,
+      title: `Delete Category "${name}"?`,
+      message: `Are you sure you want to remove vehicle category "${name}"? This action cannot be undone if vehicles or rates are associated with it.`,
+      confirmText: 'Delete Category',
+      onConfirm: async () => {
+        try {
+          setConfirmState(null);
+          await deleteVehicleTypeApi(id);
+          toast.info(`Vehicle category "${name}" deleted`);
+          void loadAllData(true);
+        } catch (err: any) {
+          toast.error(err.message || 'Delete failed');
+        }
+      },
+    });
+  };
+
+  // ----------------- MATERIAL TYPES CRUD HANDLERS -----------------
+  const handleMTypeSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setFormError(null);
+
+    const cleanName = mtypeForm.name.trim();
+    if (!cleanName || cleanName.length < 2) {
+      const msg = 'Material name must be at least 2 characters.';
+      setFormError(msg);
+      toast.error(msg);
+      return;
+    }
+
+    const isDuplicate = materialTypes.some(
+      (mt) =>
+        mt.name.trim().toLowerCase() === cleanName.toLowerCase() &&
+        (modalMode === 'mtype-add' || mt.id !== activeItem?.id),
+    );
+    if (isDuplicate) {
+      const msg = `Material specification "${cleanName}" already exists in your account.`;
+      setFormError(msg);
+      toast.error(msg);
+      return;
+    }
+
+    setSubmitting(true);
+    try {
+      if (modalMode === 'mtype-add') {
+        await createMaterialTypeApi({ name: cleanName });
+        toast.success('Material type added successfully!');
+      } else {
+        await updateMaterialTypeApi(activeItem.id, { name: cleanName });
+        toast.success('Material type updated successfully!');
+      }
+      setModalMode(null);
+      setFormError(null);
+      void loadAllData(true);
+    } catch (err: any) {
+      const msg = err.message || 'Action failed';
+      setFormError(msg);
+      toast.error(msg);
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  const handleDeleteMType = (id: string, name: string) => {
+    setConfirmState({
+      isOpen: true,
+      title: `Delete Material "${name}"?`,
+      message: `Are you sure you want to remove material specification "${name}"? This action cannot be undone if rates or loads are associated with it.`,
+      confirmText: 'Delete Material',
+      onConfirm: async () => {
+        try {
+          setConfirmState(null);
+          await deleteMaterialTypeApi(id);
+          toast.info(`Material type "${name}" deleted`);
+          void loadAllData(true);
+        } catch (err: any) {
+          toast.error(err.message || 'Delete failed');
         }
       },
     });
@@ -454,14 +572,14 @@ export const MasterDataPage: React.FC = () => {
     if (!cleanName || cleanName.length < 2) {
       const msg = 'Contractor name must be at least 2 characters.';
       setFormError(msg);
-      showNotify('error', msg);
+      toast.error(msg);
       return;
     }
 
     if (!/^[0-9]{10}$/.test(cleanMobile)) {
       const msg = 'Mobile number must be a valid 10-digit number.';
       setFormError(msg);
-      showNotify('error', msg);
+      toast.error(msg);
       return;
     }
 
@@ -474,7 +592,7 @@ export const MasterDataPage: React.FC = () => {
       const existing = contractors.find((c) => c.mobile.trim() === cleanMobile);
       const msg = `A contractor with mobile number "${cleanMobile}" already exists (${existing?.name}).`;
       setFormError(msg);
-      showNotify('error', msg);
+      toast.error(msg);
       return;
     }
 
@@ -482,18 +600,18 @@ export const MasterDataPage: React.FC = () => {
     try {
       if (modalMode === 'contractor-add') {
         await createContractorApi({ name: cleanName, mobile: cleanMobile });
-        showNotify('success', 'Contractor added successfully!');
+        toast.success('Contractor added successfully!');
       } else {
         await updateContractorApi(activeItem.id, { name: cleanName, mobile: cleanMobile });
-        showNotify('success', 'Contractor updated successfully!');
+        toast.success('Contractor updated successfully!');
       }
       setModalMode(null);
       setFormError(null);
-      void loadAllData();
+      void loadAllData(true);
     } catch (err: any) {
       const msg = err.message || 'Action failed';
       setFormError(msg);
-      showNotify('error', msg);
+      toast.error(msg);
     } finally {
       setSubmitting(false);
     }
@@ -509,10 +627,10 @@ export const MasterDataPage: React.FC = () => {
         try {
           setConfirmState(null);
           await deleteContractorApi(id);
-          showNotify('success', `Contractor "${name}" deleted`);
-          void loadAllData();
+          toast.info(`Contractor "${name}" deleted`);
+          void loadAllData(true);
         } catch (err: any) {
-          showNotify('error', err.message || 'Delete failed');
+          toast.error(err.message || 'Delete failed');
         }
       },
     });
@@ -526,14 +644,14 @@ export const MasterDataPage: React.FC = () => {
     if (isNaN(amt) || amt <= 0) {
       const msg = 'Please enter a valid rate amount greater than 0.';
       setFormError(msg);
-      showNotify('error', msg);
+      toast.error(msg);
       return;
     }
 
     if (!rateForm.siteId || !rateForm.vehicleTypeId || !rateForm.materialTypeId) {
       const msg = 'Please select a Site, Vehicle Category, and Material Type.';
       setFormError(msg);
-      showNotify('error', msg);
+      toast.error(msg);
       return;
     }
 
@@ -545,9 +663,9 @@ export const MasterDataPage: React.FC = () => {
           r.materialTypeId === rateForm.materialTypeId,
       );
       if (isDuplicate) {
-        const msg = 'A rate is already configured for this Site, Vehicle Category, and Material combination. Please edit the existing rate instead.';
+        const msg = 'A rate is already configured for this Site, Vehicle Category, and Material combination.';
         setFormError(msg);
-        showNotify('error', msg);
+        toast.error(msg);
         return;
       }
     }
@@ -561,18 +679,18 @@ export const MasterDataPage: React.FC = () => {
           materialTypeId: rateForm.materialTypeId,
           amount: amt,
         });
-        showNotify('success', 'Rate configured successfully!');
+        toast.success('Rate configured successfully!');
       } else {
         await updateRateApi(activeItem.id, { amount: amt });
-        showNotify('success', 'Rate amount updated successfully!');
+        toast.success('Rate amount updated successfully!');
       }
       setModalMode(null);
       setFormError(null);
-      void loadAllData();
+      void loadAllData(true);
     } catch (err: any) {
       const msg = err.message || 'Action failed';
       setFormError(msg);
-      showNotify('error', msg);
+      toast.error(msg);
     } finally {
       setSubmitting(false);
     }
@@ -588,365 +706,128 @@ export const MasterDataPage: React.FC = () => {
         try {
           setConfirmState(null);
           await deleteRateApi(id);
-          showNotify('success', 'Rate entry deleted');
-          void loadAllData();
+          toast.info('Rate entry deleted');
+          void loadAllData(true);
         } catch (err: any) {
-          showNotify('error', err.message || 'Delete failed');
+          toast.error(err.message || 'Delete failed');
         }
       },
     });
   };
 
-  const handleVTypeSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setFormError(null);
-
-    const cleanName = vtypeForm.name.trim();
-    if (!cleanName || cleanName.length < 2) {
-      const msg = 'Category name must be at least 2 characters.';
-      setFormError(msg);
-      showNotify('error', msg);
-      return;
+  const masterDataTabs = React.useMemo(() => {
+    const list = [];
+    if (!isSiteBoy) {
+      list.push({ id: 'sites', label: `Quarry Sites (${sites.length})`, icon: MapPin });
     }
-
-    const isDuplicate = vehicleTypes.some(
-      (vt) =>
-        vt.name.trim().toLowerCase() === cleanName.toLowerCase() &&
-        (modalMode === 'vtype-add' || vt.id !== activeItem?.id),
+    list.push(
+      { id: 'vehicles', label: `Fleet Vehicles (${vehicles.length})`, icon: Truck },
+      { id: 'vehicle-types', label: `Vehicle Categories (${vehicleTypes.length})`, icon: Truck },
+      { id: 'material-types', label: `Material Types (${materialTypes.length})`, icon: Layers },
+      { id: 'contractors', label: `Contractors / C/Os (${contractors.length})`, icon: UserCheck },
+      { id: 'rates', label: `Rate Matrix (${rates.length})`, icon: Coins },
     );
-    if (isDuplicate) {
-      const msg = `Vehicle category "${cleanName}" already exists.`;
-      setFormError(msg);
-      showNotify('error', msg);
-      return;
+    if (!isSiteBoy) {
+      list.push({ id: 'team', label: 'Team & Roles', icon: Users });
     }
-
-    setSubmitting(true);
-    try {
-      if (modalMode === 'vtype-add') {
-        await createVehicleTypeApi({ name: cleanName });
-        showNotify('success', 'Vehicle category added successfully!');
-      } else {
-        await updateVehicleTypeApi(activeItem.id, { name: cleanName });
-        showNotify('success', 'Vehicle category updated successfully!');
-      }
-      setModalMode(null);
-      setFormError(null);
-      void loadAllData();
-    } catch (err: any) {
-      const msg = err.message || 'Action failed';
-      setFormError(msg);
-      showNotify('error', msg);
-    } finally {
-      setSubmitting(false);
-    }
-  };
-
-  const handleDeleteVType = (id: string, name: string) => {
-    setConfirmState({
-      isOpen: true,
-      title: `Delete Category "${name}"?`,
-      message: `Are you sure you want to remove the global vehicle category "${name}"?`,
-      confirmText: 'Delete Category',
-      onConfirm: async () => {
-        try {
-          setConfirmState(null);
-          await deleteVehicleTypeApi(id);
-          showNotify('success', `Vehicle type "${name}" deleted`);
-          void loadAllData();
-        } catch (err: any) {
-          showNotify('error', err.message || 'Delete failed');
-        }
-      },
-    });
-  };
-
-  const handleMTypeSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setFormError(null);
-
-    const cleanName = mtypeForm.name.trim();
-    if (!cleanName || cleanName.length < 2) {
-      const msg = 'Material name must be at least 2 characters.';
-      setFormError(msg);
-      showNotify('error', msg);
-      return;
-    }
-
-    const isDuplicate = materialTypes.some(
-      (mt) =>
-        mt.name.trim().toLowerCase() === cleanName.toLowerCase() &&
-        (modalMode === 'mtype-add' || mt.id !== activeItem?.id),
+    list.push(
+      { id: 'expense-categories', label: 'Expense Heads', icon: Layers },
+      { id: 'machinery', label: 'Heavy Machinery', icon: Truck },
     );
-    if (isDuplicate) {
-      const msg = `Material type "${cleanName}" already exists.`;
-      setFormError(msg);
-      showNotify('error', msg);
-      return;
-    }
-
-    setSubmitting(true);
-    try {
-      if (modalMode === 'mtype-add') {
-        await createMaterialTypeApi({ name: cleanName });
-        showNotify('success', 'Material type added successfully!');
-      } else {
-        await updateMaterialTypeApi(activeItem.id, { name: cleanName });
-        showNotify('success', 'Material type updated successfully!');
-      }
-      setModalMode(null);
-      setFormError(null);
-      void loadAllData();
-    } catch (err: any) {
-      const msg = err.message || 'Action failed';
-      setFormError(msg);
-      showNotify('error', msg);
-    } finally {
-      setSubmitting(false);
-    }
-  };
-
-  const handleDeleteMType = (id: string, name: string) => {
-    setConfirmState({
-      isOpen: true,
-      title: `Delete Material "${name}"?`,
-      message: `Are you sure you want to remove the global material specification "${name}"?`,
-      confirmText: 'Delete Material',
-      onConfirm: async () => {
-        try {
-          setConfirmState(null);
-          await deleteMaterialTypeApi(id);
-          showNotify('success', `Material type "${name}" deleted`);
-          void loadAllData();
-        } catch (err: any) {
-          showNotify('error', err.message || 'Delete failed');
-        }
-      },
-    });
-  };
+    return list;
+  }, [isSiteBoy, sites.length, vehicles.length, vehicleTypes.length, materialTypes.length, contractors.length, rates.length]);
 
   return (
-    <div className="space-y-6">
-      {/* Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-        <div className="flex items-center gap-2">
-          <div className="p-2 rounded-xl bg-amber-500/10 text-amber-400 border border-amber-500/20">
-            <Layers className="w-5 h-5" />
-          </div>
-          <h1 className="text-xl sm:text-2xl font-extrabold text-white">
-            {isSuperAdmin ? 'Global Master Configuration' : 'Master Data Configuration'}
-          </h1>
-        </div>
-
-        <div className="flex items-center gap-2">
-          {!isSuperAdmin && (
-            <>
-              {customerTab === 'sites' && (
-                <button
-                  onClick={() => openSiteModal()}
-                  className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl bg-amber-500 hover:bg-amber-400 text-slate-950 font-bold text-sm shadow-lg shadow-amber-500/20 transition-all cursor-pointer select-none touch-manipulation"
-                >
-                  <Plus className="w-4 h-4" /> Add Site
-                </button>
-              )}
-              {customerTab === 'vehicles' && (
-                <button
-                  onClick={() => openVehicleModal()}
-                  className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl bg-amber-500 hover:bg-amber-400 text-slate-950 font-bold text-sm shadow-lg shadow-amber-500/20 transition-all cursor-pointer select-none touch-manipulation"
-                >
-                  <Plus className="w-4 h-4" /> Add Vehicle
-                </button>
-              )}
-              {customerTab === 'contractors' && (
-                <button
-                  onClick={() => openContractorModal()}
-                  className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl bg-amber-500 hover:bg-amber-400 text-slate-950 font-bold text-sm shadow-lg shadow-amber-500/20 transition-all cursor-pointer select-none touch-manipulation"
-                >
-                  <Plus className="w-4 h-4" /> Add Contractor
-                </button>
-              )}
-              {customerTab === 'rates' && (
-                <button
-                  onClick={() => openRateModal()}
-                  disabled={sites.length === 0 || vehicleTypes.length === 0 || materialTypes.length === 0}
-                  className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl bg-amber-500 hover:bg-amber-400 disabled:opacity-50 text-slate-950 font-bold text-sm shadow-lg shadow-amber-500/20 transition-all cursor-pointer select-none touch-manipulation"
-                >
-                  <Plus className="w-4 h-4" /> Configure Rate
-                </button>
-              )}
-            </>
-          )}
-
-          {isSuperAdmin && (
-            <>
-              {adminTab === 'vehicle-types' && (
-                <button
-                  onClick={() => openVTypeModal()}
-                  className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl bg-amber-500 hover:bg-amber-400 text-slate-950 font-bold text-sm shadow-lg shadow-amber-500/20 transition-all cursor-pointer select-none touch-manipulation"
-                >
-                  <Plus className="w-4 h-4" /> Add Vehicle Type
-                </button>
-              )}
-              {adminTab === 'material-types' && (
-                <button
-                  onClick={() => openMTypeModal()}
-                  className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl bg-amber-500 hover:bg-amber-400 text-slate-950 font-bold text-sm shadow-lg shadow-amber-500/20 transition-all cursor-pointer select-none touch-manipulation"
-                >
-                  <Plus className="w-4 h-4" /> Add Material Type
-                </button>
-              )}
-            </>
-          )}
-        </div>
-      </div>
-
-      {/* Notification Banner */}
-      {notification && (
-        <div
-          className={`p-4 rounded-2xl border flex items-center gap-3 transition-all ${
-            notification.type === 'success'
-              ? 'bg-emerald-500/10 border-emerald-500/30 text-emerald-300'
-              : 'bg-rose-500/10 border-rose-500/30 text-rose-300'
-          }`}
-        >
-          {notification.type === 'success' ? (
-            <CheckCircle2 className="w-5 h-5 shrink-0" />
-          ) : (
-            <AlertTriangle className="w-5 h-5 shrink-0" />
-          )}
-          <span className="text-xs sm:text-sm font-medium">{notification.message}</span>
-        </div>
-      )}
-
-      {/* Navigation Tabs */}
-      <div className="flex items-center gap-2 p-1.5 rounded-2xl bg-slate-900/80 border border-slate-800/80 overflow-x-auto">
-        {!isSuperAdmin ? (
-          <>
-            {!isSiteBoy && (
-              <button
-                onClick={() => handleCustomerTabChange('sites')}
-                className={`flex items-center gap-2 px-4 py-2 rounded-xl text-xs sm:text-sm font-bold transition-all whitespace-nowrap cursor-pointer select-none touch-manipulation ${
-                  customerTab === 'sites'
-                    ? 'bg-amber-500 text-slate-950 shadow-md shadow-amber-500/20'
-                    : 'text-slate-400 hover:text-slate-200'
-                }`}
+    <div className="space-y-6 pb-12 animate-fade-in">
+      <PageHeader
+        title="Quarry Master Data Management"
+        subtitle="Manage fleet registrations, material rates, contractors, quarry locations, team roles, and heavy machinery."
+        actions={
+          <div className="flex items-center gap-2">
+            {!isSiteBoy && customerTab === 'sites' && (
+              <Button
+                variant="primary"
+                size="md"
+                onClick={() => openSiteModal()}
+                leftIcon={<Plus className="w-4 h-4" />}
               >
-                <MapPin className="w-4 h-4" /> Quarry Sites ({sites.length})
-              </button>
+                Add Quarry Site
+              </Button>
             )}
-            <button
-              onClick={() => handleCustomerTabChange('vehicles')}
-              className={`flex items-center gap-2 px-4 py-2 rounded-xl text-xs sm:text-sm font-bold transition-all whitespace-nowrap cursor-pointer select-none touch-manipulation ${
-                customerTab === 'vehicles'
-                  ? 'bg-amber-500 text-slate-950 shadow-md shadow-amber-500/20'
-                  : 'text-slate-400 hover:text-slate-200'
-              }`}
-            >
-              <Truck className="w-4 h-4" /> Fleet Vehicles ({vehicles.length})
-            </button>
-            <button
-              onClick={() => handleCustomerTabChange('contractors')}
-              className={`flex items-center gap-2 px-4 py-2 rounded-xl text-xs sm:text-sm font-bold transition-all whitespace-nowrap cursor-pointer select-none touch-manipulation ${
-                customerTab === 'contractors'
-                  ? 'bg-amber-500 text-slate-950 shadow-md shadow-amber-500/20'
-                  : 'text-slate-400 hover:text-slate-200'
-              }`}
-            >
-              <UserCheck className="w-4 h-4" /> Contractors / C/Os ({contractors.length})
-            </button>
-            {!isSiteBoy && (
-              <>
-                <button
-                  onClick={() => handleCustomerTabChange('rates')}
-                  className={`flex items-center gap-2 px-4 py-2 rounded-xl text-xs sm:text-sm font-bold transition-all whitespace-nowrap cursor-pointer select-none touch-manipulation ${
-                    customerTab === 'rates'
-                      ? 'bg-amber-500 text-slate-950 shadow-md shadow-amber-500/20'
-                      : 'text-slate-400 hover:text-slate-200'
-                  }`}
-                >
-                  <Coins className="w-4 h-4" /> Rate Matrix ({rates.length})
-                </button>
-                <button
-                  onClick={() => handleCustomerTabChange('team')}
-                  className={`flex items-center gap-2 px-4 py-2 rounded-xl text-xs sm:text-sm font-bold transition-all whitespace-nowrap cursor-pointer select-none touch-manipulation ${
-                    customerTab === 'team'
-                      ? 'bg-amber-500 text-slate-950 shadow-md shadow-amber-500/20'
-                      : 'text-slate-400 hover:text-slate-200'
-                  }`}
-                >
-                  <Users className="w-4 h-4" /> Team & Roles
-                </button>
-                <button
-                  onClick={() => handleCustomerTabChange('expense-categories')}
-                  className={`flex items-center gap-2 px-4 py-2 rounded-xl text-xs sm:text-sm font-bold transition-all whitespace-nowrap cursor-pointer select-none touch-manipulation ${
-                    customerTab === 'expense-categories'
-                      ? 'bg-amber-500 text-slate-950 shadow-md shadow-amber-500/20'
-                      : 'text-slate-400 hover:text-slate-200'
-                  }`}
-                >
-                  <Layers className="w-4 h-4" /> Expense Heads
-                </button>
-                <button
-                  onClick={() => handleCustomerTabChange('machinery')}
-                  className={`flex items-center gap-2 px-4 py-2 rounded-xl text-xs sm:text-sm font-bold transition-all whitespace-nowrap cursor-pointer select-none touch-manipulation ${
-                    customerTab === 'machinery'
-                      ? 'bg-amber-500 text-slate-950 shadow-md shadow-amber-500/20'
-                      : 'text-slate-400 hover:text-slate-200'
-                  }`}
-                >
-                  <Truck className="w-4 h-4" /> Heavy Machinery
-                </button>
-              </>
+            {customerTab === 'vehicles' && (
+              <Button
+                variant="primary"
+                size="md"
+                onClick={() => openVehicleModal()}
+                disabled={vehicleTypes.length === 0}
+                leftIcon={<Plus className="w-4 h-4" />}
+              >
+                Register Vehicle
+              </Button>
             )}
-          </>
-        ) : (
-          <>
-            <button
-              onClick={() => {
-                setAdminTab('vehicle-types');
-                setSearch('');
-              }}
-              className={`flex items-center gap-2 px-4 py-2 rounded-xl text-xs sm:text-sm font-bold transition-all whitespace-nowrap cursor-pointer ${
-                adminTab === 'vehicle-types'
-                  ? 'bg-amber-500 text-slate-950 shadow-md shadow-amber-500/20'
-                  : 'text-slate-400 hover:text-slate-200'
-              }`}
-            >
-              <Truck className="w-4 h-4" /> Vehicle Types ({vehicleTypes.length})
-            </button>
-            <button
-              onClick={() => {
-                setAdminTab('material-types');
-                setSearch('');
-              }}
-              className={`flex items-center gap-2 px-4 py-2 rounded-xl text-xs sm:text-sm font-bold transition-all whitespace-nowrap cursor-pointer ${
-                adminTab === 'material-types'
-                  ? 'bg-amber-500 text-slate-950 shadow-md shadow-amber-500/20'
-                  : 'text-slate-400 hover:text-slate-200'
-              }`}
-            >
-              <Layers className="w-4 h-4" /> Material Types ({materialTypes.length})
-            </button>
-          </>
-        )}
-      </div>
+            {customerTab === 'vehicle-types' && (
+              <Button
+                variant="primary"
+                size="md"
+                onClick={() => openVTypeModal()}
+                leftIcon={<Plus className="w-4 h-4" />}
+              >
+                Add Vehicle Category
+              </Button>
+            )}
+            {customerTab === 'material-types' && (
+              <Button
+                variant="primary"
+                size="md"
+                onClick={() => openMTypeModal()}
+                leftIcon={<Plus className="w-4 h-4" />}
+              >
+                Add Material Type
+              </Button>
+            )}
+            {customerTab === 'contractors' && (
+              <Button
+                variant="primary"
+                size="md"
+                onClick={() => openContractorModal()}
+                leftIcon={<Plus className="w-4 h-4" />}
+              >
+                Add Contractor
+              </Button>
+            )}
+            {customerTab === 'rates' && (
+              <Button
+                variant="primary"
+                size="md"
+                onClick={() => openRateModal()}
+                disabled={sites.length === 0 || vehicleTypes.length === 0 || materialTypes.length === 0}
+                leftIcon={<Plus className="w-4 h-4" />}
+              >
+                Configure Rate
+              </Button>
+            )}
+          </div>
+        }
+      />
+
+      {/* Navigation Tabs (Mobile-friendly horizontal scroll) */}
+      <TabBar
+        tabs={masterDataTabs}
+        activeTab={customerTab}
+        onChange={(id) => handleCustomerTabChange(id as CustomerTab)}
+      />
 
       {/* Search Input */}
-      {(!isSuperAdmin && customerTab !== 'team') || isSuperAdmin ? (
-        <div className="relative">
-          <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-500" />
-          <input
-            type="text"
-            placeholder="Search items..."
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-            className="w-full pl-10 pr-4 py-2.5 rounded-xl bg-slate-900/60 border border-slate-800 text-sm text-slate-100 placeholder-slate-500 focus:outline-none focus:border-amber-500 transition-colors"
-          />
-        </div>
-      ) : null}
+      {customerTab !== 'team' && (
+        <SearchBar
+          placeholder="Search items in this tab..."
+          value={search}
+          onChange={setSearch}
+        />
+      )}
 
       {/* ----------------- TAB 1: SITES (CUSTOMER) ----------------- */}
-      {!isSuperAdmin && customerTab === 'sites' && (
+      {customerTab === 'sites' && (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
           {sites
             .filter(
@@ -1021,7 +902,7 @@ export const MasterDataPage: React.FC = () => {
       )}
 
       {/* ----------------- TAB 2: FLEET VEHICLES (CUSTOMER) ----------------- */}
-      {!isSuperAdmin && customerTab === 'vehicles' && (
+      {customerTab === 'vehicles' && (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
           {vehicles
             .filter(
@@ -1080,8 +961,116 @@ export const MasterDataPage: React.FC = () => {
         </div>
       )}
 
+      {/* ----------------- TAB 2B: VEHICLE CATEGORIES / TYPES (CUSTOMER) ----------------- */}
+      {customerTab === 'vehicle-types' && (
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+          {vehicleTypes
+            .filter((vt) => vt.name.toLowerCase().includes(search.toLowerCase()))
+            .map((vt) => (
+              <Card key={vt.id} variant="glass" className="space-y-4 hover:border-slate-700 transition-all">
+                <div className="flex items-start justify-between gap-3">
+                  <div className="flex items-center gap-3">
+                    <div className="w-10 h-10 rounded-xl bg-purple-500/10 text-purple-400 flex items-center justify-center border border-purple-500/20">
+                      <Truck className="w-5 h-5" />
+                    </div>
+                    <div>
+                      <h3 className="font-bold text-white text-base">{vt.name}</h3>
+                      <p className="text-xs text-slate-400">Vehicle Category</p>
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-1">
+                    <button
+                      onClick={() => openVTypeModal(vt)}
+                      className="p-1.5 rounded-lg text-slate-400 hover:text-amber-400 hover:bg-amber-500/10 transition-colors cursor-pointer"
+                      title="Edit Category"
+                    >
+                      <Edit2 className="w-4 h-4" />
+                    </button>
+                    <button
+                      onClick={() => handleDeleteVType(vt.id, vt.name)}
+                      className="p-1.5 rounded-lg text-slate-400 hover:text-rose-400 hover:bg-rose-500/10 transition-colors cursor-pointer"
+                      title="Delete Category"
+                    >
+                      <Trash2 className="w-4 h-4" />
+                    </button>
+                  </div>
+                </div>
+
+                <div className="pt-2 border-t border-slate-800/80 flex items-center justify-between text-[11px] text-slate-400">
+                  <span>
+                    Fleet Vehicles: <strong className="text-slate-200">{vt._count?.vehicles || 0}</strong>
+                  </span>
+                  <span>
+                    Active Rates: <strong className="text-slate-200">{vt._count?.rates || 0}</strong>
+                  </span>
+                </div>
+              </Card>
+            ))}
+
+          {vehicleTypes.length === 0 && !loading && (
+            <div className="col-span-full p-8 text-center bg-slate-900/30 rounded-3xl border border-slate-800 text-slate-400 text-sm">
+              No vehicle categories defined. Click <strong>+ Add Vehicle Category</strong> above to configure tippers, lorries, etc.
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* ----------------- TAB 2C: MATERIAL TYPES (CUSTOMER) ----------------- */}
+      {customerTab === 'material-types' && (
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+          {materialTypes
+            .filter((mt) => mt.name.toLowerCase().includes(search.toLowerCase()))
+            .map((mt) => (
+              <Card key={mt.id} variant="glass" className="space-y-4 hover:border-slate-700 transition-all">
+                <div className="flex items-start justify-between gap-3">
+                  <div className="flex items-center gap-3">
+                    <div className="w-10 h-10 rounded-xl bg-indigo-500/10 text-indigo-400 flex items-center justify-center border border-indigo-500/20">
+                      <Layers className="w-5 h-5" />
+                    </div>
+                    <div>
+                      <h3 className="font-bold text-white text-base">{mt.name}</h3>
+                      <p className="text-xs text-slate-400">Material Specification</p>
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-1">
+                    <button
+                      onClick={() => openMTypeModal(mt)}
+                      className="p-1.5 rounded-lg text-slate-400 hover:text-amber-400 hover:bg-amber-500/10 transition-colors cursor-pointer"
+                      title="Edit Material"
+                    >
+                      <Edit2 className="w-4 h-4" />
+                    </button>
+                    <button
+                      onClick={() => handleDeleteMType(mt.id, mt.name)}
+                      className="p-1.5 rounded-lg text-slate-400 hover:text-rose-400 hover:bg-rose-500/10 transition-colors cursor-pointer"
+                      title="Delete Material"
+                    >
+                      <Trash2 className="w-4 h-4" />
+                    </button>
+                  </div>
+                </div>
+
+                <div className="pt-2 border-t border-slate-800/80 flex items-center justify-between text-[11px] text-slate-400">
+                  <span>
+                    Configured Rates: <strong className="text-slate-200">{mt._count?.rates || 0}</strong>
+                  </span>
+                  <span>
+                    Recorded Loads: <strong className="text-slate-200">{mt._count?.loads || 0}</strong>
+                  </span>
+                </div>
+              </Card>
+            ))}
+
+          {materialTypes.length === 0 && !loading && (
+            <div className="col-span-full p-8 text-center bg-slate-900/30 rounded-3xl border border-slate-800 text-slate-400 text-sm">
+              No material types defined. Click <strong>+ Add Material Type</strong> above to add aggregates, sand, etc.
+            </div>
+          )}
+        </div>
+      )}
+
       {/* ----------------- TAB 3: CONTRACTORS (CUSTOMER) ----------------- */}
-      {!isSuperAdmin && customerTab === 'contractors' && (
+      {customerTab === 'contractors' && (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
           {contractors
             .filter(
@@ -1140,7 +1129,7 @@ export const MasterDataPage: React.FC = () => {
       )}
 
       {/* ----------------- TAB 4: RATE MATRIX (CUSTOMER) ----------------- */}
-      {!isSuperAdmin && customerTab === 'rates' && (
+      {customerTab === 'rates' && (
         <div className="space-y-4">
           <Card variant="highlight" className="p-4 flex items-center justify-between gap-4">
             <div className="flex items-center gap-3">
@@ -1177,7 +1166,7 @@ export const MasterDataPage: React.FC = () => {
                     </div>
                     <div className="text-right">
                       <div className="text-lg font-extrabold text-emerald-400">
-                        ₹{Number(r.amount).toLocaleString('en-IN', { minimumFractionDigits: 2 })}
+                        {formatINR(r.amount)}
                       </div>
                       <div className="text-[10px] text-slate-500 uppercase">per trip / load</div>
                     </div>
@@ -1216,106 +1205,18 @@ export const MasterDataPage: React.FC = () => {
       )}
 
       {/* ----------------- TAB 5: TEAM & SUB-ACCOUNTS (CUSTOMER) ----------------- */}
-      {!isSuperAdmin && customerTab === 'team' && (
+      {customerTab === 'team' && (
         <TeamManagement />
       )}
 
       {/* ----------------- TAB 6: EXPENSE CATEGORIES (CUSTOMER) ----------------- */}
-      {!isSuperAdmin && customerTab === 'expense-categories' && (
+      {customerTab === 'expense-categories' && (
         <ExpenseCategoriesManagement />
       )}
 
       {/* ----------------- TAB 7: HEAVY MACHINERY (CUSTOMER) ----------------- */}
-      {!isSuperAdmin && customerTab === 'machinery' && (
+      {customerTab === 'machinery' && (
         <MachineryManagement />
-      )}
-
-      {/* ----------------- SUPER ADMIN: VEHICLE TYPES ----------------- */}
-      {isSuperAdmin && adminTab === 'vehicle-types' && (
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-          {vehicleTypes
-            .filter((vt) => vt.name.toLowerCase().includes(search.toLowerCase()))
-            .map((vt) => (
-              <Card key={vt.id} variant="glass" className="space-y-4 hover:border-slate-700 transition-all">
-                <div className="flex items-start justify-between gap-3">
-                  <div className="flex items-center gap-3">
-                    <div className="w-10 h-10 rounded-xl bg-purple-500/10 text-purple-400 flex items-center justify-center border border-purple-500/20">
-                      <Truck className="w-5 h-5" />
-                    </div>
-                    <div>
-                      <h3 className="font-bold text-white text-base">{vt.name}</h3>
-                      <p className="text-xs text-slate-400">Global Category</p>
-                    </div>
-                  </div>
-                  <div className="flex items-center gap-1">
-                    <button
-                      onClick={() => openVTypeModal(vt)}
-                      className="p-1.5 rounded-lg text-slate-400 hover:text-amber-400 hover:bg-amber-500/10 transition-colors cursor-pointer"
-                      title="Edit Category"
-                    >
-                      <Edit2 className="w-4 h-4" />
-                    </button>
-                    <button
-                      onClick={() => handleDeleteVType(vt.id, vt.name)}
-                      className="p-1.5 rounded-lg text-slate-400 hover:text-rose-400 hover:bg-rose-500/10 transition-colors cursor-pointer"
-                      title="Delete Category"
-                    >
-                      <Trash2 className="w-4 h-4" />
-                    </button>
-                  </div>
-                </div>
-
-                <div className="pt-2 border-t border-slate-800/80 flex items-center justify-between text-[11px] text-slate-400">
-                  <span>Platform Vehicles: <strong className="text-slate-200">{vt._count?.vehicles || 0}</strong></span>
-                  <span>Active Rates: <strong className="text-slate-200">{vt._count?.rates || 0}</strong></span>
-                </div>
-              </Card>
-            ))}
-        </div>
-      )}
-
-      {/* ----------------- SUPER ADMIN: MATERIAL TYPES ----------------- */}
-      {isSuperAdmin && adminTab === 'material-types' && (
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-          {materialTypes
-            .filter((mt) => mt.name.toLowerCase().includes(search.toLowerCase()))
-            .map((mt) => (
-              <Card key={mt.id} variant="glass" className="space-y-4 hover:border-slate-700 transition-all">
-                <div className="flex items-start justify-between gap-3">
-                  <div className="flex items-center gap-3">
-                    <div className="w-10 h-10 rounded-xl bg-indigo-500/10 text-indigo-400 flex items-center justify-center border border-indigo-500/20">
-                      <Layers className="w-5 h-5" />
-                    </div>
-                    <div>
-                      <h3 className="font-bold text-white text-base">{mt.name}</h3>
-                      <p className="text-xs text-slate-400">Global Material</p>
-                    </div>
-                  </div>
-                  <div className="flex items-center gap-1">
-                    <button
-                      onClick={() => openMTypeModal(mt)}
-                      className="p-1.5 rounded-lg text-slate-400 hover:text-amber-400 hover:bg-amber-500/10 transition-colors cursor-pointer"
-                      title="Edit Material"
-                    >
-                      <Edit2 className="w-4 h-4" />
-                    </button>
-                    <button
-                      onClick={() => handleDeleteMType(mt.id, mt.name)}
-                      className="p-1.5 rounded-lg text-slate-400 hover:text-rose-400 hover:bg-rose-500/10 transition-colors cursor-pointer"
-                      title="Delete Material"
-                    >
-                      <Trash2 className="w-4 h-4" />
-                    </button>
-                  </div>
-                </div>
-
-                <div className="pt-2 border-t border-slate-800/80 flex items-center justify-between text-[11px] text-slate-400">
-                  <span>Configured Rates: <strong className="text-slate-200">{mt._count?.rates || 0}</strong></span>
-                  <span>Recorded Loads: <strong className="text-slate-200">{mt._count?.loads || 0}</strong></span>
-                </div>
-              </Card>
-            ))}
-        </div>
       )}
 
       {/* ========================================================================= */}
@@ -1323,470 +1224,385 @@ export const MasterDataPage: React.FC = () => {
       {/* ========================================================================= */}
 
       {/* 1. Site Modal */}
-      {(modalMode === 'site-add' || modalMode === 'site-edit') && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/80 backdrop-blur-sm p-4">
-          <Card variant="highlight" className="w-full max-w-md p-6 space-y-4 relative">
-            <button
+      <Modal
+        isOpen={modalMode === 'site-add' || modalMode === 'site-edit'}
+        onClose={() => { setModalMode(null); setFormError(null); }}
+        title={modalMode === 'site-add' ? 'Add New Quarry / Yard Site' : 'Edit Site Details'}
+        maxWidth="md"
+      >
+        {formError && (
+          <div className="p-3.5 rounded-xl bg-rose-500/15 border border-rose-500/40 text-rose-200 text-xs font-semibold flex items-center gap-2.5 mb-4 animate-fade-in">
+            <AlertTriangle className="w-4 h-4 text-rose-400 shrink-0" />
+            <span className="leading-snug">{formError}</span>
+          </div>
+        )}
+
+        <form onSubmit={handleSiteSubmit} className="space-y-4">
+          <Input
+            label="Site Name"
+            required
+            placeholder="e.g. Kolenchery Crusher Unit"
+            value={siteForm.siteName}
+            onChange={(e) => { setSiteForm({ ...siteForm, siteName: e.target.value }); setFormError(null); }}
+          />
+
+          <Input
+            label="Location / Area"
+            required
+            placeholder="e.g. Kolenchery, Ernakulam"
+            value={siteForm.location}
+            onChange={(e) => { setSiteForm({ ...siteForm, location: e.target.value }); setFormError(null); }}
+          />
+
+          <Input
+            label="6-Digit Postal Pincode"
+            required
+            maxLength={6}
+            placeholder="e.g. 682311"
+            value={siteForm.pincode}
+            onChange={(e) => { setSiteForm({ ...siteForm, pincode: e.target.value.replace(/\D/g, '').slice(0, 6) }); setFormError(null); }}
+          />
+
+          <div className="flex justify-end gap-2 pt-2 border-t border-slate-800">
+            <Button
+              type="button"
+              variant="ghost"
+              size="sm"
               onClick={() => { setModalMode(null); setFormError(null); }}
-              className="absolute right-4 top-4 text-slate-400 hover:text-white cursor-pointer"
             >
-              <X className="w-5 h-5" />
-            </button>
-            <h2 className="text-lg font-bold text-white">
-              {modalMode === 'site-add' ? 'Add New Quarry / Yard Site' : 'Edit Site Details'}
-            </h2>
-
-            {formError && (
-              <div className="p-3.5 rounded-xl bg-rose-500/15 border border-rose-500/40 text-rose-200 text-xs font-semibold flex items-center gap-2.5 animate-fade-in">
-                <AlertTriangle className="w-4 h-4 text-rose-400 shrink-0" />
-                <span className="leading-snug">{formError}</span>
-              </div>
-            )}
-
-            <form onSubmit={handleSiteSubmit} className="space-y-4">
-              <div>
-                <label className="block text-xs font-semibold text-slate-300 mb-1">
-                  Site Name <span className="text-amber-400">*</span>
-                </label>
-                <input
-                  type="text"
-                  required
-                  placeholder="e.g. Kolenchery Crusher Unit"
-                  value={siteForm.siteName}
-                  onChange={(e) => { setSiteForm({ ...siteForm, siteName: e.target.value }); setFormError(null); }}
-                  className="w-full px-3.5 py-2.5 rounded-xl bg-slate-900 border border-slate-800 text-sm text-slate-100 focus:outline-none focus:border-amber-500"
-                />
-              </div>
-              <div>
-                <label className="block text-xs font-semibold text-slate-300 mb-1">
-                  Location / Area <span className="text-amber-400">*</span>
-                </label>
-                <input
-                  type="text"
-                  required
-                  placeholder="e.g. Kolenchery, Ernakulam"
-                  value={siteForm.location}
-                  onChange={(e) => { setSiteForm({ ...siteForm, location: e.target.value }); setFormError(null); }}
-                  className="w-full px-3.5 py-2.5 rounded-xl bg-slate-900 border border-slate-800 text-sm text-slate-100 focus:outline-none focus:border-amber-500"
-                />
-              </div>
-              <div>
-                <label className="block text-xs font-semibold text-slate-300 mb-1">
-                  6-Digit Postal Pincode <span className="text-amber-400">*</span>
-                </label>
-                <input
-                  type="text"
-                  required
-                  maxLength={6}
-                  placeholder="e.g. 682311"
-                  value={siteForm.pincode}
-                  onChange={(e) => { setSiteForm({ ...siteForm, pincode: e.target.value.replace(/\D/g, '').slice(0, 6) }); setFormError(null); }}
-                  className="w-full px-3.5 py-2.5 rounded-xl bg-slate-900 border border-slate-800 text-sm text-slate-100 focus:outline-none focus:border-amber-500 font-mono"
-                />
-              </div>
-              <div className="flex justify-end gap-2 pt-2">
-                <button
-                  type="button"
-                  onClick={() => { setModalMode(null); setFormError(null); }}
-                  className="px-4 py-2 rounded-xl bg-slate-800 text-slate-300 text-sm font-semibold hover:bg-slate-700 cursor-pointer"
-                >
-                  Cancel
-                </button>
-                <button
-                  type="submit"
-                  disabled={submitting}
-                  className="px-5 py-2 rounded-xl bg-amber-500 hover:bg-amber-400 text-slate-950 font-bold text-sm cursor-pointer disabled:opacity-50"
-                >
-                  {submitting ? 'Saving...' : 'Save Site'}
-                </button>
-              </div>
-            </form>
-          </Card>
-        </div>
-      )}
+              Cancel
+            </Button>
+            <Button
+              type="submit"
+              variant="primary"
+              size="sm"
+              loading={submitting}
+            >
+              Save Site
+            </Button>
+          </div>
+        </form>
+      </Modal>
 
       {/* 2. Vehicle Modal */}
-      {(modalMode === 'vehicle-add' || modalMode === 'vehicle-edit') && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/80 backdrop-blur-sm p-4">
-          <Card variant="highlight" className="w-full max-w-md p-6 space-y-4 relative">
-            <button
+      <Modal
+        isOpen={modalMode === 'vehicle-add' || modalMode === 'vehicle-edit'}
+        onClose={() => { setModalMode(null); setFormError(null); }}
+        title={modalMode === 'vehicle-add' ? 'Register Fleet Vehicle' : 'Edit Vehicle'}
+        maxWidth="md"
+      >
+        {formError && (
+          <div className="p-3.5 rounded-xl bg-rose-500/15 border border-rose-500/40 text-rose-200 text-xs font-semibold flex items-center gap-2.5 mb-4 animate-fade-in">
+            <AlertTriangle className="w-4 h-4 text-rose-400 shrink-0" />
+            <span className="leading-snug">{formError}</span>
+          </div>
+        )}
+
+        <form onSubmit={handleVehicleSubmit} className="space-y-4">
+          <div>
+            <Input
+              label="Vehicle Registration Number"
+              required
+              maxLength={15}
+              placeholder="e.g. KL41A5621"
+              value={vehicleForm.vehicleNumber}
+              onChange={(e) => {
+                const val = e.target.value.replace(/[^a-zA-Z0-9]/g, '').toUpperCase();
+                setVehicleForm({ ...vehicleForm, vehicleNumber: val });
+                setFormError(null);
+              }}
+            />
+            <p className="text-[11px] text-slate-400 mt-1">
+              Letters & numbers only (e.g. <span className="text-amber-400 font-mono">KL41A5621</span>). Spaces and symbols are automatically stripped.
+            </p>
+          </div>
+
+          <CustomSelect
+            label="Vehicle Category / Type"
+            required
+            options={vehicleTypes.map((vt) => ({
+              value: vt.id,
+              label: vt.name,
+              icon: <Truck className="w-4 h-4" />,
+            }))}
+            value={vehicleForm.vehicleTypeId}
+            onChange={(val) => {
+              setVehicleForm({ ...vehicleForm, vehicleTypeId: val });
+              setFormError(null);
+            }}
+            placeholder="Select Vehicle Category"
+          />
+
+          <div className="flex justify-end gap-2 pt-2 border-t border-slate-800">
+            <Button
+              type="button"
+              variant="ghost"
+              size="sm"
               onClick={() => { setModalMode(null); setFormError(null); }}
-              className="absolute right-4 top-4 text-slate-400 hover:text-white cursor-pointer"
             >
-              <X className="w-5 h-5" />
-            </button>
-            <h2 className="text-lg font-bold text-white">
-              {modalMode === 'vehicle-add' ? 'Register Fleet Vehicle' : 'Edit Vehicle'}
-            </h2>
+              Cancel
+            </Button>
+            <Button
+              type="submit"
+              variant="primary"
+              size="sm"
+              loading={submitting}
+            >
+              Save Vehicle
+            </Button>
+          </div>
+        </form>
+      </Modal>
 
-            {formError && (
-              <div className="p-3.5 rounded-xl bg-rose-500/15 border border-rose-500/40 text-rose-200 text-xs font-semibold flex items-center gap-2.5 animate-fade-in">
-                <AlertTriangle className="w-4 h-4 text-rose-400 shrink-0" />
-                <span className="leading-snug">{formError}</span>
-              </div>
-            )}
+      {/* 2B. Vehicle Category Modal (Owner) */}
+      <Modal
+        isOpen={modalMode === 'vtype-add' || modalMode === 'vtype-edit'}
+        onClose={() => { setModalMode(null); setFormError(null); }}
+        title={modalMode === 'vtype-add' ? 'Add Vehicle Category' : 'Edit Vehicle Category'}
+        maxWidth="sm"
+      >
+        {formError && (
+          <div className="p-3.5 rounded-xl bg-rose-500/15 border border-rose-500/40 text-rose-200 text-xs font-semibold flex items-center gap-2.5 mb-4 animate-fade-in">
+            <AlertTriangle className="w-4 h-4 text-rose-400 shrink-0" />
+            <span className="leading-snug">{formError}</span>
+          </div>
+        )}
 
-            <form onSubmit={handleVehicleSubmit} className="space-y-4">
-              <div>
-                <label className="block text-xs font-semibold text-slate-300 mb-1">
-                  Vehicle Registration Number <span className="text-amber-400">*</span>
-                </label>
-                <input
-                  type="text"
-                  required
-                  maxLength={15}
-                  placeholder="e.g. KL41A5621"
-                  value={vehicleForm.vehicleNumber}
-                  onChange={(e) => {
-                    const val = e.target.value.replace(/[^a-zA-Z0-9]/g, '').toUpperCase();
-                    setVehicleForm({ ...vehicleForm, vehicleNumber: val });
-                    setFormError(null);
-                  }}
-                  className="w-full px-3.5 py-2.5 rounded-xl bg-slate-900 border border-slate-800 text-sm text-slate-100 focus:outline-none focus:border-amber-500 font-mono uppercase tracking-wider"
-                />
-                <p className="text-[11px] text-slate-400 mt-1">
-                  Letters & numbers only (e.g. <span className="text-amber-400 font-mono">KL41A5621</span>). Spaces and symbols are automatically stripped.
-                </p>
-              </div>
+        <form onSubmit={handleVTypeSubmit} className="space-y-4">
+          <Input
+            label="Category Name"
+            required
+            placeholder="e.g. Tipper, Lorry, 10-Wheeler, Tractor"
+            value={vtypeForm.name}
+            onChange={(e) => { setVtypeForm({ name: e.target.value }); setFormError(null); }}
+          />
+
+          <div className="flex justify-end gap-2 pt-2 border-t border-slate-800">
+            <Button
+              type="button"
+              variant="ghost"
+              size="sm"
+              onClick={() => { setModalMode(null); setFormError(null); }}
+            >
+              Cancel
+            </Button>
+            <Button
+              type="submit"
+              variant="primary"
+              size="sm"
+              loading={submitting}
+            >
+              Save Category
+            </Button>
+          </div>
+        </form>
+      </Modal>
+
+      {/* 2C. Material Type Modal (Owner) */}
+      <Modal
+        isOpen={modalMode === 'mtype-add' || modalMode === 'mtype-edit'}
+        onClose={() => { setModalMode(null); setFormError(null); }}
+        title={modalMode === 'mtype-add' ? 'Add Material Specification' : 'Edit Material Specification'}
+        maxWidth="sm"
+      >
+        {formError && (
+          <div className="p-3.5 rounded-xl bg-rose-500/15 border border-rose-500/40 text-rose-200 text-xs font-semibold flex items-center gap-2.5 mb-4 animate-fade-in">
+            <AlertTriangle className="w-4 h-4 text-rose-400 shrink-0" />
+            <span className="leading-snug">{formError}</span>
+          </div>
+        )}
+
+        <form onSubmit={handleMTypeSubmit} className="space-y-4">
+          <Input
+            label="Material Name"
+            required
+            placeholder="e.g. Aggregates 20mm, Sand, Rubble, Quarry Dust"
+            value={mtypeForm.name}
+            onChange={(e) => { setMtypeForm({ name: e.target.value }); setFormError(null); }}
+          />
+
+          <div className="flex justify-end gap-2 pt-2 border-t border-slate-800">
+            <Button
+              type="button"
+              variant="ghost"
+              size="sm"
+              onClick={() => { setModalMode(null); setFormError(null); }}
+            >
+              Cancel
+            </Button>
+            <Button
+              type="submit"
+              variant="primary"
+              size="sm"
+              loading={submitting}
+            >
+              Save Material
+            </Button>
+          </div>
+        </form>
+      </Modal>
+
+      {/* 3. Contractor Modal */}
+      <Modal
+        isOpen={modalMode === 'contractor-add' || modalMode === 'contractor-edit'}
+        onClose={() => { setModalMode(null); setFormError(null); }}
+        title={modalMode === 'contractor-add' ? 'Add C/O Contractor' : 'Edit Contractor'}
+        maxWidth="md"
+      >
+        {formError && (
+          <div className="p-3.5 rounded-xl bg-rose-500/15 border border-rose-500/40 text-rose-200 text-xs font-semibold flex items-center gap-2.5 mb-4 animate-fade-in">
+            <AlertTriangle className="w-4 h-4 text-rose-400 shrink-0" />
+            <span className="leading-snug">{formError}</span>
+          </div>
+        )}
+
+        <form onSubmit={handleContractorSubmit} className="space-y-4">
+          <Input
+            label="Contractor Name"
+            required
+            placeholder="e.g. Sathar Pattimattom"
+            value={contractorForm.name}
+            onChange={(e) => {
+              setContractorForm({ ...contractorForm, name: e.target.value });
+              setFormError(null);
+            }}
+          />
+
+          <div>
+            <Input
+              label="10-Digit Mobile Number"
+              required
+              maxLength={10}
+              placeholder="e.g. 9845012345"
+              value={contractorForm.mobile}
+              onChange={(e) => {
+                setContractorForm({ ...contractorForm, mobile: e.target.value.replace(/\D/g, '').slice(0, 10) });
+                setFormError(null);
+              }}
+            />
+            <p className="text-[11px] text-slate-400 mt-1">
+              Unique 10-digit mobile number for dispatch matching and statements.
+            </p>
+          </div>
+
+          <div className="flex justify-end gap-2 pt-2 border-t border-slate-800">
+            <Button
+              type="button"
+              variant="ghost"
+              size="sm"
+              onClick={() => { setModalMode(null); setFormError(null); }}
+            >
+              Cancel
+            </Button>
+            <Button
+              type="submit"
+              variant="primary"
+              size="sm"
+              loading={submitting}
+            >
+              Save Contractor
+            </Button>
+          </div>
+        </form>
+      </Modal>
+
+      {/* 4. Rate Modal */}
+      <Modal
+        isOpen={modalMode === 'rate-add' || modalMode === 'rate-edit'}
+        onClose={() => { setModalMode(null); setFormError(null); }}
+        title={modalMode === 'rate-add' ? 'Configure Rate Matrix' : 'Update Rate Price'}
+        maxWidth="md"
+      >
+        {formError && (
+          <div className="p-3.5 rounded-xl bg-rose-500/15 border border-rose-500/40 text-rose-200 text-xs font-semibold flex items-center gap-2.5 mb-4 animate-fade-in">
+            <AlertTriangle className="w-4 h-4 text-rose-400 shrink-0" />
+            <span className="leading-snug">{formError}</span>
+          </div>
+        )}
+
+        <form onSubmit={handleRateSubmit} className="space-y-4">
+          {modalMode === 'rate-add' ? (
+            <>
               <CustomSelect
-                label="Vehicle Category / Type"
+                label="Site"
+                required
+                options={sites.map((s) => ({
+                  value: s.id,
+                  label: s.siteName,
+                  subLabel: s.location,
+                  icon: <MapPin className="w-4 h-4" />,
+                }))}
+                value={rateForm.siteId}
+                onChange={(val) => { setRateForm({ ...rateForm, siteId: val }); setFormError(null); }}
+                placeholder="Select Operational Site"
+              />
+
+              <CustomSelect
+                label="Vehicle Category"
                 required
                 options={vehicleTypes.map((vt) => ({
                   value: vt.id,
                   label: vt.name,
                   icon: <Truck className="w-4 h-4" />,
                 }))}
-                value={vehicleForm.vehicleTypeId}
-                onChange={(val) => {
-                  setVehicleForm({ ...vehicleForm, vehicleTypeId: val });
-                  setFormError(null);
-                }}
+                value={rateForm.vehicleTypeId}
+                onChange={(val) => { setRateForm({ ...rateForm, vehicleTypeId: val }); setFormError(null); }}
                 placeholder="Select Vehicle Category"
               />
-              <div className="flex justify-end gap-2 pt-2">
-                <button
-                  type="button"
-                  onClick={() => { setModalMode(null); setFormError(null); }}
-                  className="px-4 py-2 rounded-xl bg-slate-800 text-slate-300 text-sm font-semibold hover:bg-slate-700 cursor-pointer"
-                >
-                  Cancel
-                </button>
-                <button
-                  type="submit"
-                  disabled={submitting}
-                  className="px-5 py-2 rounded-xl bg-amber-500 hover:bg-amber-400 text-slate-950 font-bold text-sm cursor-pointer disabled:opacity-50"
-                >
-                  {submitting ? 'Saving...' : 'Save Vehicle'}
-                </button>
-              </div>
-            </form>
-          </Card>
-        </div>
-      )}
 
-      {/* 3. Contractor Modal */}
-      {(modalMode === 'contractor-add' || modalMode === 'contractor-edit') && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/80 backdrop-blur-sm p-4">
-          <Card variant="highlight" className="w-full max-w-md p-6 space-y-4 relative">
-            <button
+              <CustomSelect
+                label="Material Type"
+                required
+                options={materialTypes.map((mt) => ({
+                  value: mt.id,
+                  label: mt.name,
+                  icon: <Layers className="w-4 h-4" />,
+                }))}
+                value={rateForm.materialTypeId}
+                onChange={(val) => { setRateForm({ ...rateForm, materialTypeId: val }); setFormError(null); }}
+                placeholder="Select Material Type"
+              />
+            </>
+          ) : (
+            <div className="p-3 rounded-xl bg-slate-900 border border-slate-800 space-y-1 text-xs text-slate-300">
+              <div>Site: <strong className="text-white">{activeItem?.site?.siteName}</strong></div>
+              <div>Vehicle Category: <strong className="text-white">{activeItem?.vehicleType?.name}</strong></div>
+              <div>Material: <strong className="text-white">{activeItem?.materialType?.name}</strong></div>
+            </div>
+          )}
+
+          <Input
+            label="Rate Amount (₹ per load)"
+            required
+            type="number"
+            inputMode="numeric"
+            step="any"
+            min="1"
+            placeholder="3500.00"
+            value={rateForm.amount}
+            onChange={(e) => { setRateForm({ ...rateForm, amount: e.target.value }); setFormError(null); }}
+          />
+
+          <div className="flex justify-end gap-2 pt-2 border-t border-slate-800">
+            <Button
+              type="button"
+              variant="ghost"
+              size="sm"
               onClick={() => { setModalMode(null); setFormError(null); }}
-              className="absolute right-4 top-4 text-slate-400 hover:text-white cursor-pointer"
             >
-              <X className="w-5 h-5" />
-            </button>
-            <h2 className="text-lg font-bold text-white">
-              {modalMode === 'contractor-add' ? 'Add C/O Contractor' : 'Edit Contractor'}
-            </h2>
-
-            {formError && (
-              <div className="p-3.5 rounded-xl bg-rose-500/15 border border-rose-500/40 text-rose-200 text-xs font-semibold flex items-center gap-2.5 animate-fade-in">
-                <AlertTriangle className="w-4 h-4 text-rose-400 shrink-0" />
-                <span className="leading-snug">{formError}</span>
-              </div>
-            )}
-
-            <form onSubmit={handleContractorSubmit} className="space-y-4">
-              <div>
-                <label className="block text-xs font-semibold text-slate-300 mb-1">
-                  Contractor Name <span className="text-amber-400">*</span>
-                </label>
-                <input
-                  type="text"
-                  required
-                  placeholder="e.g. Sathar Pattimattom"
-                  value={contractorForm.name}
-                  onChange={(e) => {
-                    setContractorForm({ ...contractorForm, name: e.target.value });
-                    setFormError(null);
-                  }}
-                  className="w-full px-3.5 py-2.5 rounded-xl bg-slate-900 border border-slate-800 text-sm text-slate-100 focus:outline-none focus:border-amber-500"
-                />
-              </div>
-              <div>
-                <label className="block text-xs font-semibold text-slate-300 mb-1">
-                  10-Digit Mobile Number <span className="text-amber-400">*</span>
-                </label>
-                <input
-                  type="tel"
-                  required
-                  maxLength={10}
-                  placeholder="e.g. 9845012345"
-                  value={contractorForm.mobile}
-                  onChange={(e) => {
-                    setContractorForm({ ...contractorForm, mobile: e.target.value.replace(/\D/g, '').slice(0, 10) });
-                    setFormError(null);
-                  }}
-                  className="w-full px-3.5 py-2.5 rounded-xl bg-slate-900 border border-slate-800 text-sm text-slate-100 focus:outline-none focus:border-amber-500 font-mono"
-                />
-                <p className="text-[11px] text-slate-400 mt-1">
-                  Unique 10-digit mobile number for dispatch matching and statements.
-                </p>
-              </div>
-              <div className="flex justify-end gap-2 pt-2">
-                <button
-                  type="button"
-                  onClick={() => { setModalMode(null); setFormError(null); }}
-                  className="px-4 py-2 rounded-xl bg-slate-800 text-slate-300 text-sm font-semibold hover:bg-slate-700 cursor-pointer"
-                >
-                  Cancel
-                </button>
-                <button
-                  type="submit"
-                  disabled={submitting}
-                  className="px-5 py-2 rounded-xl bg-amber-500 hover:bg-amber-400 text-slate-950 font-bold text-sm cursor-pointer disabled:opacity-50"
-                >
-                  {submitting ? 'Saving...' : 'Save Contractor'}
-                </button>
-              </div>
-            </form>
-          </Card>
-        </div>
-      )}
-
-      {/* 4. Rate Modal */}
-      {(modalMode === 'rate-add' || modalMode === 'rate-edit') && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/80 backdrop-blur-sm p-4">
-          <Card variant="highlight" className="w-full max-w-md p-6 space-y-4 relative">
-            <button
-              onClick={() => { setModalMode(null); setFormError(null); }}
-              className="absolute right-4 top-4 text-slate-400 hover:text-white cursor-pointer"
+              Cancel
+            </Button>
+            <Button
+              type="submit"
+              variant="primary"
+              size="sm"
+              loading={submitting}
             >
-              <X className="w-5 h-5" />
-            </button>
-            <h2 className="text-lg font-bold text-white">
-              {modalMode === 'rate-add' ? 'Configure Rate Matrix' : 'Update Rate Price'}
-            </h2>
-
-            {formError && (
-              <div className="p-3.5 rounded-xl bg-rose-500/15 border border-rose-500/40 text-rose-200 text-xs font-semibold flex items-center gap-2.5 animate-fade-in">
-                <AlertTriangle className="w-4 h-4 text-rose-400 shrink-0" />
-                <span className="leading-snug">{formError}</span>
-              </div>
-            )}
-
-            <form onSubmit={handleRateSubmit} className="space-y-4">
-              {modalMode === 'rate-add' ? (
-                <>
-                  <CustomSelect
-                    label="Site"
-                    required
-                    options={sites.map((s) => ({
-                      value: s.id,
-                      label: s.siteName,
-                      subLabel: s.location,
-                      icon: <MapPin className="w-4 h-4" />,
-                    }))}
-                    value={rateForm.siteId}
-                    onChange={(val) => { setRateForm({ ...rateForm, siteId: val }); setFormError(null); }}
-                    placeholder="Select Operational Site"
-                  />
-
-                  <CustomSelect
-                    label="Vehicle Type"
-                    required
-                    options={vehicleTypes.map((vt) => ({
-                      value: vt.id,
-                      label: vt.name,
-                      icon: <Truck className="w-4 h-4" />,
-                    }))}
-                    value={rateForm.vehicleTypeId}
-                    onChange={(val) => { setRateForm({ ...rateForm, vehicleTypeId: val }); setFormError(null); }}
-                    placeholder="Select Vehicle Category"
-                  />
-
-                  <CustomSelect
-                    label="Material Type"
-                    required
-                    options={materialTypes.map((mt) => ({
-                      value: mt.id,
-                      label: mt.name,
-                      icon: <Layers className="w-4 h-4" />,
-                    }))}
-                    value={rateForm.materialTypeId}
-                    onChange={(val) => { setRateForm({ ...rateForm, materialTypeId: val }); setFormError(null); }}
-                    placeholder="Select Material Type"
-                  />
-                </>
-              ) : (
-                <div className="p-3 rounded-xl bg-slate-900 border border-slate-800 space-y-1 text-xs text-slate-300">
-                  <div>Site: <strong className="text-white">{activeItem?.site?.siteName}</strong></div>
-                  <div>Vehicle Type: <strong className="text-white">{activeItem?.vehicleType?.name}</strong></div>
-                  <div>Material: <strong className="text-white">{activeItem?.materialType?.name}</strong></div>
-                </div>
-              )}
-
-              <div>
-                <label className="block text-xs font-semibold text-slate-300 mb-1">
-                  Rate Amount (₹ per load) <span className="text-amber-400">*</span>
-                </label>
-                <div className="relative">
-                  <span className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-500 font-bold">₹</span>
-                  <input
-                    type="number"
-                    inputMode="numeric"
-                    step="any"
-                    min="1"
-                    required
-                    placeholder="3500.00"
-                    value={rateForm.amount}
-                    onChange={(e) => { setRateForm({ ...rateForm, amount: e.target.value }); setFormError(null); }}
-                    className="w-full pl-8 pr-4 py-2.5 rounded-xl bg-slate-900 border border-slate-800 text-sm text-slate-100 focus:outline-none focus:border-amber-500 font-mono font-bold"
-                  />
-                </div>
-              </div>
-
-              <div className="flex justify-end gap-2 pt-2">
-                <button
-                  type="button"
-                  onClick={() => { setModalMode(null); setFormError(null); }}
-                  className="px-4 py-2 rounded-xl bg-slate-800 text-slate-300 text-sm font-semibold hover:bg-slate-700 cursor-pointer"
-                >
-                  Cancel
-                </button>
-                <button
-                  type="submit"
-                  disabled={submitting}
-                  className="px-5 py-2 rounded-xl bg-amber-500 hover:bg-amber-400 text-slate-950 font-bold text-sm cursor-pointer disabled:opacity-50"
-                >
-                  {submitting ? 'Saving...' : 'Save Rate'}
-                </button>
-              </div>
-            </form>
-          </Card>
-        </div>
-      )}
-
-      {/* 5. Vehicle Type Modal (Super Admin) */}
-      {(modalMode === 'vtype-add' || modalMode === 'vtype-edit') && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/80 backdrop-blur-sm p-4">
-          <Card variant="highlight" className="w-full max-w-md p-6 space-y-4 relative">
-            <button
-              onClick={() => { setModalMode(null); setFormError(null); }}
-              className="absolute right-4 top-4 text-slate-400 hover:text-white cursor-pointer"
-            >
-              <X className="w-5 h-5" />
-            </button>
-            <h2 className="text-lg font-bold text-white">
-              {modalMode === 'vtype-add' ? 'Add Global Vehicle Category' : 'Edit Vehicle Category'}
-            </h2>
-
-            {formError && (
-              <div className="p-3.5 rounded-xl bg-rose-500/15 border border-rose-500/40 text-rose-200 text-xs font-semibold flex items-center gap-2.5 animate-fade-in">
-                <AlertTriangle className="w-4 h-4 text-rose-400 shrink-0" />
-                <span className="leading-snug">{formError}</span>
-              </div>
-            )}
-
-            <form onSubmit={handleVTypeSubmit} className="space-y-4">
-              <div>
-                <label className="block text-xs font-semibold text-slate-300 mb-1">
-                  Category Name <span className="text-amber-400">*</span>
-                </label>
-                <input
-                  type="text"
-                  required
-                  placeholder="e.g. Dumper 10-Wheeler"
-                  value={vtypeForm.name}
-                  onChange={(e) => { setVtypeForm({ name: e.target.value }); setFormError(null); }}
-                  className="w-full px-3.5 py-2.5 rounded-xl bg-slate-900 border border-slate-800 text-sm text-slate-100 focus:outline-none focus:border-amber-500"
-                />
-              </div>
-              <div className="flex justify-end gap-2 pt-2">
-                <button
-                  type="button"
-                  onClick={() => { setModalMode(null); setFormError(null); }}
-                  className="px-4 py-2 rounded-xl bg-slate-800 text-slate-300 text-sm font-semibold hover:bg-slate-700 cursor-pointer"
-                >
-                  Cancel
-                </button>
-                <button
-                  type="submit"
-                  disabled={submitting}
-                  className="px-5 py-2 rounded-xl bg-amber-500 hover:bg-amber-400 text-slate-950 font-bold text-sm cursor-pointer disabled:opacity-50"
-                >
-                  {submitting ? 'Saving...' : 'Save Category'}
-                </button>
-              </div>
-            </form>
-          </Card>
-        </div>
-      )}
-
-      {/* 6. Material Type Modal (Super Admin) */}
-      {(modalMode === 'mtype-add' || modalMode === 'mtype-edit') && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/80 backdrop-blur-sm p-4">
-          <Card variant="highlight" className="w-full max-w-md p-6 space-y-4 relative">
-            <button
-              onClick={() => { setModalMode(null); setFormError(null); }}
-              className="absolute right-4 top-4 text-slate-400 hover:text-white cursor-pointer"
-            >
-              <X className="w-5 h-5" />
-            </button>
-            <h2 className="text-lg font-bold text-white">
-              {modalMode === 'mtype-add' ? 'Add Global Material Type' : 'Edit Material Type'}
-            </h2>
-
-            {formError && (
-              <div className="p-3.5 rounded-xl bg-rose-500/15 border border-rose-500/40 text-rose-200 text-xs font-semibold flex items-center gap-2.5 animate-fade-in">
-                <AlertTriangle className="w-4 h-4 text-rose-400 shrink-0" />
-                <span className="leading-snug">{formError}</span>
-              </div>
-            )}
-
-            <form onSubmit={handleMTypeSubmit} className="space-y-4">
-              <div>
-                <label className="block text-xs font-semibold text-slate-300 mb-1">
-                  Material Name <span className="text-amber-400">*</span>
-                </label>
-                <input
-                  type="text"
-                  required
-                  placeholder="e.g. Aggregates 20mm"
-                  value={mtypeForm.name}
-                  onChange={(e) => { setMtypeForm({ name: e.target.value }); setFormError(null); }}
-                  className="w-full px-3.5 py-2.5 rounded-xl bg-slate-900 border border-slate-800 text-sm text-slate-100 focus:outline-none focus:border-amber-500"
-                />
-              </div>
-              <div className="flex justify-end gap-2 pt-2">
-                <button
-                  type="button"
-                  onClick={() => { setModalMode(null); setFormError(null); }}
-                  className="px-4 py-2 rounded-xl bg-slate-800 text-slate-300 text-sm font-semibold hover:bg-slate-700 cursor-pointer"
-                >
-                  Cancel
-                </button>
-                <button
-                  type="submit"
-                  disabled={submitting}
-                  className="px-5 py-2 rounded-xl bg-amber-500 hover:bg-amber-400 text-slate-950 font-bold text-sm cursor-pointer disabled:opacity-50"
-                >
-                  {submitting ? 'Saving...' : 'Save Material'}
-                </button>
-              </div>
-            </form>
-          </Card>
-        </div>
-      )}
+              Save Rate
+            </Button>
+          </div>
+        </form>
+      </Modal>
 
       {/* Custom Confirmation Modal */}
       {confirmState && (

@@ -8,10 +8,14 @@ import {
 import { PrismaService } from '../prisma/prisma.service';
 import { CreateContractorDto } from './dto/create-contractor.dto';
 import { UpdateContractorDto } from './dto/update-contractor.dto';
+import { MasterCacheService } from '../common/cache/master-cache.service';
 
 @Injectable()
 export class ContractorsService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly cacheService: MasterCacheService,
+  ) {}
 
   async create(userId: string, dto: CreateContractorDto) {
     const cleanMobile = dto.mobile.trim();
@@ -30,13 +34,16 @@ export class ContractorsService {
       );
     }
 
-    return this.prisma.contractor.create({
+    const created = await this.prisma.contractor.create({
       data: {
         userId,
         name: cleanName,
         mobile: cleanMobile,
       },
     });
+
+    this.cacheService.invalidateTenant(userId);
+    return created;
   }
 
   async findAll(userId: string) {
@@ -102,10 +109,13 @@ export class ContractorsService {
       updateData.mobile = cleanMobile;
     }
 
-    return this.prisma.contractor.update({
+    const updated = await this.prisma.contractor.update({
       where: { id },
       data: updateData,
     });
+
+    this.cacheService.invalidateTenant(userId);
+    return updated;
   }
 
   async remove(userId: string, id: string) {
@@ -121,8 +131,11 @@ export class ContractorsService {
       );
     }
 
-    return this.prisma.contractor.delete({
+    const deleted = await this.prisma.contractor.delete({
       where: { id },
     });
+
+    this.cacheService.invalidateTenant(userId);
+    return deleted;
   }
 }

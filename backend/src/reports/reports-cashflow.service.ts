@@ -6,27 +6,14 @@ import {
 import { PrismaService } from '../prisma/prisma.service';
 import { QueryCashflowDto } from './dto/query-cashflow.dto';
 import { AuthUser } from '../auth/decorators/current-user.decorator';
+import { buildDateRangeFilter, resolveTargetUserId } from '../common/utils/query-builder.util';
 
 @Injectable()
 export class ReportsCashflowService {
   constructor(private readonly prisma: PrismaService) {}
 
   async getCashflowReport(user: AuthUser, query: QueryCashflowDto) {
-    let targetUserId = user.ownerId || user.id;
-
-    if (user.role === 'SUPER_ADMIN') {
-      if (query.customerId) {
-        targetUserId = query.customerId;
-      } else {
-        const firstCust = await this.prisma.user.findFirst({
-          where: { isActive: true },
-          orderBy: { createdAt: 'asc' },
-        });
-        if (firstCust) {
-          targetUserId = firstCust.id;
-        }
-      }
-    }
+    const targetUserId = await resolveTargetUserId(this.prisma, user, query.customerId);
 
     const business = await this.prisma.user.findUnique({
       where: { id: targetUserId },
@@ -65,13 +52,7 @@ export class ReportsCashflowService {
     const allowedSiteIds = sites.map((s) => s.id);
 
     // Date range filter
-    const dateFilter: any = {};
-    if (query.startDate) {
-      dateFilter.gte = new Date(`${query.startDate}T00:00:00.000Z`);
-    }
-    if (query.endDate) {
-      dateFilter.lte = new Date(`${query.endDate}T23:59:59.999Z`);
-    }
+    const dateFilter = buildDateRangeFilter(query.startDate, query.endDate);
 
     // 1. Fetch Cash Loads (Inflows)
     const loadWhere: any = {
@@ -79,7 +60,7 @@ export class ReportsCashflowService {
       paymentType: 'CASH',
       deletedAt: null,
     };
-    if (query.startDate || query.endDate) {
+    if (dateFilter) {
       loadWhere.date = dateFilter;
     }
 
@@ -100,7 +81,7 @@ export class ReportsCashflowService {
       paymentMode: 'CASH_DRAWER',
       deletedAt: null,
     };
-    if (query.startDate || query.endDate) {
+    if (dateFilter) {
       expenseWhere.date = dateFilter;
     }
 

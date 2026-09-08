@@ -24,7 +24,7 @@ export class ReportsController {
   ) {}
 
   @Get('contractors-summary')
-  @Roles('OWNER', 'CO_PARTNER', 'SUPER_ADMIN')
+  @Roles('OWNER', 'CO_PARTNER', 'SITE_BOY', 'SUPER_ADMIN')
   async getContractorsSummary(
     @CurrentUser() user: AuthUser,
     @Query() query: QueryContractorSummaryDto,
@@ -33,7 +33,7 @@ export class ReportsController {
   }
 
   @Get('settlement')
-  @Roles('OWNER', 'CO_PARTNER', 'SUPER_ADMIN')
+  @Roles('OWNER', 'CO_PARTNER', 'SITE_BOY', 'SUPER_ADMIN')
   async getSettlementStatement(
     @CurrentUser() user: AuthUser,
     @Query() query: QuerySettlementDto,

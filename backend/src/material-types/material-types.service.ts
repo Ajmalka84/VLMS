@@ -7,10 +7,14 @@ import {
 import { PrismaService } from '../prisma/prisma.service';
 import { CreateMaterialTypeDto } from './dto/create-material-type.dto';
 import { UpdateMaterialTypeDto } from './dto/update-material-type.dto';
+import { MasterCacheService } from '../common/cache/master-cache.service';
 
 @Injectable()
 export class MaterialTypesService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly cacheService: MasterCacheService,
+  ) {}
 
   async create(userId: string, dto: CreateMaterialTypeDto) {
     const existing = await this.prisma.materialType.findUnique({
@@ -28,12 +32,15 @@ export class MaterialTypesService {
       );
     }
 
-    return this.prisma.materialType.create({
+    const created = await this.prisma.materialType.create({
       data: {
         userId,
         name: dto.name.trim(),
       },
     });
+
+    this.cacheService.invalidateTenant(userId);
+    return created;
   }
 
   async findAll(userId: string) {
@@ -88,10 +95,13 @@ export class MaterialTypesService {
       );
     }
 
-    return this.prisma.materialType.update({
+    const updated = await this.prisma.materialType.update({
       where: { id },
       data: { name: dto.name.trim() },
     });
+
+    this.cacheService.invalidateTenant(userId);
+    return updated;
   }
 
   async remove(userId: string, id: string) {
@@ -115,8 +125,11 @@ export class MaterialTypesService {
       );
     }
 
-    return this.prisma.materialType.delete({
+    const deleted = await this.prisma.materialType.delete({
       where: { id },
     });
+
+    this.cacheService.invalidateTenant(userId);
+    return deleted;
   }
 }

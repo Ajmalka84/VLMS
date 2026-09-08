@@ -25,6 +25,11 @@ export class CreateShiftReconciliationDto {
   actualHandoverCash!: number;
 
   @IsOptional()
+  @IsNumber()
+  @Min(0, { message: 'Opening cash must be positive or zero' })
+  openingCash?: number;
+
+  @IsOptional()
   @IsString()
   remarks?: string;
 }

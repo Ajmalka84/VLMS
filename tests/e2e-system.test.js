@@ -13,7 +13,7 @@ async function req(path, options = {}) {
     },
   });
   const data = await res.json().catch(() => null);
-  return { status: res.status, data };
+  return { status: res.status, data, headers: res.headers };
 }
 
 let superAdminToken = '';
@@ -1577,25 +1577,35 @@ test('13.4 Hurdle 13 Part 5: Heavy Machinery Rental Logbook & Vendor Settlement 
   assert.ok(res.data.data.logs.length >= 2);
 });
 
-test('13.5 Hurdle 13 Part 5: Site Boy accesses Cashflow report on assigned site, blocked from partner/machinery settlement', async () => {
-  // 1. Site Boy can access cashflow for assigned site
+test('13.5 Hurdle 13 Part 5: Site Boy accesses Contractors, Settlement, and Cashflow reports on assigned site, blocked from partner settlement', async () => {
+  // 1. Site Boy can access contractors summary for assigned site
+  const summaryRes = await req(`/reports/contractors-summary?siteId=${siteAId}`, {
+    headers: { Authorization: `Bearer ${siteBoy1Token}` },
+  });
+  assert.equal(summaryRes.status, 200);
+  assert.equal(summaryRes.data.success, true);
+  assert.ok(summaryRes.data.data.contractors.length >= 1);
+
+  // 2. Site Boy can access contractor settlement statement for assigned site
+  const settlementRes = await req(`/reports/settlement?contractorId=${contractorAId}&siteId=${siteAId}`, {
+    headers: { Authorization: `Bearer ${siteBoy1Token}` },
+  });
+  assert.equal(settlementRes.status, 200);
+  assert.equal(settlementRes.data.success, true);
+  assert.ok(settlementRes.data.data.trips.length >= 1);
+
+  // 3. Site Boy can access cashflow for assigned site
   const cashflowRes = await req(`/reports/cashflow?siteId=${siteAId}`, {
     headers: { Authorization: `Bearer ${siteBoy1Token}` },
   });
   assert.equal(cashflowRes.status, 200);
   assert.equal(cashflowRes.data.success, true);
 
-  // 2. Site Boy is blocked from partner settlement -> 403 Forbidden
+  // 4. Site Boy is blocked from partner equity settlement -> 403 Forbidden
   const partnerRes = await req('/reports/partner-settlement', {
     headers: { Authorization: `Bearer ${siteBoy1Token}` },
   });
   assert.equal(partnerRes.status, 403);
-
-  // 3. Site Boy is blocked from machinery vendor settlement -> 403 Forbidden
-  const machRes = await req('/reports/machinery-settlement', {
-    headers: { Authorization: `Bearer ${siteBoy1Token}` },
-  });
-  assert.equal(machRes.status, 403);
 });
 
 test('13.6 Hurdle 13 Part 5: Super Admin queries reports with customerId parameter across all financial endpoints', async () => {
@@ -1611,6 +1621,108 @@ test('13.6 Hurdle 13 Part 5: Super Admin queries reports with customerId paramet
   assert.equal(resMachinery.status, 200);
   assert.equal(resMachinery.data.data.business.id, tenantAUser.id);
 });
+
+test('13.7 Hurdle 13 Field Enhancements: Heavy Machinery - Hour Meter difference calculates totalHours and rent', async () => {
+  const expenseRes = await req('/expenses', {
+    method: 'POST',
+    headers: { Authorization: `Bearer ${tenantAToken}` },
+    body: JSON.stringify({
+      siteId: siteAId,
+      categoryId: categoryCustomId,
+      machineryId: machineryHitachiId,
+      date: '2026-09-08',
+      startMeterReading: 2260.0,
+      endMeterReading: 2272.5, // 12.5 working hours
+      rentPerHour: 2000.0,
+      advanceAmount: 1000.0,
+      paymentMode: 'CASH_DRAWER',
+      paidTo: 'Rajesh (Hitachi Operator)',
+    }),
+  });
+
+  assert.equal(expenseRes.status, 201);
+  assert.equal(expenseRes.data.success, true);
+  assert.equal(Number(expenseRes.data.data.totalHours), 12.5);
+  assert.equal(Number(expenseRes.data.data.amount), 25000.0); // 12.5 * 2000 = 25,000
+  assert.equal(Number(expenseRes.data.data.advanceAmount), 1000.0);
+  assert.equal(Number(expenseRes.data.data.startMeterReading), 2260.0);
+  assert.equal(Number(expenseRes.data.data.endMeterReading), 2272.5);
+});
+
+test('13.8 Hurdle 13 Field Enhancements: Shifts - Custom openingCash balance float recalculates expectedCash and discrepancy', async () => {
+  const customShiftDate = '2026-09-09';
+  const closeRes = await req('/shifts/close', {
+    method: 'POST',
+    headers: { Authorization: `Bearer ${tenantAToken}` },
+    body: JSON.stringify({
+      siteId: siteAId,
+      date: customShiftDate,
+      shiftType: 'DAY',
+      openingCash: 5000.0, // Initial cash float provided in morning
+      actualHandoverCash: 4900.0,
+      remarks: 'Morning cash float ₹5000 provided, ₹100 discrepancy at evening',
+    }),
+  });
+
+  assert.equal(closeRes.status, 201);
+  assert.equal(Number(closeRes.data.data.openingCash), 5000.0);
+  assert.equal(Number(closeRes.data.data.expectedCash), 5000.0); // 5000 + 0 - 0 = 5000
+  assert.equal(Number(closeRes.data.data.actualHandoverCash), 4900.0);
+  assert.equal(Number(closeRes.data.data.discrepancy), -100.0); // 4900 - 5000 = -100
+});
+
+test('14.1 Hurdle 14: Latency Telemetry Header (X-Response-Time) is attached to all API responses', async () => {
+  const res = await req('/health');
+  assert.equal(res.status, 200);
+  assert.ok(res.headers.get('x-response-time'), 'X-Response-Time header must be present');
+  assert.match(res.headers.get('x-response-time'), /ms$/, 'X-Response-Time must end in ms');
+});
+
+test('14.2 Hurdle 14: In-Memory Master Data Bundle Cache delivers identical data with 0ms-level latency', async () => {
+  // First call primes cache
+  const firstRes = await req('/master-data/bundle', {
+    headers: { Authorization: `Bearer ${tenantAToken}` },
+  });
+  assert.equal(firstRes.status, 200);
+  assert.equal(firstRes.data.success, true);
+  assert.ok(firstRes.data.data.sites.length >= 1);
+
+  // Second call retrieves from in-memory cache
+  const secondRes = await req('/master-data/bundle', {
+    headers: { Authorization: `Bearer ${tenantAToken}` },
+  });
+  assert.equal(secondRes.status, 200);
+  assert.deepEqual(secondRes.data.data.sites, firstRes.data.data.sites);
+});
+
+test('14.3 Hurdle 14: Rate Matrix Lookup retrieves rates from cache & handles non-configured combinations', async () => {
+  const lookupRes = await req(`/rates/lookup?siteId=${siteAId}&vehicleTypeId=${vehicleTypeId}&materialTypeId=${materialTypeId}`, {
+    headers: { Authorization: `Bearer ${tenantAToken}` },
+  });
+  assert.equal(lookupRes.status, 200);
+  assert.equal(lookupRes.data.success, true);
+  assert.ok(lookupRes.data.data !== undefined);
+});
+
+test('14.4 Hurdle 14: Global Exception Filter normalizes 404 Not Found & malformed IDs without crashing server', async () => {
+  // Valid UUID format that doesn't exist in DB -> 404 NOT_FOUND
+  const notFoundRes = await req('/loads/00000000-0000-0000-0000-000000000000', {
+    headers: { Authorization: `Bearer ${tenantAToken}` },
+  });
+  assert.equal(notFoundRes.status, 404);
+  assert.equal(notFoundRes.data.success, false);
+  assert.equal(notFoundRes.data.code, 'NOT_FOUND');
+
+  // Malformed ID string -> 400 BAD_REQUEST gracefully normalized
+  const malformedRes = await req('/loads/malformed-id-123', {
+    headers: { Authorization: `Bearer ${tenantAToken}` },
+  });
+  assert.equal(malformedRes.status, 400);
+  assert.equal(malformedRes.data.success, false);
+  assert.equal(malformedRes.data.code, 'BAD_REQUEST');
+});
+
+
 
 
 

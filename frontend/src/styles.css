@@ -1,4 +1,5 @@
 @import "tailwindcss";
+@import "./styles/theme.css";
 
 @layer base {
   :root {
@@ -47,9 +48,6 @@ input[type="datetime-local"],
 input[type="time"],
 input[type="month"] {
   color-scheme: dark;
-  -webkit-appearance: none;
-  -moz-appearance: none;
-  appearance: none;
   min-width: 0;
   max-width: 100%;
   box-sizing: border-box;
@@ -65,11 +63,113 @@ input[type="datetime-local"]::-webkit-calendar-picker-indicator {
   cursor: pointer;
   filter: invert(0.85) sepia(100%) saturate(300%) hue-rotate(5deg);
   opacity: 0.85;
-  transition: opacity 0.2s ease, filter 0.2s ease;
+  padding: 4px;
+  border-radius: 6px;
+  transition: opacity 0.2s ease, filter 0.2s ease, transform 0.15s ease;
 }
 
 input[type="date"]::-webkit-calendar-picker-indicator:hover,
 input[type="datetime-local"]::-webkit-calendar-picker-indicator:hover {
   opacity: 1;
   filter: invert(0.95) sepia(100%) saturate(600%) hue-rotate(5deg);
+  transform: scale(1.08);
 }
+
+
+/* Custom Scrollbar for Sleek Dark Theme */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+::-webkit-scrollbar-track {
+  background: rgba(15, 23, 42, 0.6);
+}
+
+::-webkit-scrollbar-thumb {
+  background: rgba(51, 65, 85, 0.8);
+  border-radius: 9999px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: rgba(100, 116, 139, 1);
+}
+
+/* Skeleton Loading Shimmer */
+@keyframes shimmer {
+  0% {
+    background-position: -200% 0;
+  }
+  100% {
+    background-position: 200% 0;
+  }
+}
+
+.skeleton-shimmer {
+  background: linear-gradient(
+    90deg,
+    rgba(30, 41, 59, 0.6) 25%,
+    rgba(51, 65, 85, 0.4) 37%,
+    rgba(30, 41, 59, 0.6) 63%
+  );
+  background-size: 200% 100%;
+  animation: shimmer 1.5s infinite;
+}
+
+/* ========================================================================== */
+/*                       SUPER-OPTIMIZED RENDER PERFORMANCE                   */
+/* ========================================================================== */
+
+/* Virtual-like CSS rendering containment for large data tables and lists */
+.content-visibility-auto {
+  content-visibility: auto;
+  contain-intrinsic-size: auto 68px;
+}
+
+/* Eliminate 300ms tap delay on mobile touch devices */
+button,
+[role="button"],
+input,
+select,
+a {
+  touch-action: manipulation;
+}
+
+/* Hardware accelerated layer promotion for fluid 60fps animations */
+.gpu-layer {
+  transform: translateZ(0);
+  backface-visibility: hidden;
+  perspective: 1000px;
+}
+
+/* ========================================================================== */
+/*                       DESIGN SYSTEM HELPER UTILITIES                       */
+/* ========================================================================== */
+
+.input-dark {
+  background-color: rgba(2, 6, 23, 0.85);
+  border: 1px solid rgba(30, 41, 59, 0.8);
+  color: #f8fafc;
+  border-radius: 1rem;
+  font-size: 0.875rem;
+  font-weight: 600;
+  padding: 0.625rem 0.875rem;
+  min-height: 44px;
+  outline: none;
+  transition: all 0.15s ease;
+}
+
+.input-dark:focus {
+  border-color: #f59e0b;
+  box-shadow: 0 0 0 1px rgba(245, 158, 11, 0.5);
+}
+
+.table-row-hover {
+  transition: background-color 0.15s ease, transform 0.15s ease;
+}
+
+.table-row-hover:hover {
+  background-color: rgba(30, 41, 59, 0.4);
+}
+
+

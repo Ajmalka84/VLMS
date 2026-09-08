@@ -1,4 +1,4 @@
-import React, { useState, useRef, useEffect, useMemo } from 'react';
+import React, { useState, useRef, useEffect, useMemo, useCallback } from 'react';
 import { ChevronDown, Search, Check, X } from 'lucide-react';
 
 export interface CustomSelectOption {
@@ -19,10 +19,12 @@ interface CustomSelectProps {
   searchPlaceholder?: string;
   required?: boolean;
   disabled?: boolean;
+  fullWidth?: boolean;
   className?: string;
+  id?: string;
 }
 
-export const CustomSelect: React.FC<CustomSelectProps> = ({
+export const CustomSelect: React.FC<CustomSelectProps> = React.memo(({
   options,
   value,
   onChange,
@@ -33,9 +35,12 @@ export const CustomSelect: React.FC<CustomSelectProps> = ({
   searchPlaceholder = 'Search...',
   required = false,
   disabled = false,
+  fullWidth = true,
   className = '',
+  id,
 }) => {
   const [isOpen, setIsOpen] = useState(false);
+  const [openDirection, setOpenDirection] = useState<'down' | 'up'>('down');
   const [search, setSearch] = useState('');
   const containerRef = useRef<HTMLDivElement>(null);
   const searchInputRef = useRef<HTMLInputElement>(null);
@@ -45,27 +50,45 @@ export const CustomSelect: React.FC<CustomSelectProps> = ({
     [options, value]
   );
 
+  const handleToggle = useCallback(() => {
+    if (disabled) return;
+    if (!isOpen && containerRef.current) {
+      const rect = containerRef.current.getBoundingClientRect();
+      const spaceBelow = window.innerHeight - rect.bottom;
+      const spaceAbove = rect.top;
+      if (spaceBelow < 260 && spaceAbove > 260) {
+        setOpenDirection('up');
+      } else {
+        setOpenDirection('down');
+      }
+    }
+    setIsOpen((prev) => !prev);
+  }, [disabled, isOpen]);
+
   // Close dropdown on click outside
   useEffect(() => {
-    const handleClickOutside = (e: MouseEvent) => {
+    const handleClickOutside = (e: MouseEvent | TouchEvent) => {
       if (containerRef.current && !containerRef.current.contains(e.target as Node)) {
         setIsOpen(false);
       }
     };
     if (isOpen) {
       document.addEventListener('mousedown', handleClickOutside);
+      document.addEventListener('touchstart', handleClickOutside);
     }
     return () => {
       document.removeEventListener('mousedown', handleClickOutside);
+      document.removeEventListener('touchstart', handleClickOutside);
     };
   }, [isOpen]);
 
   // Focus search when opened
   useEffect(() => {
     if (isOpen && searchable && searchInputRef.current) {
-      setTimeout(() => {
+      const timer = setTimeout(() => {
         searchInputRef.current?.focus();
       }, 50);
+      return () => clearTimeout(timer);
     }
     if (!isOpen) {
       setSearch('');
@@ -82,12 +105,22 @@ export const CustomSelect: React.FC<CustomSelectProps> = ({
     );
   }, [options, search]);
 
+  const selectId = id || (label ? label.toLowerCase().replace(/\s+/g, '-') : undefined);
+
   return (
-    <div className={`relative ${isOpen ? 'z-[100]' : 'z-10'} ${className}`} ref={containerRef}>
+    <div
+      ref={containerRef}
+      className={`relative ${fullWidth ? 'w-full flex-1 min-w-0' : ''} ${
+        isOpen ? 'z-[99]' : 'z-10'
+      } ${className}`}
+    >
       {(label || labelRight) && (
         <div className="flex items-center justify-between mb-1.5 gap-2">
           {label && (
-            <label className="block text-xs font-bold text-slate-300 uppercase tracking-wider">
+            <label
+              htmlFor={selectId}
+              className="block text-xs font-bold text-slate-300 uppercase tracking-wider select-none"
+            >
               {label} {required && <span className="text-amber-400">*</span>}
             </label>
           )}
@@ -97,9 +130,10 @@ export const CustomSelect: React.FC<CustomSelectProps> = ({
 
       {/* Trigger Button */}
       <button
+        id={selectId}
         type="button"
         disabled={disabled}
-        onClick={() => setIsOpen(!isOpen)}
+        onClick={handleToggle}
         className={`w-full h-[46px] min-h-[46px] px-3.5 py-2.5 rounded-2xl bg-slate-900 border text-left flex items-center justify-between gap-2.5 transition-all cursor-pointer select-none touch-manipulation ${
           isOpen
             ? 'border-amber-500 ring-2 ring-amber-500/20 shadow-lg shadow-amber-500/10'
@@ -130,10 +164,14 @@ export const CustomSelect: React.FC<CustomSelectProps> = ({
 
       {/* Dropdown Menu */}
       {isOpen && (
-        <div className="absolute left-0 right-0 top-full mt-1.5 z-[100] rounded-2xl bg-slate-900 border border-slate-700 shadow-2xl shadow-black/90 overflow-hidden animate-fade-in">
+        <div
+          className={`absolute left-0 right-0 ${
+            openDirection === 'up' ? 'bottom-full mb-1.5' : 'top-full mt-1.5'
+          } z-[100] min-w-full w-full rounded-2xl bg-slate-900 border border-slate-700 shadow-2xl shadow-black/95 overflow-hidden animate-fade-in`}
+        >
           {/* Search Bar inside dropdown */}
           {searchable && options.length > 5 && (
-            <div className="p-2.5 border-b border-slate-800 bg-slate-950/60">
+            <div className="p-2.5 border-b border-slate-800 bg-slate-950/80">
               <div className="relative">
                 <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-slate-500" />
                 <input
@@ -142,7 +180,7 @@ export const CustomSelect: React.FC<CustomSelectProps> = ({
                   placeholder={searchPlaceholder}
                   value={search}
                   onChange={(e) => setSearch(e.target.value)}
-                  className="w-full pl-8 pr-7 py-1.5 rounded-xl bg-slate-900 border border-slate-800 text-xs text-white placeholder:text-slate-500 focus:outline-none focus:border-amber-500"
+                  className="w-full pl-8 pr-7 py-1.5 rounded-xl bg-slate-900 border border-slate-800 text-xs text-white placeholder:text-slate-500 focus:outline-none focus:border-amber-500 font-medium"
                 />
                 {search && (
                   <button
@@ -158,7 +196,7 @@ export const CustomSelect: React.FC<CustomSelectProps> = ({
           )}
 
           {/* Options List */}
-          <div className="max-h-60 overflow-y-auto p-1.5 space-y-1 scrollbar-thin scrollbar-thumb-slate-800">
+          <div className="max-h-56 overflow-y-auto p-1.5 space-y-1 scrollbar-thin scrollbar-thumb-slate-800">
             {filteredOptions.length === 0 ? (
               <div className="p-4 text-center text-xs text-slate-500 font-medium">
                 No matching options found
@@ -218,4 +256,7 @@ export const CustomSelect: React.FC<CustomSelectProps> = ({
       )}
     </div>
   );
-};
+});
+
+CustomSelect.displayName = 'CustomSelect';
+

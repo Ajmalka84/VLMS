@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Plus, Edit2, Trash2, Layers, AlertCircle, CheckCircle2, X } from 'lucide-react';
+import { Plus, Edit2, Trash2, Layers, AlertCircle } from 'lucide-react';
 import {
   fetchExpenseCategoriesApi,
   createExpenseCategoryApi,
@@ -7,8 +7,7 @@ import {
   deleteExpenseCategoryApi,
   ExpenseCategory,
 } from '../../api/expenses';
-import { Card } from '../common/Card';
-import { ConfirmModal } from '../common/ConfirmModal';
+import { Card, ConfirmModal, Modal, Input, Button, Badge, EmptyState } from '../common';
 
 export const ExpenseCategoriesManagement: React.FC = () => {
   const [categories, setCategories] = useState<ExpenseCategory[]>([]);
@@ -103,19 +102,28 @@ export const ExpenseCategoriesManagement: React.FC = () => {
             Manage cost heads for site expenditure (Diesel, Labour, Explosives, Maintenance, Food, etc.)
           </p>
         </div>
-        <button
+        <Button
+          variant="primary"
+          size="sm"
+          leftIcon={<Plus className="w-4 h-4" />}
           onClick={openCreateModal}
-          className="inline-flex items-center gap-2 px-4 py-2 bg-amber-500 hover:bg-amber-400 text-slate-950 text-xs font-bold rounded-xl transition shadow-lg shadow-amber-500/20 cursor-pointer select-none touch-manipulation"
         >
-          <Plus className="w-4 h-4" />
           Add Category
-        </button>
+        </Button>
       </div>
 
       {isLoading ? (
         <div className="p-12 text-center text-slate-400 animate-pulse">Loading categories...</div>
       ) : error ? (
         <div className="p-8 text-center text-rose-400 font-semibold">{error}</div>
+      ) : categories.length === 0 ? (
+        <EmptyState
+          icon={<Layers className="w-8 h-8 text-amber-400" />}
+          title="No Expense Categories"
+          description="Create your first cost head category to categorize operational site expenses."
+          actionText="Add Category"
+          onAction={openCreateModal}
+        />
       ) : (
         <div className="overflow-hidden rounded-2xl border border-slate-800 bg-slate-900/60 backdrop-blur-md shadow-xl">
           <table className="w-full text-left text-sm text-slate-300">
@@ -137,13 +145,9 @@ export const ExpenseCategoriesManagement: React.FC = () => {
                   </td>
                   <td className="px-4 py-3.5">
                     {cat.isDefault ? (
-                      <span className="px-2.5 py-0.5 rounded-full text-[11px] font-bold bg-slate-800 text-slate-300 border border-slate-700">
-                        System Default
-                      </span>
+                      <Badge variant="slate" size="sm">System Default</Badge>
                     ) : (
-                      <span className="px-2.5 py-0.5 rounded-full text-[11px] font-bold bg-amber-500/10 text-amber-300 border border-amber-500/30">
-                        Custom Head
-                      </span>
+                      <Badge variant="amber" size="sm">Custom Head</Badge>
                     )}
                   </td>
                   <td className="px-4 py-3.5 text-right">
@@ -172,63 +176,48 @@ export const ExpenseCategoriesManagement: React.FC = () => {
       )}
 
       {/* Modal */}
-      {isModalOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/80 backdrop-blur-sm p-4 animate-fade-in">
-          <div className="bg-slate-900 border border-slate-800 text-slate-100 rounded-2xl shadow-2xl max-w-md w-full p-6 space-y-4 relative">
-            <div className="flex items-center justify-between pb-3 border-b border-slate-800">
-              <h3 className="text-base font-bold text-white">
-                {editingCat ? 'Edit Category Name' : 'Create Expense Category'}
-              </h3>
-              <button
-                onClick={() => setIsModalOpen(false)}
-                className="p-1 text-slate-400 hover:text-white rounded-lg transition"
-              >
-                <X className="w-5 h-5" />
-              </button>
-            </div>
-
-            {formError && (
-              <div className="p-3 bg-rose-500/10 border border-rose-500/30 text-rose-400 text-xs rounded-xl flex items-center gap-2">
-                <AlertCircle className="w-4 h-4 shrink-0" />
-                <span>{formError}</span>
-              </div>
-            )}
-
-            <form onSubmit={handleSave} className="space-y-4">
-              <div>
-                <label className="block text-xs font-semibold text-slate-300 mb-1">
-                  Category Name <span className="text-rose-400">*</span>
-                </label>
-                <input
-                  type="text"
-                  placeholder="e.g. Blasting & Explosives"
-                  value={catName}
-                  onChange={(e) => setCatName(e.target.value)}
-                  required
-                  className="w-full text-sm px-3.5 py-2.5 rounded-xl bg-slate-950 border border-slate-700 text-white focus:border-amber-500 focus:ring-1 focus:ring-amber-500 outline-none"
-                />
-              </div>
-
-              <div className="flex items-center justify-end gap-3 pt-2 border-t border-slate-800">
-                <button
-                  type="button"
-                  onClick={() => setIsModalOpen(false)}
-                  className="px-4 py-2 text-xs font-bold text-slate-400 hover:text-white rounded-xl transition cursor-pointer"
-                >
-                  Cancel
-                </button>
-                <button
-                  type="submit"
-                  disabled={isSubmitting}
-                  className="px-5 py-2 text-xs font-bold text-slate-950 bg-amber-500 hover:bg-amber-400 rounded-xl transition shadow-lg shadow-amber-500/20 cursor-pointer disabled:opacity-50"
-                >
-                  {isSubmitting ? 'Saving...' : 'Save Category'}
-                </button>
-              </div>
-            </form>
+      <Modal
+        isOpen={isModalOpen}
+        onClose={() => setIsModalOpen(false)}
+        title={editingCat ? 'Edit Category Name' : 'Create Expense Category'}
+        maxWidth="sm"
+      >
+        {formError && (
+          <div className="p-3 bg-rose-500/10 border border-rose-500/30 text-rose-400 text-xs rounded-xl flex items-center gap-2 mb-4">
+            <AlertCircle className="w-4 h-4 shrink-0" />
+            <span>{formError}</span>
           </div>
-        </div>
-      )}
+        )}
+
+        <form onSubmit={handleSave} className="space-y-4">
+          <Input
+            label="Category Name"
+            required
+            placeholder="e.g. Blasting & Explosives"
+            value={catName}
+            onChange={(e) => setCatName(e.target.value)}
+          />
+
+          <div className="flex items-center justify-end gap-3 pt-2 border-t border-slate-800">
+            <Button
+              type="button"
+              variant="ghost"
+              size="sm"
+              onClick={() => setIsModalOpen(false)}
+            >
+              Cancel
+            </Button>
+            <Button
+              type="submit"
+              variant="primary"
+              size="sm"
+              loading={isSubmitting}
+            >
+              Save Category
+            </Button>
+          </div>
+        </form>
+      </Modal>
 
       {/* Delete Modal */}
       {deletingCat && (

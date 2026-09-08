@@ -26,15 +26,33 @@ import {
   UserCheck,
   Download,
   Lock,
+  Coins,
 } from 'lucide-react';
-import { Card } from '../components/common/Card';
-import { ConfirmModal } from '../components/common/ConfirmModal';
-import { CustomSelect, CustomSelectOption } from '../components/common/CustomSelect';
+import {
+  Button,
+  Input,
+  DateInput,
+  SearchBar,
+  CustomSelect,
+  CustomSelectOption,
+  Badge,
+  Modal,
+  TabBar,
+  Card,
+  PageHeader,
+  MetricCard,
+  FilterBar,
+  ConfirmModal,
+  StatusBadge,
+  EmptyState,
+} from '../components/common';
 import { useAuth } from '../context/AuthContext';
 import { useLanguage } from '../context/LanguageContext';
 import { useToast } from '../context/ToastContext';
 import { useMasterCache } from '../context/MasterCacheContext';
 import { useDebounce } from '../hooks/useDebounce';
+import { useFilterState } from '../hooks/useFilterState';
+import { formatINR, formatShortDate } from '../utils/formatters';
 import {
   Site,
   Vehicle,
@@ -53,6 +71,7 @@ import {
   LoadsResponse,
 } from '../api/loads';
 import { exportToCsv } from '../utils/csvExporter';
+import { queryCache } from '../utils/queryCache';
 
 const STORAGE_KEY_SITE = 'vlms_last_siteId';
 const STORAGE_KEY_MATERIAL = 'vlms_last_materialId';
@@ -61,6 +80,7 @@ const STORAGE_KEY_RECENT_VEHICLES = 'vlms_recent_vehicle_ids';
 
 export const LoadsPage: React.FC = () => {
   const { user } = useAuth();
+  const isSiteBoy = user?.role === 'SITE_BOY';
   const { t, language } = useLanguage();
   const toast = useToast();
   const [activeView, setActiveView] = useState<'record' | 'history'>('record');
@@ -110,51 +130,14 @@ export const LoadsPage: React.FC = () => {
   const [submitting, setSubmitting] = useState(false);
   const [lastRecordedLoad, setLastRecordedLoad] = useState<Load | null>(null);
 
-  // History / Register State
+  // History / Register State with useFilterState
   const [loadsData, setLoadsData] = useState<LoadsResponse | null>(null);
   const [historyLoading, setHistoryLoading] = useState(false);
   const [filterSite, setFilterSite] = useState('');
   const [filterContractor, setFilterContractor] = useState('');
   const [filterMaterial, setFilterMaterial] = useState('');
   const [filterPayment, setFilterPayment] = useState<'' | 'CASH' | 'CREDIT'>('');
-  const [filterSearch, setFilterSearch] = useState('');
-  const debouncedFilterSearch = useDebounce(filterSearch, 200);
-  const [filterStartDate, setFilterStartDate] = useState('');
-  const [filterEndDate, setFilterEndDate] = useState('');
-  const [historyPresetRange, setHistoryPresetRange] = useState<
-    'all' | 'today' | 'yesterday' | 'week' | 'month' | 'custom'
-  >('all');
-  const [page, setPage] = useState(1);
-
-  const applyHistoryPreset = (
-    preset: 'all' | 'today' | 'yesterday' | 'week' | 'month' | 'custom'
-  ) => {
-    setHistoryPresetRange(preset);
-    setPage(1);
-    const now = new Date();
-
-    if (preset === 'all') {
-      setFilterStartDate('');
-      setFilterEndDate('');
-    } else if (preset === 'today') {
-      const todayStr = now.toISOString().split('T')[0];
-      setFilterStartDate(todayStr);
-      setFilterEndDate(todayStr);
-    } else if (preset === 'yesterday') {
-      const yesterday = new Date(now.getTime() - 86400000);
-      const yestStr = yesterday.toISOString().split('T')[0];
-      setFilterStartDate(yestStr);
-      setFilterEndDate(yestStr);
-    } else if (preset === 'week') {
-      const sevenDaysAgo = new Date(now.getTime() - 6 * 86400000);
-      setFilterStartDate(sevenDaysAgo.toISOString().split('T')[0]);
-      setFilterEndDate(now.toISOString().split('T')[0]);
-    } else if (preset === 'month') {
-      const firstDay = new Date(now.getFullYear(), now.getMonth(), 1);
-      setFilterStartDate(firstDay.toISOString().split('T')[0]);
-      setFilterEndDate(now.toISOString().split('T')[0]);
-    }
-  };
+  const historyFilter = useFilterState({ defaultPreset: 'all', debounceMs: 200 });
 
   // Edit / Delete Modal State
   const [editLoad, setEditLoad] = useState<Load | null>(null);
@@ -218,6 +201,16 @@ export const LoadsPage: React.FC = () => {
   const handleSiteSelect = (id: string) => {
     setSiteId(id);
     localStorage.setItem(STORAGE_KEY_SITE, id);
+  };
+
+  const handleVehicleSelect = (id: string) => {
+    setVehicleId(id);
+    if (contractors.length > 0) {
+      const recentWithVeh = loadsData?.loads.find((l) => l.vehicleId === id && l.contractorId);
+      if (recentWithVeh?.contractorId && contractors.some((c) => c.id === recentWithVeh.contractorId)) {
+        setContractorId(recentWithVeh.contractorId);
+      }
+    }
   };
 
   const handleMaterialSelect = (id: string) => {
@@ -314,6 +307,13 @@ export const LoadsPage: React.FC = () => {
     ];
   }, [t]);
 
+  // Edit Modal Payment options
+  const editPaymentOptions: CustomSelectOption[] = useMemo(() => [
+    { value: 'CREDIT', label: t('credit') },
+    { value: 'CASH', label: t('cash') },
+  ], [t]);
+
+
   // Live Auto-Rate Resolution (0ms Instant Cache Resolver)
   useEffect(() => {
     if (!siteId || !vehicleId || !materialTypeId) {
@@ -361,12 +361,22 @@ export const LoadsPage: React.FC = () => {
     };
   }, [siteId, vehicleId, materialTypeId, vehicles, resolveRate, t]);
 
-  const historyFetchingRef = useRef(false);
+  const historyAbortRef = useRef<AbortController | null>(null);
 
-  // Load History fetcher
+  useEffect(() => {
+    return () => {
+      historyAbortRef.current?.abort();
+    };
+  }, []);
+
+  // Load History fetcher with useFilterState
   const fetchLoadsHistory = useCallback(async () => {
-    if (historyFetchingRef.current) return;
-    historyFetchingRef.current = true;
+    if (historyAbortRef.current) {
+      historyAbortRef.current.abort();
+    }
+    const controller = new AbortController();
+    historyAbortRef.current = controller;
+
     setHistoryLoading(true);
     try {
       const res = await getLoadsApi({
@@ -374,28 +384,30 @@ export const LoadsPage: React.FC = () => {
         contractorId: filterContractor || undefined,
         materialTypeId: filterMaterial || undefined,
         paymentType: filterPayment || undefined,
-        search: debouncedFilterSearch.trim() || undefined,
-        startDate: filterStartDate || undefined,
-        endDate: filterEndDate || undefined,
-        page,
+        search: historyFilter.debouncedSearch.trim() || undefined,
+        startDate: historyFilter.startDate || undefined,
+        endDate: historyFilter.endDate || undefined,
+        page: historyFilter.page,
         limit: 20,
-      });
+      }, { signal: controller.signal });
       setLoadsData(res);
     } catch (err: any) {
-      toast.error(err.message || 'Failed to fetch loads history');
+      if (err.name !== 'AbortError') {
+        toast.error(err.message || 'Failed to fetch loads history');
+      }
     } finally {
       setHistoryLoading(false);
-      historyFetchingRef.current = false;
     }
   }, [
     filterSite,
     filterContractor,
     filterMaterial,
     filterPayment,
-    debouncedFilterSearch,
-    filterStartDate,
-    filterEndDate,
-    page,
+    historyFilter.debouncedSearch,
+    historyFilter.startDate,
+    historyFilter.endDate,
+    historyFilter.page,
+    toast,
   ]);
 
   useEffect(() => {
@@ -413,9 +425,9 @@ export const LoadsPage: React.FC = () => {
         contractorId: filterContractor || undefined,
         materialTypeId: filterMaterial || undefined,
         paymentType: filterPayment || undefined,
-        search: filterSearch.trim() || undefined,
-        startDate: filterStartDate || undefined,
-        endDate: filterEndDate || undefined,
+        search: historyFilter.search.trim() || undefined,
+        startDate: historyFilter.startDate || undefined,
+        endDate: historyFilter.endDate || undefined,
         page: 1,
         limit: 5000,
       });
@@ -453,10 +465,10 @@ export const LoadsPage: React.FC = () => {
         l.remarks || '',
       ]);
 
-      const dateSuffix = filterStartDate && filterEndDate
-        ? `${filterStartDate}_to_${filterEndDate}`
-        : filterStartDate
-        ? `from_${filterStartDate}`
+      const dateSuffix = historyFilter.startDate && historyFilter.endDate
+        ? `${historyFilter.startDate}_to_${historyFilter.endDate}`
+        : historyFilter.startDate
+        ? `from_${historyFilter.startDate}`
         : 'All_Time';
 
       exportToCsv(
@@ -573,6 +585,8 @@ export const LoadsPage: React.FC = () => {
 
       // Update real created entity
       setLastRecordedLoad(created);
+      queryCache.invalidate('dashboard_');
+      queryCache.invalidate('rep_');
       if (activeView === 'history') {
         void fetchLoadsHistory();
       }
@@ -594,6 +608,8 @@ export const LoadsPage: React.FC = () => {
           const loadIdToDelete = load.id;
           setConfirmState(null);
           await deleteLoadApi(loadIdToDelete);
+          queryCache.invalidate('dashboard_');
+          queryCache.invalidate('rep_');
 
           // Optimistically remove from local state immediately
           setLoadsData((prev) => {
@@ -668,6 +684,8 @@ export const LoadsPage: React.FC = () => {
         paymentType: editForm.paymentType,
         contractorId: editForm.contractorId || null,
       });
+      queryCache.invalidate('dashboard_');
+      queryCache.invalidate('rep_');
 
       // Optimistically update local loadsData list
       setLoadsData((prev) => {
@@ -694,42 +712,31 @@ export const LoadsPage: React.FC = () => {
     <div className="space-y-6">
       {/* Header & Mode Switcher */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-        <div className="flex items-center gap-2">
-          <div className="p-2 rounded-xl bg-amber-500/10 text-amber-400 border border-amber-500/20">
-            <Truck className="w-5 h-5" />
-          </div>
-          <h1 className="text-xl sm:text-2xl font-extrabold text-white tracking-tight">
-            {t('load_management_title')}
-          </h1>
-        </div>
+        <PageHeader
+          title={t('load_management_title')}
+          icon={<Truck className="w-5 h-5 text-amber-400" />}
+          className="p-0 border-0 bg-transparent"
+        />
 
-        {/* Mode Switcher Tabs: 50% / 50% half-and-half on mobile, flex on desktop */}
-        <div className="w-full sm:w-auto grid grid-cols-2 sm:flex sm:items-center p-1 rounded-2xl bg-slate-900 border border-slate-800 shrink-0 gap-1 sm:gap-0">
-          <button
-            onClick={() => setActiveView('record')}
-            id="view-record-tab"
-            className={`flex items-center justify-center gap-2 px-3 sm:px-4 py-2.5 rounded-xl text-xs sm:text-sm font-bold transition-all cursor-pointer select-none touch-manipulation ${
-              activeView === 'record'
-                ? 'bg-amber-500 text-slate-950 shadow-md shadow-amber-500/20 font-extrabold'
-                : 'text-slate-400 hover:text-slate-200'
-            }`}
-          >
-            <PlusCircle className="w-4 h-4 shrink-0" />
-            <span className="truncate">{t('quick_entry')}</span>
-          </button>
-          <button
-            onClick={() => setActiveView('history')}
-            id="view-history-tab"
-            className={`flex items-center justify-center gap-2 px-3 sm:px-4 py-2.5 rounded-xl text-xs sm:text-sm font-bold transition-all cursor-pointer select-none touch-manipulation ${
-              activeView === 'history'
-                ? 'bg-amber-500 text-slate-950 shadow-md shadow-amber-500/20 font-extrabold'
-                : 'text-slate-400 hover:text-slate-200'
-            }`}
-          >
-            <History className="w-4 h-4 shrink-0" />
-            <span className="truncate">{t('load_register')} ({loadsData?.total ?? 0})</span>
-          </button>
-        </div>
+        <TabBar
+          activeTab={activeView}
+          onChange={(tabId) => setActiveView(tabId as 'record' | 'history')}
+          tabs={[
+            {
+              id: 'record',
+              buttonId: 'view-record-tab',
+              label: t('quick_entry'),
+              icon: PlusCircle,
+            },
+            {
+              id: 'history',
+              buttonId: 'view-history-tab',
+              label: `${t('load_register')}`,
+              badge: loadsData?.total ?? 0,
+              icon: History,
+            },
+          ]}
+        />
       </div>
 
       {/* ========================================================================= */}
@@ -749,21 +756,42 @@ export const LoadsPage: React.FC = () => {
                   <label className="block text-xs font-bold text-slate-300 uppercase tracking-wider">
                     {t('select_site')} <span className="text-amber-400">*</span>
                   </label>
-                  {sites.length === 1 && (
+                  {!isSiteBoy && sites.length === 1 && (
                     <span className="text-[11px] text-emerald-400 font-semibold bg-emerald-500/10 px-2 py-0.5 rounded border border-emerald-500/20">
                       {language === 'ml' ? 'ഓട്ടോ സെലക്ട്' : 'Single Site Active'}
                     </span>
                   )}
                 </div>
-                <Link
-                  to="/settings?tab=sites"
-                  className="text-xs font-bold text-amber-400 hover:text-amber-300 underline underline-offset-2 flex items-center gap-1 cursor-pointer transition-colors"
-                >
-                  <Plus className="w-3.5 h-3.5" /> Add New Site
-                </Link>
+                {!isSiteBoy && (
+                  <Link
+                    to="/settings?tab=sites"
+                    className="text-xs font-bold text-amber-400 hover:text-amber-300 underline underline-offset-2 flex items-center gap-1 cursor-pointer transition-colors"
+                  >
+                    <Plus className="w-3.5 h-3.5" /> Add New Site
+                  </Link>
+                )}
               </div>
 
-              {sites.length <= 3 ? (
+              {isSiteBoy ? (
+                <div className="flex items-center justify-between p-3.5 rounded-2xl bg-slate-950/80 border border-slate-800">
+                  <div className="flex items-center gap-3">
+                    <div className="p-2 rounded-xl bg-amber-500/10 text-amber-400 border border-amber-500/20">
+                      <MapPin className="w-4 h-4" />
+                    </div>
+                    <div>
+                      <div className="text-sm font-bold text-white">
+                        {sites.find((s) => s.id === siteId)?.siteName || 'Assigned Quarry Site'}
+                      </div>
+                      <div className="text-xs text-slate-400">
+                        {sites.find((s) => s.id === siteId)?.location || 'Field Location'}
+                      </div>
+                    </div>
+                  </div>
+                  <span className="px-2.5 py-1 rounded-full bg-blue-500/10 border border-blue-500/30 text-blue-400 text-xs font-bold flex items-center gap-1">
+                    <Lock className="w-3 h-3" /> Assigned Site
+                  </span>
+                </div>
+              ) : sites.length <= 3 ? (
                 <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-2.5">
                   {sites.map((site) => (
                     <button
@@ -837,7 +865,7 @@ export const LoadsPage: React.FC = () => {
                       <button
                         key={v.id}
                         type="button"
-                        onClick={() => setVehicleId(v.id)}
+                        onClick={() => handleVehicleSelect(v.id)}
                         className={`px-3 py-1.5 rounded-xl border text-xs font-mono font-bold transition-all cursor-pointer flex items-center gap-1.5 ${
                           vehicleId === v.id
                             ? 'bg-blue-500 text-white border-blue-400 shadow-md shadow-blue-500/20'
@@ -853,16 +881,12 @@ export const LoadsPage: React.FC = () => {
               )}
 
               {/* Search Vehicles or Pick from Grid */}
-              <div className="relative">
-                <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-500" />
-                <input
-                  type="text"
-                  placeholder={t('search_vehicle_ph')}
-                  value={vehicleSearch}
-                  onChange={(e) => setVehicleSearch(e.target.value)}
-                  className="w-full h-[46px] min-h-[46px] pl-10 pr-4 py-2.5 rounded-2xl bg-slate-900 border border-slate-800 text-xs sm:text-sm text-white focus:outline-none focus:border-blue-500 uppercase font-mono"
-                />
-              </div>
+              <SearchBar
+                placeholder={t('search_vehicle_ph')}
+                value={vehicleSearch}
+                onChange={setVehicleSearch}
+                className="uppercase font-mono"
+              />
 
               {/* Vehicle Options Grid */}
               <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-2 max-h-56 overflow-y-auto pr-1">
@@ -870,7 +894,7 @@ export const LoadsPage: React.FC = () => {
                   <button
                     key={v.id}
                     type="button"
-                    onClick={() => setVehicleId(v.id)}
+                    onClick={() => handleVehicleSelect(v.id)}
                     className={`p-2.5 rounded-xl border text-left transition-all cursor-pointer flex items-center justify-between ${
                       vehicleId === v.id
                         ? 'bg-blue-500/20 border-blue-500 text-white shadow-md shadow-blue-500/10'
@@ -893,7 +917,7 @@ export const LoadsPage: React.FC = () => {
               </div>
             </div>
 
-            {/* Material Type Dropdown with Search */}
+            {/* Material Type: Compact Searchable Select with Sticky Default */}
             <div className="space-y-2">
               <CustomSelect
                 label={t('select_material')}
@@ -960,38 +984,14 @@ export const LoadsPage: React.FC = () => {
               </div>
             </div>
 
-            {/* Compact Date Row with Visual Picker */}
-            <div
-              onClick={() => {
-                const dateInput = document.getElementById('cockpit-date-picker') as HTMLInputElement;
-                if (dateInput) {
-                  dateInput.showPicker?.();
-                }
-              }}
-              className="flex items-center justify-between p-3 rounded-2xl bg-slate-950/60 border border-slate-800 hover:border-amber-500/40 text-xs cursor-pointer transition-colors"
-            >
-              <div className="flex items-center gap-2 text-slate-300">
-                <Calendar className="w-4 h-4 text-amber-400" />
-                <span>
-                  {t('dispatch_date')}:{' '}
-                  <strong className="text-white">
-                    {date === new Date().toISOString().split('T')[0]
-                      ? `${t('today')} (${new Date(date).toLocaleDateString()})`
-                      : new Date(date).toLocaleDateString()}
-                  </strong>
-                </span>
-              </div>
-              <div className="flex items-center gap-2" onClick={(e) => e.stopPropagation()}>
-                <input
-                  id="cockpit-date-picker"
-                  type="date"
-                  value={date}
-                  onChange={(e) => setDate(e.target.value)}
-                  onClick={(e) => (e.target as any).showPicker?.()}
-                  className="px-2.5 py-1 rounded-xl bg-slate-900 border border-slate-700 text-xs text-white focus:outline-none focus:border-amber-500 cursor-pointer font-mono"
-                />
-              </div>
-            </div>
+            {/* Compact Date Row with DateInput */}
+            <DateInput
+              label={t('dispatch_date')}
+              value={date}
+              onChange={setDate}
+              id="cockpit-date-picker"
+              clearable={false}
+            />
 
             {/* Live Dynamic Rate Display & Override HUD */}
             <div className="p-4 rounded-2xl bg-slate-950/80 border border-slate-800/80 space-y-3">
@@ -1041,44 +1041,38 @@ export const LoadsPage: React.FC = () => {
                 </div>
               ) : (
                 <div className="space-y-1.5 animate-fade-in">
-                  <label className="block text-[11px] text-amber-300 font-semibold">
-                    {t('enter_override_amount')}
-                  </label>
-                  <div className="relative">
-                    <span className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-500 font-bold">₹</span>
-                    <input
-                      type="number"
-                      inputMode="numeric"
-                      step="any"
-                      min="1"
-                      required
-                      placeholder="e.g. 3800.00"
-                      value={customAmount}
-                      onChange={(e) => setCustomAmount(e.target.value)}
-                      className="w-full pl-8 pr-4 py-2.5 rounded-xl bg-slate-900 border border-amber-500/50 text-base font-bold text-emerald-400 focus:outline-none focus:border-amber-400"
-                    />
-                  </div>
+                  <Input
+                    label={t('enter_override_amount')}
+                    type="number"
+                    inputMode="numeric"
+                    step="any"
+                    min="1"
+                    required
+                    placeholder="e.g. 3800.00"
+                    value={customAmount}
+                    onChange={(e) => setCustomAmount(e.target.value)}
+                    leftIcon={<span className="font-bold text-slate-500">₹</span>}
+                    className="text-base font-bold text-emerald-400"
+                  />
                 </div>
               )}
             </div>
 
-            {/* Big 56px Dispatch Button */}
-            <button
+            {/* Big Dispatch Button */}
+            <Button
               type="submit"
               disabled={submitting}
               id="record-load-submit-btn"
-              className="w-full py-4 sm:py-4.5 rounded-2xl bg-amber-500 hover:bg-amber-400 active:scale-[0.99] text-slate-950 font-extrabold text-base tracking-wide shadow-xl shadow-amber-500/20 transition-all cursor-pointer flex items-center justify-center gap-2.5 disabled:opacity-50"
+              variant="primary"
+              size="lg"
+              loading={submitting}
+              loadingText={t('recording_load_progress')}
+              leftIcon={<CheckCircle2 className="w-5 h-5" />}
+              fullWidth
+              className="py-4 sm:py-4.5 text-base tracking-wide shadow-xl shadow-amber-500/20"
             >
-              {submitting ? (
-                <>
-                  <RefreshCw className="w-5 h-5 animate-spin" /> {t('recording_load_progress')}
-                </>
-              ) : (
-                <>
-                  <CheckCircle2 className="w-5 h-5" /> {t('record_load_btn')}
-                </>
-              )}
-            </button>
+              {t('record_load_btn')}
+            </Button>
           </form>
 
           {/* Right Col: Live Summary & Last Recorded Load */}
@@ -1101,15 +1095,9 @@ export const LoadsPage: React.FC = () => {
                   </div>
                 </div>
                 <div className="pt-2 border-t border-slate-800 flex items-center justify-between">
-                  <span
-                    className={`px-2 py-0.5 rounded text-[11px] font-extrabold uppercase ${
-                      lastRecordedLoad.paymentType === 'CASH'
-                        ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/30'
-                        : 'bg-amber-500/20 text-amber-300 border border-amber-500/30'
-                    }`}
-                  >
+                  <Badge variant={lastRecordedLoad.paymentType === 'CASH' ? 'emerald' : 'amber'} size="sm">
                     {lastRecordedLoad.paymentType}
-                  </span>
+                  </Badge>
                   <div className="text-base font-extrabold text-emerald-400">
                     ₹{Number(lastRecordedLoad.amount).toLocaleString('en-IN', { minimumFractionDigits: 2 })}
                   </div>
@@ -1165,172 +1153,78 @@ export const LoadsPage: React.FC = () => {
         <div className="space-y-6">
           {/* Summary Metric Cards */}
           <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-            <Card variant="glass" className="p-4 sm:p-5">
-              <div className="text-xs font-semibold text-slate-400">{t('total_loads')}</div>
-              <div className="text-xl sm:text-3xl font-extrabold text-white mt-1 truncate">
-                {loadsData?.summary.totalLoads ?? 0}
-              </div>
-              <div className="text-[11px] text-slate-500 mt-0.5">{t('dispatches')}</div>
-            </Card>
-
-            <Card variant="glass" className="p-4 sm:p-5">
-              <div className="text-xs font-semibold text-emerald-400">{t('total_turnover')}</div>
-              <div className="text-lg sm:text-2xl font-extrabold text-emerald-400 mt-1 truncate">
-                ₹{Math.round(loadsData?.summary.totalAmount ?? 0).toLocaleString('en-IN')}
-              </div>
-              <div className="text-[11px] text-slate-500 mt-0.5">{language === 'ml' ? 'ആകെ വാടക' : 'Total Revenue'}</div>
-            </Card>
-
-            <Card variant="glass" className="p-4 sm:p-5">
-              <div className="text-xs font-semibold text-blue-400">{t('cash_volume')}</div>
-              <div className="text-lg sm:text-2xl font-extrabold text-blue-400 mt-1 truncate">
-                ₹{Math.round(loadsData?.summary.totalCashAmount ?? 0).toLocaleString('en-IN')}
-              </div>
-              <div className="text-[11px] text-slate-500 mt-0.5">{loadsData?.summary.cashCount ?? 0} {t('cash')}</div>
-            </Card>
-
-            <Card variant="glass" className="p-4 sm:p-5">
-              <div className="text-xs font-semibold text-amber-400">{t('credit_outstanding')}</div>
-              <div className="text-lg sm:text-2xl font-extrabold text-amber-400 mt-1 truncate">
-                ₹{Math.round(loadsData?.summary.totalCreditAmount ?? 0).toLocaleString('en-IN')}
-              </div>
-              <div className="text-[11px] text-slate-500 mt-0.5">{loadsData?.summary.creditCount ?? 0} {t('credit')}</div>
-            </Card>
+            <MetricCard
+              label={t('total_loads')}
+              value={loadsData?.summary.totalLoads ?? 0}
+              subLabel={t('dispatches')}
+              icon={<Truck className="w-5 h-5 text-amber-400" />}
+              variant="default"
+            />
+            <MetricCard
+              label={t('total_turnover')}
+              value={formatINR(loadsData?.summary.totalAmount ?? 0)}
+              subLabel={language === 'ml' ? 'ആകെ വാടക' : 'Total Revenue'}
+              icon={<Coins className="w-5 h-5 text-emerald-400" />}
+              variant="emerald"
+            />
+            <MetricCard
+              label={t('cash_volume')}
+              value={formatINR(loadsData?.summary.totalCashAmount ?? 0)}
+              subLabel={`${loadsData?.summary.cashCount ?? 0} ${t('cash')}`}
+              icon={<Banknote className="w-5 h-5 text-blue-400" />}
+              variant="blue"
+            />
+            <MetricCard
+              label={t('credit_outstanding')}
+              value={formatINR(loadsData?.summary.totalCreditAmount ?? 0)}
+              subLabel={`${loadsData?.summary.creditCount ?? 0} ${t('credit')}`}
+              icon={<CreditCard className="w-5 h-5 text-amber-400" />}
+              variant="amber"
+            />
           </div>
 
-          {/* Filter Toolbar with Date Presets, Custom Date Range & Select Components */}
-          <div className="p-4 rounded-3xl bg-slate-900 border border-slate-800 space-y-3 relative z-40 overflow-visible shadow-xl">
-            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-2 border-b border-slate-800/80">
-              <span className="text-xs font-bold text-slate-300 uppercase tracking-wider flex items-center gap-1.5">
-                <Layers className="w-4 h-4 text-amber-400" />
-                {language === 'ml' ? 'ലോഡ് രജിസ്റ്റർ ഫിൽട്ടറുകൾ' : 'Load Register Filters'}
-              </span>
+          {/* Filter Toolbar with Reusable FilterBar component */}
+          <FilterBar
+            activePreset={historyFilter.preset}
+            onPresetChange={historyFilter.setPreset}
+            startDate={historyFilter.startDate}
+            onStartDateChange={historyFilter.setStartDate}
+            endDate={historyFilter.endDate}
+            onEndDateChange={historyFilter.setEndDate}
+            search={historyFilter.search}
+            onSearchChange={historyFilter.setSearch}
+            searchPlaceholder={t('search_loads_ph')}
+            onExportCSV={handleExportLoadsCSV}
+            exportLabel={language === 'ml' ? 'ലെഡ്ജർ എക്സ്പോർട്ട്' : 'Export CSV'}
+          >
+            {/* Filter Site with CustomSelect (Owner/Co-Partner only) */}
+            {!isSiteBoy && (
+              <CustomSelect
+                options={filterSiteOptions}
+                value={filterSite}
+                onChange={setFilterSite}
+                placeholder={t('all_sites')}
+              />
+            )}
 
-              <button
-                type="button"
-                onClick={handleExportLoadsCSV}
-                className="flex items-center justify-center gap-1.5 px-4 py-2 rounded-xl bg-slate-900 border border-slate-800 hover:border-slate-700 text-xs font-bold text-slate-200 hover:text-white transition-all cursor-pointer shadow-sm select-none touch-manipulation"
-              >
-                <Download className="w-4 h-4 text-emerald-400" />
-                {language === 'ml' ? 'ലെഡ്ജർ എക്സ്പോർട്ട് (CSV / Excel)' : 'Export Ledger (CSV / Excel)'}
-              </button>
-            </div>
+            {/* Filter Contractor with CustomSelect */}
+            <CustomSelect
+              options={filterContractorOptions}
+              value={filterContractor}
+              onChange={setFilterContractor}
+              placeholder={t('all_contractors')}
+            />
 
-            {/* Date Range Presets & Inline Custom Range */}
-            <div className="flex flex-wrap items-center gap-1.5 pb-2 border-b border-slate-800/80">
-              <span className="text-xs font-semibold text-slate-400 mr-2 flex items-center gap-1">
-                <Calendar className="w-3.5 h-3.5 text-amber-400" /> {t('period')}:
-              </span>
-              {[
-                { key: 'all', label: t('all_time') },
-                { key: 'today', label: t('today') },
-                { key: 'yesterday', label: t('yesterday') },
-                { key: 'week', label: t('last_7_days') },
-                { key: 'month', label: t('this_month') },
-                { key: 'custom', label: t('custom_range') },
-              ].map((p) => (
-                <button
-                  key={p.key}
-                  type="button"
-                  onClick={() => applyHistoryPreset(p.key as any)}
-                  className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer ${
-                    historyPresetRange === p.key
-                      ? 'bg-amber-500 text-slate-950 font-extrabold shadow-sm'
-                      : 'bg-slate-950 text-slate-400 hover:text-white border border-slate-800'
-                  }`}
-                >
-                  {p.label}
-                </button>
-              ))}
+            {/* Filter Payment with CustomSelect */}
+            <CustomSelect
+              options={filterPaymentOptions}
+              value={filterPayment}
+              onChange={(val) => setFilterPayment(val as any)}
+              placeholder={t('all_payments')}
+              searchable={false}
+            />
+          </FilterBar>
 
-              {historyPresetRange === 'custom' && (
-                <div className="flex flex-wrap items-center gap-2 ml-auto mt-2 sm:mt-0">
-                  <div className="flex items-center gap-1.5 text-xs text-slate-400">
-                    <span>{language === 'ml' ? 'മുതൽ:' : 'From:'}</span>
-                    <input
-                      type="date"
-                      value={filterStartDate}
-                      onChange={(e) => {
-                        setFilterStartDate(e.target.value);
-                        setPage(1);
-                      }}
-                      className="px-2.5 py-1 rounded-lg bg-slate-950 border border-slate-800 text-xs text-white focus:outline-none focus:border-amber-500"
-                    />
-                  </div>
-                  <div className="flex items-center gap-1.5 text-xs text-slate-400">
-                    <span>{language === 'ml' ? 'വരെ:' : 'To:'}</span>
-                    <input
-                      type="date"
-                      value={filterEndDate}
-                      onChange={(e) => {
-                        setFilterEndDate(e.target.value);
-                        setPage(1);
-                      }}
-                      className="px-2.5 py-1 rounded-lg bg-slate-950 border border-slate-800 text-xs text-white focus:outline-none focus:border-amber-500"
-                    />
-                  </div>
-                  {(filterStartDate || filterEndDate) && (
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setFilterStartDate('');
-                        setFilterEndDate('');
-                        setHistoryPresetRange('all');
-                      }}
-                      className="text-[11px] text-amber-400 hover:text-amber-300 font-semibold underline px-1 cursor-pointer"
-                    >
-                      {language === 'ml' ? 'മായ്ക്കുക' : 'Clear'}
-                    </button>
-                  )}
-                </div>
-              )}
-            </div>
-
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-2.5">
-              {/* Search */}
-              <div className="relative lg:col-span-2">
-                <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-500" />
-                <input
-                  type="text"
-                  placeholder={t('search_loads_ph')}
-                  value={filterSearch}
-                  onChange={(e) => setFilterSearch(e.target.value)}
-                  className="w-full h-[46px] min-h-[46px] pl-10 pr-4 py-2.5 rounded-2xl bg-slate-950 border border-slate-800 text-xs sm:text-sm text-white focus:outline-none focus:border-amber-500"
-                />
-              </div>
-
-              {/* Filter Site with CustomSelect */}
-              <div className="relative">
-                <CustomSelect
-                  options={filterSiteOptions}
-                  value={filterSite}
-                  onChange={setFilterSite}
-                  placeholder={t('all_sites')}
-                />
-              </div>
-
-              {/* Filter Contractor with CustomSelect */}
-              <div className="relative">
-                <CustomSelect
-                  options={filterContractorOptions}
-                  value={filterContractor}
-                  onChange={setFilterContractor}
-                  placeholder={t('all_contractors')}
-                />
-              </div>
-
-              {/* Filter Payment with CustomSelect */}
-              <div className="relative">
-                <CustomSelect
-                  options={filterPaymentOptions}
-                  value={filterPayment}
-                  onChange={(val) => setFilterPayment(val as any)}
-                  placeholder={t('all_payments')}
-                  searchable={false}
-                />
-              </div>
-            </div>
-          </div>
 
           {/* Load History List */}
           <div className="space-y-3 relative z-10">
@@ -1340,15 +1234,17 @@ export const LoadsPage: React.FC = () => {
                 <span>{language === 'ml' ? 'ലോഡുകൾ ലഭ്യമാക്കുന്നു...' : 'Loading dispatches...'}</span>
               </div>
             ) : loadsData?.loads.length === 0 ? (
-              <div className="p-8 text-center bg-slate-900/30 rounded-3xl border border-slate-800 text-slate-400 text-sm">
-                {t('no_loads_found')}
-              </div>
+              <EmptyState
+                icon={<Truck className="w-8 h-8 text-slate-500" />}
+                title={t('no_loads_found')}
+                description={language === 'ml' ? 'തിരഞ്ഞെടുത്ത തീയതികളിൽ ലോഡുകൾ ഒന്നും ലഭ്യമല്ല' : 'No load records match your filter criteria'}
+              />
             ) : (
               loadsData?.loads.map((load) => (
                 <Card
                   key={load.id}
                   variant="glass"
-                  className="p-4 sm:p-5 flex flex-col sm:flex-row sm:items-center justify-between gap-4 hover:border-slate-700 transition-all"
+                  className="p-4 sm:p-5 flex flex-col sm:flex-row sm:items-center justify-between gap-4 hover:border-slate-700 transition-all content-visibility-auto"
                 >
                   <div className="flex items-start sm:items-center gap-4">
                     <div className="p-3 rounded-2xl bg-amber-500/10 text-amber-400 border border-amber-500/20 shrink-0">
@@ -1359,15 +1255,9 @@ export const LoadsPage: React.FC = () => {
                         <span className="font-extrabold text-white font-mono text-base sm:text-lg tracking-wide">
                           {load.vehicle?.vehicleNumber}
                         </span>
-                        <span
-                          className={`px-2 py-0.5 rounded text-[10px] font-extrabold uppercase ${
-                            load.paymentType === 'CASH'
-                              ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/30'
-                              : 'bg-amber-500/20 text-amber-300 border border-amber-500/30'
-                          }`}
-                        >
+                        <Badge variant={load.paymentType === 'CASH' ? 'emerald' : 'amber'} size="sm">
                           {load.paymentType === 'CASH' ? t('cash') : t('credit')}
-                        </span>
+                        </Badge>
                         <span className="text-[11px] text-slate-400 bg-slate-800/80 px-2 py-0.5 rounded">
                           {load.vehicle?.vehicleType?.name}
                         </span>
@@ -1384,7 +1274,7 @@ export const LoadsPage: React.FC = () => {
                         • <span className="text-slate-400">{load.materialType?.name}</span>
                       </div>
                       <div className="text-[11px] text-slate-500 mt-0.5">
-                        {t('select_site')}: {load.site?.siteName} • {t('dispatch_date')}: {new Date(load.date).toLocaleDateString()}
+                        {t('select_site')}: {load.site?.siteName} • {t('dispatch_date')}: {formatShortDate(load.date)}
                       </div>
                     </div>
                   </div>
@@ -1392,7 +1282,7 @@ export const LoadsPage: React.FC = () => {
                   <div className="flex items-center justify-between sm:justify-end gap-4 pt-3 sm:pt-0 border-t sm:border-t-0 border-slate-800">
                     <div className="text-left sm:text-right">
                       <div className="text-lg sm:text-xl font-extrabold text-emerald-400">
-                        ₹{Math.round(Number(load.amount)).toLocaleString('en-IN')}
+                        {formatINR(load.amount)}
                       </div>
                       <div className="text-[10px] text-slate-500 uppercase">{t('per_trip')}</div>
                     </div>
@@ -1446,100 +1336,83 @@ export const LoadsPage: React.FC = () => {
         </div>
       )}
 
-      {/* ========================================================================= */}
-      {/*                                EDIT MODAL                                 */}
-      {/* ========================================================================= */}
+      {/* Edit Modal */}
       {editLoad && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/80 backdrop-blur-sm p-4 animate-fade-in">
-          <Card variant="highlight" className="w-full max-w-md p-6 space-y-4 relative">
-            <button
-              onClick={() => setEditLoad(null)}
-              className="absolute right-4 top-4 text-slate-400 hover:text-white cursor-pointer"
-            >
-              <X className="w-5 h-5" />
-            </button>
-            <h2 className="text-lg font-bold text-white">
-              {t('edit')} Load: {editLoad.vehicle?.vehicleNumber}
-            </h2>
+        <Modal
+          isOpen={!!editLoad}
+          onClose={() => setEditLoad(null)}
+          title={`${t('edit')} Load: ${editLoad.vehicle?.vehicleNumber}`}
+          icon={<Truck className="w-5 h-5" />}
+          maxWidth="md"
+        >
+          {editError && (
+            <div className="p-3.5 rounded-xl bg-rose-500/15 border border-rose-500/40 text-rose-200 text-xs font-semibold flex items-center gap-2.5 animate-fade-in">
+              <AlertTriangle className="w-4 h-4 text-rose-400 shrink-0" />
+              <span className="leading-snug">{editError}</span>
+            </div>
+          )}
 
-            {editError && (
-              <div className="p-3.5 rounded-xl bg-rose-500/15 border border-rose-500/40 text-rose-200 text-xs font-semibold flex items-center gap-2.5 animate-fade-in">
-                <AlertTriangle className="w-4 h-4 text-rose-400 shrink-0" />
-                <span className="leading-snug">{editError}</span>
-              </div>
-            )}
+          <form onSubmit={handleEditSubmit} className="space-y-4">
+            <CustomSelect
+              label={t('select_contractor')}
+              required
+              options={contractorOptions}
+              value={editForm.contractorId}
+              onChange={(val) => setEditForm({ ...editForm, contractorId: val })}
+            />
 
-            <form onSubmit={handleEditSubmit} className="space-y-4">
-              <CustomSelect
-                label={t('select_contractor')}
-                required
-                options={contractorOptions}
-                value={editForm.contractorId}
-                onChange={(val) => setEditForm({ ...editForm, contractorId: val })}
-              />
+            <Input
+              label={`${t('trip_rate')} (₹)`}
+              type="number"
+              inputMode="numeric"
+              step="any"
+              min="1"
+              required
+              value={editForm.amount}
+              onChange={(e) => setEditForm({ ...editForm, amount: e.target.value })}
+              leftIcon={<span className="font-bold text-slate-500">₹</span>}
+              className="text-emerald-400 font-bold"
+            />
 
-              <div>
-                <label className="block text-xs font-semibold text-slate-300 mb-1">
-                  {t('trip_rate')} (₹)
-                </label>
-                <input
-                  type="number"
-                  inputMode="numeric"
-                  step="any"
-                  min="1"
-                  required
-                  value={editForm.amount}
-                  onChange={(e) => setEditForm({ ...editForm, amount: e.target.value })}
-                  className="w-full px-3.5 py-2.5 rounded-xl bg-slate-900 border border-slate-800 text-sm text-emerald-400 font-bold focus:outline-none focus:border-amber-500"
-                />
-              </div>
+            <CustomSelect
+              label={t('payment_terms')}
+              required
+              searchable={false}
+              options={editPaymentOptions}
+              value={editForm.paymentType}
+              onChange={(val) =>
+                setEditForm({ ...editForm, paymentType: val as PaymentType })
+              }
+            />
 
-              <CustomSelect
-                label={t('payment_terms')}
-                required
-                searchable={false}
-                options={[
-                  { value: 'CREDIT', label: t('credit') },
-                  { value: 'CASH', label: t('cash') },
-                ]}
-                value={editForm.paymentType}
-                onChange={(val) =>
-                  setEditForm({ ...editForm, paymentType: val as PaymentType })
-                }
-              />
 
-              <div>
-                <label className="block text-xs font-semibold text-slate-300 mb-1">
-                  {t('dispatch_date')}
-                </label>
-                <input
-                  type="date"
-                  value={editForm.date}
-                  onChange={(e) => setEditForm({ ...editForm, date: e.target.value })}
-                  onClick={(e) => (e.target as any).showPicker?.()}
-                  className="w-full px-3.5 py-2.5 rounded-xl bg-slate-900 border border-slate-800 text-sm text-slate-100 focus:outline-none focus:border-amber-500 cursor-pointer font-mono"
-                />
-              </div>
+            <DateInput
+              label={t('dispatch_date')}
+              value={editForm.date}
+              onChange={(val) => setEditForm({ ...editForm, date: val })}
+              clearable={false}
+            />
 
-              <div className="flex justify-end gap-2 pt-2">
-                <button
-                  type="button"
-                  onClick={() => setEditLoad(null)}
-                  className="px-4 py-2 rounded-xl bg-slate-800 text-slate-300 text-sm font-semibold hover:bg-slate-700 cursor-pointer"
-                >
-                  {t('cancel')}
-                </button>
-                <button
-                  type="submit"
-                  disabled={submitting}
-                  className="px-5 py-2 rounded-xl bg-amber-500 hover:bg-amber-400 text-slate-950 font-bold text-sm cursor-pointer"
-                >
-                  {submitting ? t('recording_load_progress') : t('save')}
-                </button>
-              </div>
-            </form>
-          </Card>
-        </div>
+            <div className="flex justify-end gap-2 pt-3 border-t border-slate-800">
+              <Button
+                variant="secondary"
+                size="md"
+                onClick={() => setEditLoad(null)}
+              >
+                {t('cancel')}
+              </Button>
+              <Button
+                type="submit"
+                variant="primary"
+                size="md"
+                loading={submitting}
+                loadingText={t('recording_load_progress')}
+              >
+                {t('save')}
+              </Button>
+            </div>
+          </form>
+        </Modal>
       )}
 
       {/* Custom Confirmation Modal */}

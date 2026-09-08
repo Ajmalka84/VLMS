@@ -278,8 +278,11 @@ model Expense {
   machinery          Machinery?      @relation(fields: [machineryId], references: [id], onDelete: SetNull)
 
   @@index([siteId, date])
+  @@index([siteId, deletedAt, date])
+  @@index([paymentMode, siteId, deletedAt])
   @@index([categoryId, date])
   @@index([machineryId, date])
+  @@index([machineryId, deletedAt, date])
   @@index([deletedAt])
   @@map("expenses")
 }
@@ -307,6 +310,7 @@ model ShiftReconciliation {
   approvedBy         User?     @relation("ShiftApprover", fields: [approvedByUserId], references: [id], onDelete: SetNull)
 
   @@index([siteId, date])
+  @@index([siteId, isApproved, date])
   @@map("shift_reconciliations")
 }
 
@@ -332,7 +336,10 @@ model Load {
   rate           Rate         @relation(fields: [rateId], references: [id], onDelete: Restrict)
 
   @@index([siteId, date])
+  @@index([siteId, deletedAt, date])
+  @@index([paymentType, siteId, deletedAt])
   @@index([contractorId, date])
+  @@index([contractorId, deletedAt, date])
   @@index([vehicleId, date])
   @@index([deletedAt])
   @@index([date])

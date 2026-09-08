@@ -84,7 +84,10 @@ export async function createLoadApi(dto: CreateLoadDto): Promise<Load> {
   });
 }
 
-export async function getLoadsApi(query: QueryLoadsDto = {}): Promise<LoadsResponse> {
+export async function getLoadsApi(
+  query: QueryLoadsDto = {},
+  options?: { signal?: AbortSignal }
+): Promise<LoadsResponse> {
   const params = new URLSearchParams();
   if (query.siteId) params.append('siteId', query.siteId);
   if (query.vehicleId) params.append('vehicleId', query.vehicleId);
@@ -98,7 +101,9 @@ export async function getLoadsApi(query: QueryLoadsDto = {}): Promise<LoadsRespo
   if (query.limit) params.append('limit', String(query.limit));
 
   const qs = params.toString();
-  return apiClient<LoadsResponse>(`/loads${qs ? `?${qs}` : ''}`);
+  return apiClient<LoadsResponse>(`/loads${qs ? `?${qs}` : ''}`, {
+    signal: options?.signal,
+  });
 }
 
 export async function getLoadByIdApi(id: string): Promise<Load> {

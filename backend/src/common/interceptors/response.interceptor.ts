@@ -6,6 +6,7 @@ import {
 } from '@nestjs/common';
 import { Observable } from 'rxjs';
 import { map } from 'rxjs/operators';
+import { Response } from 'express';
 
 export interface ApiResponse<T> {
   success: boolean;
@@ -20,14 +21,22 @@ export class ResponseInterceptor<T>
     context: ExecutionContext,
     next: CallHandler,
   ): Observable<ApiResponse<T> | T> {
+    const startTime = Date.now();
+    const response = context.switchToHttp().getResponse<Response>();
+
     return next.handle().pipe(
       map((data) => {
+        const duration = Date.now() - startTime;
+        if (response && typeof response.setHeader === 'function') {
+          response.setHeader('X-Response-Time', `${duration}ms`);
+        }
+
         // If data already has a standard response envelope, return as-is
         if (
           data &&
           typeof data === 'object' &&
           'success' in data &&
-          typeof data.success === 'boolean'
+          typeof (data as Record<string, unknown>).success === 'boolean'
         ) {
           return data;
         }

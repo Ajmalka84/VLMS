@@ -7,28 +7,14 @@ import { PrismaService } from '../prisma/prisma.service';
 import { QuerySettlementDto } from './dto/query-settlement.dto';
 import { QueryContractorSummaryDto } from './dto/query-contractor-summary.dto';
 import { AuthUser } from '../auth/decorators/current-user.decorator';
+import { buildDateRangeFilter, resolveTargetUserId } from '../common/utils/query-builder.util';
 
 @Injectable()
 export class ReportsService {
   constructor(private readonly prisma: PrismaService) {}
 
   async getContractorsSummary(user: AuthUser, query: QueryContractorSummaryDto) {
-    let targetUserId = user.ownerId || user.id;
-
-    // Super Admin support: allow querying specific customer
-    if (user.role === 'SUPER_ADMIN') {
-      if (query.customerId) {
-        targetUserId = query.customerId;
-      } else {
-        const firstCust = await this.prisma.user.findFirst({
-          where: { isActive: true },
-          orderBy: { createdAt: 'asc' },
-        });
-        if (firstCust) {
-          targetUserId = firstCust.id;
-        }
-      }
-    }
+    const targetUserId = await resolveTargetUserId(this.prisma, user, query.customerId);
 
     // 1. Fetch tenant contractors
     const contractorWhere: any = { userId: targetUserId };
@@ -51,29 +37,29 @@ export class ReportsService {
       deletedAt: null,
     };
 
+    const allowedSites =
+      user.assignedSiteIds && user.assignedSiteIds.length > 0
+        ? user.assignedSiteIds
+        : user.assignedSiteId
+        ? [user.assignedSiteId]
+        : [];
+
     if (user.role !== 'OWNER' && user.role !== 'SUPER_ADMIN') {
-      loadWhere.siteId = { in: user.assignedSiteIds || [] };
+      loadWhere.siteId = { in: allowedSites };
     }
 
     if (query.siteId) {
       if (user.role !== 'OWNER' && user.role !== 'SUPER_ADMIN') {
-        if (!user.assignedSiteIds.includes(query.siteId)) {
+        if (!allowedSites.includes(query.siteId)) {
           throw new ForbiddenException('You are not authorized to view reports for this site');
         }
       }
       loadWhere.siteId = query.siteId;
     }
 
-    if (query.startDate || query.endDate) {
-      loadWhere.date = {};
-      if (query.startDate) {
-        loadWhere.date.gte = new Date(query.startDate);
-      }
-      if (query.endDate) {
-        const end = new Date(query.endDate);
-        end.setHours(23, 59, 59, 999);
-        loadWhere.date.lte = end;
-      }
+    const dateFilter = buildDateRangeFilter(query.startDate, query.endDate);
+    if (dateFilter) {
+      loadWhere.date = dateFilter;
     }
 
     const loads = await this.prisma.load.findMany({
@@ -261,13 +247,20 @@ export class ReportsService {
       deletedAt: null,
     };
 
+    const allowedSitesForSettlement =
+      user.assignedSiteIds && user.assignedSiteIds.length > 0
+        ? user.assignedSiteIds
+        : user.assignedSiteId
+        ? [user.assignedSiteId]
+        : [];
+
     if (user.role !== 'OWNER' && user.role !== 'SUPER_ADMIN') {
-      where.siteId = { in: user.assignedSiteIds || [] };
+      where.siteId = { in: allowedSitesForSettlement };
     }
 
     if (query.siteId) {
       if (user.role !== 'OWNER' && user.role !== 'SUPER_ADMIN') {
-        if (!user.assignedSiteIds.includes(query.siteId)) {
+        if (!allowedSitesForSettlement.includes(query.siteId)) {
           throw new ForbiddenException('You are not authorized to view reports for this site');
         }
       }
@@ -278,16 +271,9 @@ export class ReportsService {
       where.paymentType = query.paymentType;
     }
 
-    if (query.startDate || query.endDate) {
-      where.date = {};
-      if (query.startDate) {
-        where.date.gte = new Date(query.startDate);
-      }
-      if (query.endDate) {
-        const end = new Date(query.endDate);
-        end.setHours(23, 59, 59, 999);
-        where.date.lte = end;
-      }
+    const dateFilter = buildDateRangeFilter(query.startDate, query.endDate);
+    if (dateFilter) {
+      where.date = dateFilter;
     }
 
     // 3. Fetch loads with relations

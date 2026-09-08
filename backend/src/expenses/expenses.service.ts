@@ -9,6 +9,7 @@ import { PrismaService } from '../prisma/prisma.service';
 import { CreateExpenseDto } from './dto/create-expense.dto';
 import { UpdateExpenseDto } from './dto/update-expense.dto';
 import { QueryExpensesDto } from './dto/query-expenses.dto';
+import { buildDateRangeFilter } from '../common/utils/query-builder.util';
 
 export function parseTimeToMinutes(timeStr: string): number | null {
   if (!timeStr) return null;
@@ -102,8 +103,15 @@ export class ExpensesService {
         rentPerHour = Number(machine.defaultRentPerHour);
       }
 
-      if (calculatedHours === undefined && dto.startTime && dto.closingTime) {
-        calculatedHours = calculateWorkingHours(dto.startTime, dto.closingTime);
+      if (calculatedHours === undefined) {
+        if (dto.endMeterReading !== undefined && dto.startMeterReading !== undefined) {
+          calculatedHours = Math.max(
+            0,
+            Math.round((Number(dto.endMeterReading) - Number(dto.startMeterReading)) * 100) / 100,
+          );
+        } else if (dto.startTime && dto.closingTime) {
+          calculatedHours = calculateWorkingHours(dto.startTime, dto.closingTime);
+        }
       }
 
       if (finalAmount === undefined && calculatedHours !== undefined && rentPerHour !== undefined) {
@@ -187,17 +195,13 @@ export class ExpensesService {
       where.paymentMode = query.paymentMode;
     }
 
-    if (query.startDate || query.endDate) {
-      where.date = {};
-      if (query.startDate) {
-        where.date.gte = new Date(query.startDate);
-      }
-      if (query.endDate) {
-        where.date.lte = new Date(query.endDate);
-      }
+    const dateFilter = buildDateRangeFilter(query.startDate, query.endDate);
+    if (dateFilter) {
+      where.date = dateFilter;
     }
 
-    const [expenses, total, allMatchingExpenses] = await Promise.all([
+    // High-performance single-pass database query with PostgreSQL SQL aggregations
+    const [expenses, total, overallAggregates, paymentModeGroups, machineAggregates] = await Promise.all([
       this.prisma.expense.findMany({
         where,
         skip,
@@ -211,38 +215,41 @@ export class ExpensesService {
         },
       }),
       this.prisma.expense.count({ where }),
-      this.prisma.expense.findMany({
+      this.prisma.expense.aggregate({
         where,
-        select: {
+        _sum: {
           amount: true,
-          paymentMode: true,
-          machineryId: true,
           advanceAmount: true,
+        },
+      }),
+      this.prisma.expense.groupBy({
+        by: ['paymentMode'],
+        where,
+        _sum: {
+          amount: true,
+        },
+      }),
+      this.prisma.expense.aggregate({
+        where: {
+          ...where,
+          machineryId: { not: null },
+        },
+        _sum: {
+          amount: true,
           totalHours: true,
         },
       }),
     ]);
 
-    let totalExpenses = 0;
-    let totalCashDrawerExpenses = 0;
-    let totalMachineRent = 0;
-    let totalAdvancesPaid = 0;
-    let totalMachineHours = 0;
+    const totalExpenses = Number(overallAggregates._sum?.amount || 0);
+    const totalAdvancesPaid = Number(overallAggregates._sum?.advanceAmount || 0);
+    const totalMachineRent = Number(machineAggregates._sum?.amount || 0);
+    const totalMachineHours = Number(machineAggregates._sum?.totalHours || 0);
 
-    for (const exp of allMatchingExpenses) {
-      const amt = Number(exp.amount || 0);
-      totalExpenses += amt;
-      if (exp.paymentMode === 'CASH_DRAWER') {
-        totalCashDrawerExpenses += amt;
-      }
-      if (exp.machineryId) {
-        totalMachineRent += amt;
-      }
-      if (exp.advanceAmount) {
-        totalAdvancesPaid += Number(exp.advanceAmount);
-      }
-      if (exp.totalHours) {
-        totalMachineHours += Number(exp.totalHours);
+    let totalCashDrawerExpenses = 0;
+    for (const group of paymentModeGroups) {
+      if (group.paymentMode === 'CASH_DRAWER') {
+        totalCashDrawerExpenses = Number(group._sum?.amount || 0);
       }
     }
 
@@ -371,8 +378,21 @@ export class ExpensesService {
 
     let calculatedHours = dto.totalHours !== undefined ? dto.totalHours : (existing.totalHours ? Number(existing.totalHours) : undefined);
 
+    const effectiveStartMeter =
+      dto.startMeterReading !== undefined
+        ? dto.startMeterReading !== null ? Number(dto.startMeterReading) : undefined
+        : existing.startMeterReading ? Number(existing.startMeterReading) : undefined;
+    const effectiveEndMeter =
+      dto.endMeterReading !== undefined
+        ? dto.endMeterReading !== null ? Number(dto.endMeterReading) : undefined
+        : existing.endMeterReading ? Number(existing.endMeterReading) : undefined;
+
     if (effectiveMachineryId) {
-      if (dto.startTime !== undefined || dto.closingTime !== undefined) {
+      if (dto.startMeterReading !== undefined || dto.endMeterReading !== undefined) {
+        if (effectiveStartMeter !== undefined && effectiveEndMeter !== undefined) {
+          calculatedHours = Math.max(0, Math.round((effectiveEndMeter - effectiveStartMeter) * 100) / 100);
+        }
+      } else if (dto.startTime !== undefined || dto.closingTime !== undefined) {
         if (effectiveStartTime && effectiveClosingTime) {
           calculatedHours = calculateWorkingHours(effectiveStartTime, effectiveClosingTime);
         }

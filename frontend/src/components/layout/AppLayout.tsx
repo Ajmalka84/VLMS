@@ -1,6 +1,8 @@
-import React, { useEffect, useState } from 'react';
-import { NavLink, Outlet } from 'react-router-dom';
+import React, { useEffect, useState, useCallback } from 'react';
+import { NavLink, Outlet, useLocation } from 'react-router-dom';
 import {
+  Menu,
+  X,
   Truck,
   LayoutDashboard,
   FileSpreadsheet,
@@ -15,17 +17,55 @@ import {
   Wallet,
   Lock,
   Building2,
+  ChevronLeft,
+  ChevronRight,
 } from 'lucide-react';
 import { fetchHealth, HealthData } from '../../api/health';
 import { useAuth } from '../../context/AuthContext';
 import { useLanguage } from '../../context/LanguageContext';
+import { Badge, Button } from '../common';
+
+const SIDEBAR_STORAGE_KEY = 'vlms_sidebar_collapsed';
 
 export const AppLayout: React.FC = () => {
   const { user, logout } = useAuth();
   const { language, setLanguage, t } = useLanguage();
+  const location = useLocation();
+
   const [health, setHealth] = useState<HealthData | null>(null);
   const [loading, setLoading] = useState(true);
 
+  // Desktop Collapsed Sidebar State (Persistent in localStorage)
+  const [isCollapsed, setIsCollapsed] = useState<boolean>(() => {
+    try {
+      return localStorage.getItem(SIDEBAR_STORAGE_KEY) === 'true';
+    } catch {
+      return false;
+    }
+  });
+
+  // Mobile Slide-out Drawer State
+  const [isMobileDrawerOpen, setIsMobileDrawerOpen] = useState(false);
+
+  // Toggle Desktop Sidebar
+  const toggleSidebar = useCallback(() => {
+    setIsCollapsed((prev) => {
+      const next = !prev;
+      try {
+        localStorage.setItem(SIDEBAR_STORAGE_KEY, String(next));
+      } catch {
+        // Ignore
+      }
+      return next;
+    });
+  }, []);
+
+  // Close Mobile Drawer on Route Change
+  useEffect(() => {
+    setIsMobileDrawerOpen(false);
+  }, [location.pathname]);
+
+  // Periodic Health Check
   const checkStatus = async () => {
     try {
       setLoading(true);
@@ -60,116 +100,133 @@ export const AppLayout: React.FC = () => {
     navItems = [
       { to: '/admin/users', label: t('customers'), icon: Users },
       { to: '/reports', label: t('reports'), icon: FileSpreadsheet },
-      { to: '/settings', label: t('global_master'), icon: Layers },
     ];
   } else if (user?.role === 'CO_PARTNER') {
     navItems = [
-      { to: '/dashboard', label: 'Dashboard', icon: LayoutDashboard },
+      { to: '/dashboard', label: t('dashboard'), icon: LayoutDashboard },
+      { to: '/loads', label: t('loads'), icon: Truck },
       { to: '/reports', label: t('reports'), icon: FileSpreadsheet },
+      { to: '/settings', label: t('masters'), icon: Settings },
     ];
   } else if (user?.role === 'SITE_BOY') {
     navItems = [
       { to: '/loads', label: t('loads'), icon: Truck },
-      { to: '/expenses', label: 'Expenses', icon: DollarSign },
-      { to: '/shift-drawer', label: 'Cash Drawer', icon: Wallet },
-      { to: '/settings', label: t('master_data'), icon: Settings },
+      { to: '/expenses', label: t('expenses'), icon: DollarSign },
+      { to: '/shift-drawer', label: t('drawer'), icon: Wallet },
+      { to: '/reports', label: t('reports'), icon: FileSpreadsheet },
+      { to: '/settings', label: t('masters'), icon: Settings },
     ];
   } else {
-    // OWNER / default
+    // OWNER: 1. Dashboard, 2. Loads, 3. Expenses, 4. Drawer, 5. Reports, 6. Masters
     navItems = [
-      { to: '/dashboard', label: 'Dashboard', icon: LayoutDashboard },
+      { to: '/dashboard', label: t('dashboard'), icon: LayoutDashboard },
       { to: '/loads', label: t('loads'), icon: Truck },
-      { to: '/expenses', label: 'Expenses', icon: DollarSign },
+      { to: '/expenses', label: t('expenses'), icon: DollarSign },
+      { to: '/shift-drawer', label: t('drawer'), icon: Wallet },
       { to: '/reports', label: t('reports'), icon: FileSpreadsheet },
-      { to: '/shift-drawer', label: 'Cash Drawer', icon: Wallet },
-      { to: '/settings', label: t('master_data'), icon: Settings },
+      { to: '/settings', label: t('masters'), icon: Settings },
     ];
   }
 
-  // Helper for role badge in header
+  // Active Role Badge
   const renderRoleBadge = () => {
     if (!user) return null;
     if (isSuperAdmin) {
       return (
-        <span className="px-2 sm:px-2.5 py-0.5 rounded-full bg-purple-500/10 border border-purple-500/30 text-purple-300 text-[10px] sm:text-[11px] font-bold shrink-0 whitespace-nowrap">
+        <Badge variant="purple" size="sm">
           Super Admin
-        </span>
+        </Badge>
       );
     }
     if (user.role === 'CO_PARTNER') {
       const count = user.assignedSiteIds?.length || 0;
       return (
-        <span className="px-2 sm:px-2.5 py-0.5 rounded-full bg-amber-500/10 border border-amber-500/30 text-amber-300 text-[10px] sm:text-[11px] font-bold shrink-0 flex items-center gap-1 whitespace-nowrap">
-          <Building2 className="w-3 h-3 text-amber-400" />
+        <Badge
+          variant="amber"
+          size="sm"
+          icon={<Building2 className="w-3.5 h-3.5 text-amber-400" />}
+        >
           Partner ({count} {count === 1 ? 'Site' : 'Sites'})
-        </span>
+        </Badge>
       );
     }
     if (user.role === 'SITE_BOY') {
       return (
-        <span className="px-2 sm:px-2.5 py-0.5 rounded-full bg-blue-500/10 border border-blue-500/30 text-blue-300 text-[10px] sm:text-[11px] font-bold shrink-0 flex items-center gap-1 whitespace-nowrap">
-          <Lock className="w-3 h-3 text-blue-400" />
+        <Badge
+          variant="blue"
+          size="sm"
+          icon={<Lock className="w-3.5 h-3.5 text-blue-400" />}
+        >
           Gate Supervisor
-        </span>
+        </Badge>
       );
     }
     return (
-      <span className="px-2 sm:px-2.5 py-0.5 rounded-full bg-amber-500/10 border border-amber-500/30 text-amber-300 text-[10px] sm:text-[11px] font-bold shrink-0 whitespace-nowrap">
+      <Badge variant="amber" size="sm">
         Quarry Owner
-      </span>
+      </Badge>
     );
   };
 
-  // Helper for customer subscription badge in header
+  // Subscription Header Pill
   const renderSubscriptionHeaderPill = () => {
     if (isSuperAdmin || !user || user.role === 'SITE_BOY' || user.role === 'CO_PARTNER') return null;
 
     if (user.subscriptionPlan === 'TRIAL' || user.subscriptionStatus === 'TRIAL_ACTIVE') {
       const days = user.daysRemaining ?? 7;
       return (
-        <div
+        <Badge
+          variant="cyan"
+          size="sm"
           title={`7-Day Free Pilot Active (${days} days remaining)`}
-          className="inline-flex items-center gap-1 sm:gap-1.5 px-2 sm:px-2.5 py-0.5 sm:py-1 rounded-full bg-cyan-950/90 border border-cyan-700/70 text-cyan-300 text-[10px] sm:text-[11px] font-bold shadow-sm shrink-0 whitespace-nowrap"
+          icon={<Clock className="w-3 h-3 text-cyan-400" />}
         >
-          <Clock className="w-3 h-3 sm:w-3.5 sm:h-3.5 text-cyan-400 shrink-0" />
-          <span>7-Day Trial ({days}d)</span>
-        </div>
+          7-Day Trial ({days}d)
+        </Badge>
       );
     }
 
     if (user.subscriptionStatus === 'EXPIRING_SOON') {
+      const days = user.daysRemaining ?? 0;
       return (
-        <div
-          title={`Annual Package expiring in ${user.daysRemaining ?? 0} days`}
-          className="inline-flex items-center gap-1 sm:gap-1.5 px-2 sm:px-2.5 py-0.5 sm:py-1 rounded-full bg-amber-950/90 border border-amber-600/80 text-amber-300 text-[10px] sm:text-[11px] font-bold shadow-sm animate-pulse shrink-0 whitespace-nowrap"
+        <Badge
+          variant="amber"
+          size="sm"
+          dot
+          dotPulse
+          title={`Annual Package expiring in ${days} days`}
+          icon={<AlertTriangle className="w-3 h-3 text-amber-400" />}
         >
-          <AlertTriangle className="w-3 h-3 sm:w-3.5 sm:h-3.5 text-amber-400 shrink-0" />
-          <span>Expiring in {user.daysRemaining ?? 0}d</span>
-        </div>
+          Expiring in {days}d
+        </Badge>
       );
     }
 
     if (user.subscriptionStatus === 'IN_GRACE_PERIOD') {
       return (
-        <div
+        <Badge
+          variant="rose"
+          size="sm"
+          dot
+          dotPulse
           title="Subscription Grace Period Active"
-          className="inline-flex items-center gap-1 sm:gap-1.5 px-2 sm:px-2.5 py-0.5 sm:py-1 rounded-full bg-orange-950/90 border border-orange-600 text-orange-300 text-[10px] sm:text-[11px] font-bold shadow-sm animate-pulse shrink-0 whitespace-nowrap"
+          icon={<AlertTriangle className="w-3 h-3 text-rose-400" />}
         >
-          <AlertTriangle className="w-3 h-3 sm:w-3.5 sm:h-3.5 text-orange-400 shrink-0" />
-          <span>Grace Period</span>
-        </div>
+          Grace Period
+        </Badge>
       );
     }
 
     if (user.subscriptionStatus === 'ACTIVE_PAID') {
       return (
-        <div
+        <Badge
+          variant="emerald"
+          size="sm"
           title={`Annual Package Active (${user.daysRemaining !== null ? `${user.daysRemaining} days left` : 'Lifetime'})`}
-          className="inline-flex items-center gap-1 sm:gap-1.5 px-2 sm:px-2.5 py-0.5 sm:py-1 rounded-full bg-emerald-950/90 border border-emerald-700/70 text-emerald-300 text-[10px] sm:text-[11px] font-bold shadow-sm shrink-0 whitespace-nowrap"
+          icon={<CheckCircle2 className="w-3 h-3 text-emerald-400" />}
         >
-          <CheckCircle2 className="w-3 h-3 sm:w-3.5 sm:h-3.5 text-emerald-400 shrink-0" />
-          <span>Annual Plan {user.daysRemaining !== null ? `(${user.daysRemaining}d)` : ''}</span>
-        </div>
+          Annual Plan {user.daysRemaining !== null ? `(${user.daysRemaining}d)` : ''}
+        </Badge>
       );
     }
 
@@ -178,36 +235,119 @@ export const AppLayout: React.FC = () => {
 
   const defaultHome = isSuperAdmin
     ? '/admin/users'
-    : user?.role === 'CO_PARTNER'
-    ? '/dashboard'
-    : '/loads';
+    : user?.role === 'SITE_BOY'
+    ? '/loads'
+    : '/dashboard';
 
   return (
-    <div className="min-h-screen flex flex-col bg-slate-950 text-slate-100 selection:bg-amber-500 selection:text-slate-950">
-      {/* Top Header */}
-      <header className="sticky top-0 z-40 glass-panel border-b border-slate-800/80 px-3 py-2.5 sm:px-6">
-        <div className="max-w-7xl mx-auto flex items-center justify-between gap-2 sm:gap-4">
-          {/* Brand Logo & Client Name below */}
-          <div className="flex items-center gap-2 sm:gap-3 shrink-0 min-w-0">
-            <NavLink
-              to={defaultHome}
-              className="flex flex-col items-start cursor-pointer select-none group shrink-0 min-w-0"
-            >
-              <span className="font-black text-lg sm:text-2xl tracking-tight text-white leading-none">
-                VLMS
+    <div className="min-h-screen flex flex-col bg-slate-950 text-slate-100 selection:bg-amber-500 selection:text-slate-950 antialiased">
+      {/* ========================================================================= */}
+      {/*                              TOP NAVBAR                                   */}
+      {/* ========================================================================= */}
+      <header className="sticky top-0 z-40 h-16 glass-panel border-b border-slate-800/80 px-3 sm:px-5 flex items-center justify-between gap-3">
+        {/* Left: Hamburger Toggle & Brand */}
+        <div className="flex items-center gap-3 shrink-0 min-w-0">
+          {/* Hamburger Menu Toggle Button (Desktop toggles Mini/Expanded, Mobile toggles Drawer) */}
+          <button
+            type="button"
+            onClick={() => {
+              if (window.innerWidth >= 768) {
+                toggleSidebar();
+              } else {
+                setIsMobileDrawerOpen((prev) => !prev);
+              }
+            }}
+            aria-label="Toggle Navigation Sidebar"
+            className="p-2.5 rounded-2xl bg-slate-900/90 hover:bg-slate-800 border border-slate-800 text-slate-300 hover:text-white transition-all cursor-pointer active:scale-95 touch-manipulation"
+          >
+            <Menu className="w-5 h-5" />
+          </button>
+
+          {/* Logo & Quarry Name */}
+          <NavLink
+            to={defaultHome}
+            className="flex items-center gap-2.5 group cursor-pointer select-none shrink-0 min-w-0"
+          >
+            <div className="w-9 h-9 rounded-2xl bg-gradient-to-br from-amber-500 to-amber-600 flex items-center justify-center font-black text-slate-950 text-base shadow-md shadow-amber-500/20 group-hover:scale-105 transition-transform">
+              V
+            </div>
+            <div className="flex flex-col items-start min-w-0">
+              <span className="font-black text-base sm:text-lg tracking-tight text-white leading-none">
+                VLMS<span className="text-amber-400">.</span>
               </span>
-              <span className="text-[10px] sm:text-[11px] text-slate-400 font-medium truncate max-w-[100px] sm:max-w-[200px] leading-tight mt-0.5 group-hover:text-slate-300 transition-colors">
+              <span className="text-[10px] sm:text-[11px] text-slate-400 font-medium truncate max-w-[120px] sm:max-w-[220px] leading-tight mt-0.5 group-hover:text-slate-300 transition-colors">
                 {user?.businessName || 'Quarry Management'}
               </span>
-            </NavLink>
-            <div className="flex items-center gap-1.5">
-              {renderRoleBadge()}
-              {renderSubscriptionHeaderPill()}
             </div>
+          </NavLink>
+        </div>
+
+        {/* Center/Right: Badges, Language & User Controls */}
+        <div className="flex items-center gap-2 sm:gap-3 shrink-0">
+          {/* Status & Subscription Pills (Hidden on very small screens) */}
+          <div className="hidden sm:flex items-center gap-2">
+            {renderRoleBadge()}
+            {renderSubscriptionHeaderPill()}
           </div>
 
-          {/* Desktop Navigation Menu */}
-          <nav className="hidden md:flex items-center gap-1.5 p-1 rounded-2xl bg-slate-900/80 border border-slate-800/90 shadow-sm">
+          {/* Language Switcher Pill */}
+          <div className="flex items-center p-0.5 rounded-2xl bg-slate-900 border border-slate-800 text-[11px] sm:text-xs font-bold shadow-inner">
+            <button
+              type="button"
+              onClick={() => setLanguage('en')}
+              className={`px-2.5 py-1.5 rounded-xl transition-all cursor-pointer select-none touch-manipulation ${
+                language === 'en'
+                  ? 'bg-amber-500 text-slate-950 font-extrabold shadow-sm'
+                  : 'text-slate-400 hover:text-white'
+              }`}
+              title="Switch to English"
+            >
+              EN
+            </button>
+            <button
+              type="button"
+              onClick={() => setLanguage('ml')}
+              className={`px-2.5 py-1.5 rounded-xl transition-all cursor-pointer select-none touch-manipulation ${
+                language === 'ml'
+                  ? 'bg-amber-500 text-slate-950 font-extrabold shadow-sm'
+                  : 'text-slate-400 hover:text-white'
+              }`}
+              title="മലയാളത്തിലേക്ക് മാറ്റുക"
+            >
+              മലയാളം
+            </button>
+          </div>
+
+          {/* Logout Button */}
+          <Button
+            id="logout-btn"
+            variant="ghost"
+            size="sm"
+            onClick={logout}
+            title="Sign Out"
+            leftIcon={<LogOut className="w-4 h-4 shrink-0 pointer-events-none" />}
+            className="hover:border-rose-900 hover:bg-rose-950/40 text-slate-300 hover:text-rose-400 font-bold border border-slate-800 bg-slate-900"
+          >
+            <span className="hidden md:inline pointer-events-none">Sign Out</span>
+          </Button>
+        </div>
+      </header>
+
+      {/* ========================================================================= */}
+      {/*                         BODY (SIDEBAR + MAIN CONTENT)                     */}
+      {/* ========================================================================= */}
+      <div className="flex-1 flex relative">
+
+        {/* ======================================================================= */}
+        {/*        YOUTUBE-STYLE COLLAPSIBLE SIDEBAR (DESKTOP / TABLET)             */}
+        {/* ======================================================================= */}
+        <aside
+          className={`hidden md:flex flex-col fixed top-16 bottom-0 left-0 z-30 bg-slate-950/95 backdrop-blur-xl border-r border-slate-800/80 transition-all duration-300 ease-in-out select-none ${
+            isCollapsed ? 'w-[76px]' : 'w-60'
+          }`}
+        >
+          {/* Nav Items Container */}
+          <div className="flex-1 py-4 px-2.5 space-y-1.5 overflow-y-auto scrollbar-thin scrollbar-thumb-slate-800">
             {navItems.map((item) => {
               const Icon = item.icon;
               return (
@@ -215,78 +355,188 @@ export const AppLayout: React.FC = () => {
                   key={item.to}
                   to={item.to}
                   end={item.to === '/admin/users' || item.to === '/loads' || item.to === '/dashboard'}
-                  id={`desktop-nav-${item.label.toLowerCase().replace(/\s+/g, '-')}`}
+                  id={`sidebar-nav-${item.label.toLowerCase().replace(/\s+/g, '-')}`}
+                  title={isCollapsed ? item.label : undefined}
                   className={({ isActive }) =>
-                    `flex items-center gap-2 px-3.5 py-2 rounded-xl text-xs font-bold transition-all cursor-pointer select-none touch-manipulation active:scale-[0.98] ${
+                    `group relative transition-all rounded-2xl cursor-pointer select-none touch-manipulation flex items-center ${
+                      isCollapsed
+                        ? 'flex-col justify-center py-3 px-1 text-center'
+                        : 'flex-row gap-3.5 px-3.5 py-3'
+                    } ${
                       isActive
                         ? isSuperAdmin
-                          ? 'bg-purple-500 text-white shadow-md shadow-purple-500/20 font-extrabold'
-                          : 'bg-amber-500 text-slate-950 shadow-md shadow-amber-500/20 font-extrabold'
-                        : 'text-slate-400 hover:text-slate-100 hover:bg-slate-800/70'
+                          ? 'bg-purple-500 text-white shadow-lg shadow-purple-500/20 font-black'
+                          : 'bg-amber-500 text-slate-950 shadow-lg shadow-amber-500/20 font-black'
+                        : 'text-slate-400 hover:text-white hover:bg-slate-900/80'
                     }`
                   }
                 >
-                  <Icon className="w-4 h-4 shrink-0 pointer-events-none" />
-                  <span className="pointer-events-none">{item.label}</span>
+                  {({ isActive }) => (
+                    <>
+                      <Icon
+                        className={`shrink-0 transition-transform ${
+                          isCollapsed ? 'w-5 h-5 mb-1 group-hover:scale-110' : 'w-5 h-5'
+                        } ${
+                          isActive
+                            ? isSuperAdmin
+                              ? 'text-white'
+                              : 'text-slate-950'
+                            : 'text-slate-400 group-hover:text-amber-400'
+                        }`}
+                      />
+                      <span
+                        className={`truncate ${
+                          isCollapsed
+                            ? 'text-[10px] font-bold tracking-tight max-w-[64px] leading-tight block'
+                            : 'text-xs sm:text-sm font-bold tracking-wide'
+                        }`}
+                      >
+                        {item.label}
+                      </span>
+
+                      {/* Expanded Active Bar Indicator */}
+                      {!isCollapsed && isActive && (
+                        <div className="ml-auto w-1.5 h-4 rounded-full bg-slate-950/40" />
+                      )}
+                    </>
+                  )}
                 </NavLink>
               );
             })}
-          </nav>
-
-          {/* Header Actions: Language Switcher & Logout */}
-          <div className="flex items-center gap-2 sm:gap-2.5 shrink-0">
-            {/* Language Switcher Pill */}
-            <div className="flex items-center p-0.5 rounded-xl bg-slate-900 border border-slate-800 text-[11px] sm:text-xs font-bold shadow-inner">
-              <button
-                type="button"
-                onClick={() => setLanguage('en')}
-                className={`px-2 py-1 rounded-lg transition-all cursor-pointer select-none touch-manipulation ${
-                  language === 'en'
-                    ? 'bg-amber-500 text-slate-950 font-extrabold shadow-sm'
-                    : 'text-slate-400 hover:text-white'
-                }`}
-                title="Switch to English"
-              >
-                EN
-              </button>
-              <button
-                type="button"
-                onClick={() => setLanguage('ml')}
-                className={`px-2 py-1 rounded-lg transition-all cursor-pointer select-none touch-manipulation ${
-                  language === 'ml'
-                    ? 'bg-amber-500 text-slate-950 font-extrabold shadow-sm'
-                    : 'text-slate-400 hover:text-white'
-                }`}
-                title="മലയാളത്തിലേക്ക് മാറ്റുക"
-              >
-                മലയാളം
-              </button>
-            </div>
-
-            {/* Logout Button */}
-            <button
-              id="logout-btn"
-              type="button"
-              onClick={logout}
-              title="Sign Out"
-              className="flex items-center gap-1.5 px-3 py-2 rounded-xl bg-slate-900 border border-slate-800 hover:border-rose-900 hover:bg-rose-950/40 text-slate-300 hover:text-rose-400 text-xs font-semibold transition-all cursor-pointer select-none touch-manipulation shrink-0"
-            >
-              <LogOut className="w-4 h-4 shrink-0 pointer-events-none" />
-              <span className="hidden sm:inline pointer-events-none">Sign Out</span>
-            </button>
           </div>
-        </div>
-      </header>
 
-      {/* Main Content Area */}
-      <main className="flex-1 max-w-7xl w-full mx-auto p-3 sm:p-6 lg:p-8 pb-24 md:pb-8">
-        <Outlet context={{ health, loading, refreshHealth: checkStatus }} />
-      </main>
+          {/* Sidebar Bottom Footer: Collapse Toggle Button & User Profile Chip */}
+          <div className="p-3 border-t border-slate-800/80 bg-slate-950/50 space-y-2">
+            {!isCollapsed ? (
+              <div className="p-3 rounded-2xl bg-slate-900/80 border border-slate-800 text-xs space-y-1.5">
+                <div className="flex items-center justify-between">
+                  <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Account</span>
+                  {renderRoleBadge()}
+                </div>
+                <div className="font-extrabold text-white text-xs truncate">
+                  {user?.businessName || user?.mobile}
+                </div>
+                <button
+                  type="button"
+                  onClick={toggleSidebar}
+                  className="w-full mt-2 py-1.5 px-2 rounded-xl bg-slate-950 border border-slate-800 hover:border-slate-700 text-[11px] font-semibold text-slate-400 hover:text-white flex items-center justify-center gap-1.5 transition cursor-pointer"
+                >
+                  <ChevronLeft className="w-3.5 h-3.5" />
+                  <span>Collapse Menu</span>
+                </button>
+              </div>
+            ) : (
+              <button
+                type="button"
+                onClick={toggleSidebar}
+                className="w-full p-2.5 rounded-2xl bg-slate-900/90 border border-slate-800 hover:border-slate-700 text-slate-400 hover:text-amber-400 flex items-center justify-center transition cursor-pointer"
+                title="Expand Menu"
+              >
+                <ChevronRight className="w-4 h-4" />
+              </button>
+            )}
+          </div>
+        </aside>
 
-      {/* Mobile Bottom Navigation Bar (Fixed for Mobile-First Experience, Hidden on MD+) */}
-      <nav className="md:hidden fixed bottom-0 left-0 right-0 z-40 glass-panel border-t border-slate-800/90 px-3 py-1.5 shadow-2xl">
+        {/* ======================================================================= */}
+        {/*                  MOBILE OFF-CANVAS SLIDE-OUT DRAWER                     */}
+        {/* ======================================================================= */}
+        {isMobileDrawerOpen && (
+          <div className="md:hidden fixed inset-0 z-[60] flex">
+            {/* Backdrop Blur Overlay */}
+            <div
+              onClick={() => setIsMobileDrawerOpen(false)}
+              className="fixed inset-0 bg-slate-950/80 backdrop-blur-sm animate-fade-in"
+            />
+
+            {/* Slide-out Sidebar Menu */}
+            <div className="relative w-72 max-w-[85vw] bg-slate-900 border-r border-slate-800 h-full p-5 flex flex-col justify-between shadow-2xl z-10 animate-slide-right">
+              <div className="space-y-6">
+                {/* Header in Drawer */}
+                <div className="flex items-center justify-between pb-4 border-b border-slate-800">
+                  <div className="flex items-center gap-2.5">
+                    <div className="w-9 h-9 rounded-2xl bg-amber-500 flex items-center justify-center font-black text-slate-950 text-base shadow-md shadow-amber-500/20">
+                      V
+                    </div>
+                    <div>
+                      <span className="font-black text-lg text-white">VLMS</span>
+                      <p className="text-[11px] text-slate-400">{user?.businessName}</p>
+                    </div>
+                  </div>
+                  <button
+                    onClick={() => setIsMobileDrawerOpen(false)}
+                    className="p-2 rounded-xl text-slate-400 hover:text-white bg-slate-950 border border-slate-800"
+                  >
+                    <X className="w-4 h-4" />
+                  </button>
+                </div>
+
+                {/* Mobile Drawer Navigation Links */}
+                <div className="space-y-1.5">
+                  {navItems.map((item) => {
+                    const Icon = item.icon;
+                    return (
+                      <NavLink
+                        key={item.to}
+                        to={item.to}
+                        end={item.to === '/admin/users' || item.to === '/loads' || item.to === '/dashboard'}
+                        onClick={() => setIsMobileDrawerOpen(false)}
+                        className={({ isActive }) =>
+                          `flex items-center gap-3 px-4 py-3 rounded-2xl text-xs font-bold transition-all ${
+                            isActive
+                              ? isSuperAdmin
+                                ? 'bg-purple-500 text-white shadow-md shadow-purple-500/20 font-extrabold'
+                                : 'bg-amber-500 text-slate-950 shadow-md shadow-amber-500/20 font-extrabold'
+                              : 'text-slate-300 hover:text-white hover:bg-slate-800'
+                          }`
+                        }
+                      >
+                        <Icon className="w-4 h-4 shrink-0" />
+                        <span>{item.label}</span>
+                      </NavLink>
+                    );
+                  })}
+                </div>
+              </div>
+
+              {/* Drawer Bottom Details & Sign Out */}
+              <div className="space-y-3 pt-4 border-t border-slate-800">
+                <div className="flex items-center justify-between text-xs text-slate-400">
+                  <span>Role:</span>
+                  {renderRoleBadge()}
+                </div>
+                <Button
+                  variant="danger"
+                  size="md"
+                  fullWidth
+                  onClick={logout}
+                  leftIcon={<LogOut className="w-4 h-4" />}
+                >
+                  Sign Out
+                </Button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* ======================================================================= */}
+        {/*                               MAIN CONTENT                              */}
+        {/* ======================================================================= */}
+        <main
+          className={`flex-1 min-w-0 transition-all duration-300 ease-in-out p-3 sm:p-6 lg:p-8 pb-24 md:pb-8 ${
+            isCollapsed ? 'md:ml-[76px]' : 'md:ml-60'
+          }`}
+        >
+          <Outlet context={{ health, loading, refreshHealth: checkStatus }} />
+        </main>
+      </div>
+
+      {/* ========================================================================= */}
+      {/*        MOBILE BOTTOM NAVIGATION BAR (FOR 1-TAP PHONE ACCESSIBILITY)       */}
+      {/* ========================================================================= */}
+      <nav className="md:hidden fixed bottom-0 left-0 right-0 z-40 glass-panel border-t border-slate-800/90 px-2 py-1.5 shadow-2xl">
         <div
-          className="grid gap-1.5 max-w-md mx-auto"
+          className="grid gap-1 max-w-md mx-auto"
           style={{ gridTemplateColumns: `repeat(${navItems.length}, minmax(0, 1fr))` }}
         >
           {navItems.map((item) => {

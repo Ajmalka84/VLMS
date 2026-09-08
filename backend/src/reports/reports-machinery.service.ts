@@ -6,27 +6,14 @@ import {
 import { PrismaService } from '../prisma/prisma.service';
 import { QueryMachinerySettlementDto } from './dto/query-machinery-settlement.dto';
 import { AuthUser } from '../auth/decorators/current-user.decorator';
+import { buildDateRangeFilter, resolveTargetUserId } from '../common/utils/query-builder.util';
 
 @Injectable()
 export class ReportsMachineryService {
   constructor(private readonly prisma: PrismaService) {}
 
   async getMachinerySettlement(user: AuthUser, query: QueryMachinerySettlementDto) {
-    let targetUserId = user.ownerId || user.id;
-
-    if (user.role === 'SUPER_ADMIN') {
-      if (query.customerId) {
-        targetUserId = query.customerId;
-      } else {
-        const firstCust = await this.prisma.user.findFirst({
-          where: { isActive: true },
-          orderBy: { createdAt: 'asc' },
-        });
-        if (firstCust) {
-          targetUserId = firstCust.id;
-        }
-      }
-    }
+    const targetUserId = await resolveTargetUserId(this.prisma, user, query.customerId);
 
     const business = await this.prisma.user.findUnique({
       where: { id: targetUserId },
@@ -78,14 +65,9 @@ export class ReportsMachineryService {
       expenseWhere.machineryId = query.machineryId;
     }
 
-    if (query.startDate || query.endDate) {
-      expenseWhere.date = {};
-      if (query.startDate) {
-        expenseWhere.date.gte = new Date(`${query.startDate}T00:00:00.000Z`);
-      }
-      if (query.endDate) {
-        expenseWhere.date.lte = new Date(`${query.endDate}T23:59:59.999Z`);
-      }
+    const dateFilter = buildDateRangeFilter(query.startDate, query.endDate);
+    if (dateFilter) {
+      expenseWhere.date = dateFilter;
     }
 
     const logs = await this.prisma.expense.findMany({

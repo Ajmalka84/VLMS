@@ -1,0 +1,46 @@
+{
+  "name": "VLMS — Vehicle Load Management System",
+  "short_name": "VLMS Quarry",
+  "description": "Enterprise quarry fleet dispatch, weighbridge tracking, live shift cash drawer & contractor settlements",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "orientation": "portrait-primary",
+  "background_color": "#020617",
+  "theme_color": "#020617",
+  "categories": ["business", "finance", "productivity", "utilities"],
+  "icons": [
+    {
+      "src": "/icons/icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "/favicon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any"
+    }
+  ],
+  "shortcuts": [
+    {
+      "name": "Record Trip Load",
+      "short_name": "New Load",
+      "url": "/loads",
+      "icons": [{ "src": "/icons/icon.svg", "sizes": "any" }]
+    },
+    {
+      "name": "Live Shift Drawer",
+      "short_name": "Shift Drawer",
+      "url": "/shift-drawer",
+      "icons": [{ "src": "/icons/icon.svg", "sizes": "any" }]
+    },
+    {
+      "name": "Financial Reports",
+      "short_name": "Reports",
+      "url": "/reports",
+      "icons": [{ "src": "/icons/icon.svg", "sizes": "any" }]
+    }
+  ]
+}

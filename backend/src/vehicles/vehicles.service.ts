@@ -8,10 +8,14 @@ import {
 import { PrismaService } from '../prisma/prisma.service';
 import { CreateVehicleDto } from './dto/create-vehicle.dto';
 import { UpdateVehicleDto } from './dto/update-vehicle.dto';
+import { MasterCacheService } from '../common/cache/master-cache.service';
 
 @Injectable()
 export class VehiclesService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly cacheService: MasterCacheService,
+  ) {}
 
   async create(userId: string, dto: CreateVehicleDto) {
     // 1. Verify vehicleType exists
@@ -42,7 +46,7 @@ export class VehiclesService {
       );
     }
 
-    return this.prisma.vehicle.create({
+    const created = await this.prisma.vehicle.create({
       data: {
         userId,
         vehicleNumber: cleanVehicleNumber,
@@ -52,6 +56,9 @@ export class VehiclesService {
         vehicleType: true,
       },
     });
+
+    this.cacheService.invalidateTenant(userId);
+    return created;
   }
 
   async findAll(userId: string) {
@@ -132,13 +139,16 @@ export class VehiclesService {
       }
     }
 
-    return this.prisma.vehicle.update({
+    const updated = await this.prisma.vehicle.update({
       where: { id },
       data: updateData,
       include: {
         vehicleType: true,
       },
     });
+
+    this.cacheService.invalidateTenant(userId);
+    return updated;
   }
 
   async remove(userId: string, id: string) {
@@ -154,8 +164,11 @@ export class VehiclesService {
       );
     }
 
-    return this.prisma.vehicle.delete({
+    const deleted = await this.prisma.vehicle.delete({
       where: { id },
     });
+
+    this.cacheService.invalidateTenant(userId);
+    return deleted;
   }
 }

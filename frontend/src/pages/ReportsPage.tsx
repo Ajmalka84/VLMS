@@ -1,21 +1,14 @@
 import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import {
   FileSpreadsheet,
-  FileText,
   Printer,
   Download,
   Calendar,
   Search,
   Truck,
   Layers,
-  MapPin,
   ArrowLeft,
   ArrowRight,
-  UserCheck,
-  Building2,
-  RefreshCw,
-  Clock,
-  CheckCircle2,
   Wallet,
   Users,
   Wrench,
@@ -25,16 +18,26 @@ import {
   Receipt,
   BadgePercent,
   SlidersHorizontal,
+  Share2,
+  Phone,
 } from 'lucide-react';
-import { Card } from '../components/common/Card';
-import { CustomSelect, CustomSelectOption } from '../components/common/CustomSelect';
+import {
+  Card,
+  PageHeader,
+  MetricCard,
+  CustomSelect,
+  Button,
+  TabBar,
+  DateInput,
+  SearchBar,
+  EmptyState,
+  Badge,
+} from '../components/common';
 import { useAuth } from '../context/AuthContext';
 import { useLanguage } from '../context/LanguageContext';
 import { useToast } from '../context/ToastContext';
-import { Site, getSitesApi } from '../api/masterData';
 import { getCustomersApi, CustomerUser } from '../api/admin';
 import {
-  ContractorSummaryItem,
   ContractorsSummaryResponse,
   SettlementReportResponse,
   CashflowReportResponse,
@@ -50,23 +53,18 @@ import { PaymentType } from '../api/loads';
 import { useMasterCache } from '../context/MasterCacheContext';
 import { useDebounce } from '../hooks/useDebounce';
 import { exportToCsv } from '../utils/csvExporter';
-import { numberToWordsINR } from '../utils/numberToWords';
-import { groupTrips } from '../utils/tripGrouper';
-import {
-  PdfCustomHeaderOptions,
-  exportSettlementPdf,
-  exportCashflowPdf,
-  exportPartnerSettlementPdf,
-  exportMachinerySettlementPdf,
-} from '../utils/pdfGenerator';
+import { formatINR } from '../utils/formatters';
+import type { PdfCustomHeaderOptions } from '../utils/pdfGenerator';
 import { PdfCustomHeaderModal } from '../components/reports/PdfCustomHeaderModal';
+import { queryCache } from '../utils/queryCache';
 
 export type ReportTab = 'contractors' | 'cashflow' | 'partners' | 'machinery';
 
 export const ReportsPage: React.FC = () => {
   const { user } = useAuth();
-  const { t, language } = useLanguage();
+  const { t } = useLanguage();
   const toast = useToast();
+  const abortControllerRef = useRef<AbortController | null>(null);
 
   const isSuperAdmin = user?.role === 'SUPER_ADMIN';
   const isOwner = user?.role === 'OWNER';
@@ -84,12 +82,24 @@ export const ReportsPage: React.FC = () => {
   const [customersLoaded, setCustomersLoaded] = useState(!isSuperAdmin);
 
   // Filter State
-  const [siteId, setSiteId] = useState('');
+  const [siteId, setSiteId] = useState<string>(() => {
+    if (user?.role === 'SITE_BOY' && user?.assignedSiteId) {
+      return user.assignedSiteId;
+    }
+    return '';
+  });
   const [presetRange, setPresetRange] = useState<
     'all' | 'today' | 'yesterday' | 'week' | 'month' | 'custom'
   >('all');
   const [startDate, setStartDate] = useState('');
   const [endDate, setEndDate] = useState('');
+
+  // Auto-bind assigned site for Site Boy
+  useEffect(() => {
+    if (isSiteBoy && user?.assignedSiteId && siteId !== user.assignedSiteId) {
+      setSiteId(user.assignedSiteId);
+    }
+  }, [isSiteBoy, user?.assignedSiteId, siteId]);
 
   // Contractor Tab Specific State
   const [contractorSearch, setContractorSearch] = useState('');
@@ -113,6 +123,13 @@ export const ReportsPage: React.FC = () => {
   // General Loading & Modal State
   const [loading, setLoading] = useState(false);
   const [isPdfModalOpen, setIsPdfModalOpen] = useState(false);
+
+  // Clean up any pending requests on unmount
+  useEffect(() => {
+    return () => {
+      abortControllerRef.current?.abort();
+    };
+  }, []);
 
   // Load Customers if Super Admin
   useEffect(() => {
@@ -156,16 +173,14 @@ export const ReportsPage: React.FC = () => {
       setStartDate(yestStr);
       setEndDate(yestStr);
     } else if (preset === 'week') {
-      const weekAgo = new Date(now);
-      weekAgo.setDate(weekAgo.getDate() - 7);
-      setStartDate(weekAgo.toISOString().split('T')[0]);
+      const sevenDaysAgo = new Date(now);
+      sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 6);
+      setStartDate(sevenDaysAgo.toISOString().split('T')[0]);
       setEndDate(now.toISOString().split('T')[0]);
     } else if (preset === 'month') {
       const firstDay = new Date(now.getFullYear(), now.getMonth(), 1);
-      const todayStr = now.toISOString().split('T')[0];
-      const firstDayStr = firstDay.toISOString().split('T')[0];
-      setStartDate(firstDayStr);
-      setEndDate(todayStr);
+      setStartDate(firstDay.toISOString().split('T')[0]);
+      setEndDate(now.toISOString().split('T')[0]);
     }
   };
 
@@ -181,16 +196,75 @@ export const ReportsPage: React.FC = () => {
     return sites;
   }, [sites, isSuperAdmin, isSiteBoy, isCoPartner, user]);
 
-  // -------------------------------------------------------------
-  // DATA FETCHING HOOKS
-  // -------------------------------------------------------------
+  // Memoized Select Options for 0-lag Rendering
+  const customerSelectOptions = useMemo(
+    () =>
+      customers.map((c) => ({
+        value: c.id,
+        label: `${c.businessName || c.mobile} (${c.mobile})`,
+      })),
+    [customers]
+  );
 
-  // 1. Fetch Contractors Summary & Settlement
+  const siteSelectOptions = useMemo(
+    () =>
+      isSiteBoy
+        ? filteredSites.map((s) => ({ value: s.id, label: `${s.siteName} (${s.location})` }))
+        : [
+            { value: '', label: 'All Operational Sites' },
+            ...filteredSites.map((s) => ({ value: s.id, label: `${s.siteName} (${s.location})` })),
+          ],
+    [filteredSites, isSiteBoy]
+  );
+
+  const partnerSelectOptions = useMemo(
+    () =>
+      partnerData?.partnersList.map((p) => ({
+        value: p.id,
+        label: `${p.name} (${p.mobile})`,
+      })) || [],
+    [partnerData?.partnersList]
+  );
+
+  const machinerySelectOptions = useMemo(
+    () =>
+      machineryData?.machineryList
+        ? [
+            { value: '', label: 'All Heavy Machinery & Excavators' },
+            ...machineryData.machineryList.map((m) => ({
+              value: m.id,
+              label: `${m.name} (${m.code || 'N/A'}${m.vendorName ? ` - ${m.vendorName}` : ''})`,
+            })),
+          ]
+        : [],
+    [machineryData?.machineryList]
+  );
+
+
+  // 1. Fetch Contractors Ledger / Settlement
   const fetchContractorsData = useCallback(async () => {
     if (!customersLoaded) return;
-    setLoading(true);
+    const cacheKey = selectedContractorId
+      ? `rep_stmt_${selectedContractorId}_${siteId}_${startDate}_${endDate}_${paymentType}_${selectedCustomerId}`
+      : `rep_sum_${siteId}_${startDate}_${endDate}_${debouncedContractorSearch}_${selectedCustomerId}`;
+
+    if (selectedContractorId) {
+      const cached = queryCache.get<SettlementReportResponse>(cacheKey);
+      if (cached) setSettlementData(cached);
+      else setLoading(true);
+    } else {
+      const cached = queryCache.get<ContractorsSummaryResponse>(cacheKey);
+      if (cached) setSummaryData(cached);
+      else setLoading(true);
+    }
+
+    if (abortControllerRef.current) abortControllerRef.current.abort();
+    const controller = new AbortController();
+    abortControllerRef.current = controller;
+
     try {
       if (selectedContractorId) {
+        // Detailed Statement
         const res = await getSettlementReportApi({
           contractorId: selectedContractorId,
           siteId: siteId || undefined,
@@ -198,20 +272,25 @@ export const ReportsPage: React.FC = () => {
           endDate: endDate || undefined,
           paymentType: paymentType || undefined,
           customerId: isSuperAdmin ? selectedCustomerId : undefined,
-        });
+        }, { signal: controller.signal });
         setSettlementData(res);
+        queryCache.set(cacheKey, res);
       } else {
+        // Summary Table
         const res = await getContractorsSummaryApi({
           siteId: siteId || undefined,
           startDate: startDate || undefined,
           endDate: endDate || undefined,
           search: debouncedContractorSearch || undefined,
           customerId: isSuperAdmin ? selectedCustomerId : undefined,
-        });
+        }, { signal: controller.signal });
         setSummaryData(res);
+        queryCache.set(cacheKey, res);
       }
     } catch (err: any) {
-      toast.error(err.message || 'Failed to load contractor reports');
+      if (err.name !== 'AbortError') {
+        toast.error(err.message || 'Failed to load contractor reports');
+      }
     } finally {
       setLoading(false);
     }
@@ -220,17 +299,28 @@ export const ReportsPage: React.FC = () => {
   // 2. Fetch Cashflow Report
   const fetchCashflowData = useCallback(async () => {
     if (!customersLoaded) return;
-    setLoading(true);
+    const cacheKey = `rep_cf_${siteId}_${startDate}_${endDate}_${selectedCustomerId}`;
+    const cached = queryCache.get<CashflowReportResponse>(cacheKey);
+    if (cached) setCashflowData(cached);
+    else setLoading(true);
+
+    if (abortControllerRef.current) abortControllerRef.current.abort();
+    const controller = new AbortController();
+    abortControllerRef.current = controller;
+
     try {
       const res = await getCashflowReportApi({
         siteId: siteId || undefined,
         startDate: startDate || undefined,
         endDate: endDate || undefined,
         customerId: isSuperAdmin ? selectedCustomerId : undefined,
-      });
+      }, { signal: controller.signal });
       setCashflowData(res);
+      queryCache.set(cacheKey, res);
     } catch (err: any) {
-      toast.error(err.message || 'Failed to load cashflow statement');
+      if (err.name !== 'AbortError') {
+        toast.error(err.message || 'Failed to load cashflow statement');
+      }
     } finally {
       setLoading(false);
     }
@@ -239,7 +329,15 @@ export const ReportsPage: React.FC = () => {
   // 3. Fetch Partner Settlement Report
   const fetchPartnerData = useCallback(async () => {
     if (!customersLoaded) return;
-    setLoading(true);
+    const cacheKey = `rep_part_${partnerId}_${siteId}_${startDate}_${endDate}_${selectedCustomerId}`;
+    const cached = queryCache.get<PartnerSettlementResponse>(cacheKey);
+    if (cached) setPartnerData(cached);
+    else setLoading(true);
+
+    if (abortControllerRef.current) abortControllerRef.current.abort();
+    const controller = new AbortController();
+    abortControllerRef.current = controller;
+
     try {
       const res = await getPartnerSettlementReportApi({
         partnerId: partnerId || undefined,
@@ -247,13 +345,16 @@ export const ReportsPage: React.FC = () => {
         startDate: startDate || undefined,
         endDate: endDate || undefined,
         customerId: isSuperAdmin ? selectedCustomerId : undefined,
-      });
+      }, { signal: controller.signal });
       setPartnerData(res);
+      queryCache.set(cacheKey, res);
       if (!partnerId && res.selectedPartner?.id) {
         setPartnerId(res.selectedPartner.id);
       }
     } catch (err: any) {
-      toast.error(err.message || 'Failed to load partner settlement statement');
+      if (err.name !== 'AbortError') {
+        toast.error(err.message || 'Failed to load partner settlement statement');
+      }
     } finally {
       setLoading(false);
     }
@@ -262,7 +363,15 @@ export const ReportsPage: React.FC = () => {
   // 4. Fetch Machinery Settlement Report
   const fetchMachineryData = useCallback(async () => {
     if (!customersLoaded) return;
-    setLoading(true);
+    const cacheKey = `rep_mach_${machineryId}_${siteId}_${startDate}_${endDate}_${selectedCustomerId}`;
+    const cached = queryCache.get<MachinerySettlementResponse>(cacheKey);
+    if (cached) setMachineryData(cached);
+    else setLoading(true);
+
+    if (abortControllerRef.current) abortControllerRef.current.abort();
+    const controller = new AbortController();
+    abortControllerRef.current = controller;
+
     try {
       const res = await getMachinerySettlementReportApi({
         machineryId: machineryId || undefined,
@@ -270,10 +379,13 @@ export const ReportsPage: React.FC = () => {
         startDate: startDate || undefined,
         endDate: endDate || undefined,
         customerId: isSuperAdmin ? selectedCustomerId : undefined,
-      });
+      }, { signal: controller.signal });
       setMachineryData(res);
+      queryCache.set(cacheKey, res);
     } catch (err: any) {
-      toast.error(err.message || 'Failed to load machinery logbook report');
+      if (err.name !== 'AbortError') {
+        toast.error(err.message || 'Failed to load machinery logbook report');
+      }
     } finally {
       setLoading(false);
     }
@@ -292,19 +404,7 @@ export const ReportsPage: React.FC = () => {
     }
   }, [activeTab, fetchContractorsData, fetchCashflowData, fetchPartnerData, fetchMachineryData]);
 
-  // Format INR Currency
-  const formatINR = (val: number | string | null | undefined) => {
-    const num = Number(val || 0);
-    return new Intl.NumberFormat('en-IN', {
-      style: 'currency',
-      currency: 'INR',
-      maximumFractionDigits: 2,
-    }).format(num);
-  };
-
-  // -------------------------------------------------------------
   // CSV EXPORTERS
-  // -------------------------------------------------------------
   const handleExportCsv = () => {
     if (activeTab === 'contractors') {
       if (selectedContractorId && settlementData) {
@@ -375,203 +475,190 @@ export const ReportsPage: React.FC = () => {
     }
   };
 
-  // -------------------------------------------------------------
-  // PDF EXPORTERS
-  // -------------------------------------------------------------
-  const handleExportPdf = (customOpts?: PdfCustomHeaderOptions) => {
+  // PDF EXPORTERS (Lazy dynamic import on demand for optimal bundle size)
+  const handleExportPdf = async (customOpts?: PdfCustomHeaderOptions) => {
     const fallbackBiz = isSuperAdmin ? 'VLMS SaaS Admin' : (user?.businessName || 'VLMS Quarry Management');
-    if (activeTab === 'contractors' && settlementData) {
-      exportSettlementPdf(settlementData, fallbackBiz, customOpts);
-    } else if (activeTab === 'cashflow' && cashflowData) {
-      exportCashflowPdf(cashflowData, fallbackBiz, customOpts);
-    } else if (activeTab === 'partners' && partnerData) {
-      exportPartnerSettlementPdf(partnerData, fallbackBiz, customOpts);
-    } else if (activeTab === 'machinery' && machineryData) {
-      exportMachinerySettlementPdf(machineryData, fallbackBiz, customOpts);
+    try {
+      const {
+        exportSettlementPdf,
+        exportCashflowPdf,
+        exportPartnerSettlementPdf,
+        exportMachinerySettlementPdf,
+      } = await import('../utils/pdfGenerator');
+
+      if (activeTab === 'contractors' && settlementData) {
+        exportSettlementPdf(settlementData, fallbackBiz, customOpts);
+      } else if (activeTab === 'cashflow' && cashflowData) {
+        exportCashflowPdf(cashflowData, fallbackBiz, customOpts);
+      } else if (activeTab === 'partners' && partnerData) {
+        exportPartnerSettlementPdf(partnerData, fallbackBiz, customOpts);
+      } else if (activeTab === 'machinery' && machineryData) {
+        exportMachinerySettlementPdf(machineryData, fallbackBiz, customOpts);
+      }
+    } catch (err) {
+      console.error('Failed to generate PDF:', err);
+      toast.error('Failed to generate PDF document');
     }
   };
 
-  return (
-    <div className="space-y-6 pb-12">
-      {/* Top Header & Tab Navigation */}
-      <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4 border-b border-slate-800 pb-5">
-        <div>
-          <h1 className="text-2xl font-bold text-white tracking-tight flex items-center gap-2.5">
-            <TrendingUp className="w-6 h-6 text-amber-500" />
-            Financial Intelligence & Reports
-          </h1>
-          <p className="text-sm text-slate-400 mt-1">
-            Contractor settlement statements, daily cash drawer flows, partner dividends, and machinery rental logbooks.
-          </p>
-        </div>
 
-        {/* Global Action Buttons */}
-        <div className="flex flex-wrap items-center gap-2.5">
-          <button
-            onClick={handleExportCsv}
-            disabled={loading}
-            className="flex items-center gap-2 px-3.5 py-2 rounded-xl text-xs font-semibold bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 transition"
-          >
-            <Download className="w-3.5 h-3.5 text-emerald-400" />
-            Export CSV
-          </button>
-          <button
-            onClick={() => handleExportPdf()}
-            disabled={loading || (activeTab === 'contractors' && !selectedContractorId)}
-            className="flex items-center gap-2 px-3.5 py-2 rounded-xl text-xs font-semibold bg-amber-500 hover:bg-amber-400 text-slate-950 transition shadow-lg shadow-amber-500/20 font-medium"
-          >
-            <Printer className="w-3.5 h-3.5" />
-            Print / Export PDF
-          </button>
-          {activeTab === 'contractors' && selectedContractorId && (
-            <button
-              onClick={() => setIsPdfModalOpen(true)}
-              className="flex items-center gap-2 px-3 py-2 rounded-xl text-xs font-medium bg-slate-800/80 hover:bg-slate-700 text-amber-400 border border-amber-500/30 transition"
-              title="Customize Business Header for PDF"
+  // WhatsApp Share statement helper
+  const handleWhatsAppShare = () => {
+    if (!settlementData) return;
+    const cleanMobile = settlementData.contractor.mobile.replace(/\D/g, '');
+    const bizName = user?.businessName || 'VLMS Quarry';
+    const text = `*${bizName} - Settlement Statement*\n` +
+      `Contractor: *${settlementData.contractor.name}*\n` +
+      `Total Trips: *${settlementData.summary.totalTrips}*\n` +
+      `Total Amount: *${formatINR(settlementData.summary.totalAmount)}*\n` +
+      `Cash Paid: *${formatINR(settlementData.summary.cashAmount)}*\n` +
+      `Credit Balance Due: *${formatINR(settlementData.summary.creditAmount)}*\n\n` +
+      `Generated on ${new Date().toLocaleDateString('en-IN')}`;
+    const url = cleanMobile && cleanMobile.length === 10
+      ? `https://wa.me/91${cleanMobile}?text=${encodeURIComponent(text)}`
+      : `https://wa.me/?text=${encodeURIComponent(text)}`;
+    window.open(url, '_blank');
+  };
+
+  const reportTabs = useMemo(() => {
+    const list: { id: ReportTab; label: string; icon: React.ElementType }[] = [
+      { id: 'contractors', label: 'Contractor Statements', icon: FileSpreadsheet },
+      { id: 'cashflow', label: 'Site Cashflow Statement', icon: Wallet },
+    ];
+    if (!isSiteBoy) {
+      list.push({ id: 'partners', label: 'Partner Profit-Sharing', icon: Users });
+    }
+    if (isOwner || isSuperAdmin || isSiteBoy) {
+      list.push({ id: 'machinery', label: 'Machinery Rental Logbook', icon: Wrench });
+    }
+    return list;
+  }, [isSiteBoy, isOwner, isSuperAdmin]);
+
+  return (
+    <div className="space-y-6 pb-12 animate-fade-in">
+      {/* Top Header & Tab Navigation */}
+      <PageHeader
+        title="Financial Intelligence & Reports"
+        subtitle="Contractor settlement statements, daily cash drawer flows, partner dividends, and machinery rental logbooks."
+        actions={
+          <div className="flex flex-wrap items-center gap-2">
+            {activeTab === 'contractors' && selectedContractorId && settlementData && (
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={handleWhatsAppShare}
+                title="Share Statement via WhatsApp"
+                leftIcon={<Share2 className="w-3.5 h-3.5 text-emerald-400" />}
+              >
+                WhatsApp
+              </Button>
+            )}
+            <Button
+              variant="secondary"
+              size="sm"
+              onClick={handleExportCsv}
+              disabled={loading}
+              leftIcon={<Download className="w-3.5 h-3.5 text-emerald-400" />}
             >
-              <SlidersHorizontal className="w-3.5 h-3.5" />
-              Custom Header
-            </button>
-          )}
-        </div>
-      </div>
+              CSV
+            </Button>
+            <Button
+              variant="primary"
+              size="sm"
+              onClick={() => handleExportPdf()}
+              disabled={loading || (activeTab === 'contractors' && !selectedContractorId)}
+              leftIcon={<Printer className="w-3.5 h-3.5" />}
+            >
+              PDF
+            </Button>
+            {activeTab === 'contractors' && selectedContractorId && (
+              <Button
+                variant="secondary"
+                size="sm"
+                onClick={() => setIsPdfModalOpen(true)}
+                title="Customize Business Header for PDF"
+                leftIcon={<SlidersHorizontal className="w-3.5 h-3.5 text-amber-400" />}
+              >
+                Header
+              </Button>
+            )}
+          </div>
+        }
+      />
 
       {/* Tabs Header */}
-      <div className="flex flex-wrap items-center gap-2 border-b border-slate-800/60 pb-3">
-        {(!isSiteBoy || isOwner || isSuperAdmin) && (
-          <button
-            onClick={() => {
-              setActiveTab('contractors');
-              setSelectedContractorId(null);
-            }}
-            className={`flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-semibold transition ${
-              activeTab === 'contractors'
-                ? 'bg-amber-500 text-slate-950 shadow-md shadow-amber-500/20'
-                : 'bg-slate-800/60 text-slate-400 hover:text-white hover:bg-slate-800'
-            }`}
-          >
-            <FileSpreadsheet className="w-4 h-4" />
-            Contractor Statements
-          </button>
-        )}
-
-        <button
-          onClick={() => setActiveTab('cashflow')}
-          className={`flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-semibold transition ${
-            activeTab === 'cashflow'
-              ? 'bg-amber-500 text-slate-950 shadow-md shadow-amber-500/20'
-              : 'bg-slate-800/60 text-slate-400 hover:text-white hover:bg-slate-800'
-          }`}
-        >
-          <Wallet className="w-4 h-4" />
-          Site Cashflow Statement
-        </button>
-
-        {(!isSiteBoy || isOwner || isSuperAdmin) && (
-          <button
-            onClick={() => setActiveTab('partners')}
-            className={`flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-semibold transition ${
-              activeTab === 'partners'
-                ? 'bg-amber-500 text-slate-950 shadow-md shadow-amber-500/20'
-                : 'bg-slate-800/60 text-slate-400 hover:text-white hover:bg-slate-800'
-            }`}
-          >
-            <Users className="w-4 h-4" />
-            Partner Profit-Sharing
-          </button>
-        )}
-
-        {(isOwner || isSuperAdmin) && (
-          <button
-            onClick={() => setActiveTab('machinery')}
-            className={`flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-semibold transition ${
-              activeTab === 'machinery'
-                ? 'bg-amber-500 text-slate-950 shadow-md shadow-amber-500/20'
-                : 'bg-slate-800/60 text-slate-400 hover:text-white hover:bg-slate-800'
-            }`}
-          >
-            <Wrench className="w-4 h-4" />
-            Machinery Rental Logbook
-          </button>
-        )}
-      </div>
+      <TabBar
+        tabs={reportTabs}
+        activeTab={activeTab}
+        onChange={(tabId) => {
+          setActiveTab(tabId as ReportTab);
+          if (tabId === 'contractors') {
+            setSelectedContractorId(null);
+          }
+        }}
+      />
 
       {/* Filter Bar */}
-      <Card className="bg-slate-900/90 border border-slate-800 p-4 rounded-2xl shadow-xl space-y-3">
+      <Card variant="glass" className="p-4 rounded-2xl shadow-xl space-y-3">
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-3">
-          {/* Super Admin Customer Filter */}
           {isSuperAdmin && (
             <div>
               <label className="text-xs text-slate-400 font-medium block mb-1">Customer Space</label>
               <CustomSelect
                 value={selectedCustomerId}
                 onChange={setSelectedCustomerId}
-                options={customers.map((c) => ({
-                  value: c.id,
-                  label: `${c.businessName || c.name || c.mobile} (${c.mobile})`,
-                }))}
+                options={customerSelectOptions}
                 placeholder="Select Customer Space"
               />
             </div>
           )}
 
-          {/* Quarry Site Filter */}
           <div>
             <label className="text-xs text-slate-400 font-medium block mb-1">Quarry Site</label>
             <CustomSelect
               value={siteId}
               onChange={setSiteId}
-              options={[
-                { value: '', label: 'All Operational Sites' },
-                ...filteredSites.map((s) => ({ value: s.id, label: `${s.siteName} (${s.location})` })),
-              ]}
-              placeholder="All Sites"
+              options={siteSelectOptions}
+              placeholder={isSiteBoy ? 'Assigned Site' : 'All Sites'}
               disabled={isSiteBoy}
             />
           </div>
 
-          {/* Date Range Presets */}
+
           <div className="lg:col-span-2">
             <label className="text-xs text-slate-400 font-medium block mb-1">Date Interval</label>
             <div className="flex flex-wrap items-center gap-1.5 bg-slate-950/60 p-1 rounded-xl border border-slate-800">
               {(['all', 'today', 'yesterday', 'week', 'month', 'custom'] as const).map((preset) => (
-                <button
+                <Button
                   key={preset}
+                  variant={presetRange === preset ? 'primary' : 'ghost'}
+                  size="sm"
                   onClick={() => applyPreset(preset)}
-                  className={`px-3 py-1.5 rounded-lg text-xs font-medium capitalize transition ${
-                    presetRange === preset
-                      ? 'bg-amber-500 text-slate-950 font-semibold'
-                      : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/60'
+                  className={`min-h-[32px] capitalize ${
+                    presetRange === preset ? 'font-black' : 'text-slate-400 hover:text-slate-200'
                   }`}
                 >
                   {preset === 'all' ? 'All Time' : preset}
-                </button>
+                </Button>
               ))}
             </div>
           </div>
         </div>
 
-        {/* Custom Start / End Dates if Custom Preset Selected */}
         {presetRange === 'custom' && (
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-2 border-t border-slate-800/60">
-            <div>
-              <label className="text-xs text-slate-400 font-medium block mb-1">From Date</label>
-              <input
-                type="date"
-                value={startDate}
-                onChange={(e) => setStartDate(e.target.value)}
-                className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-xs text-slate-200 focus:outline-none focus:border-amber-500"
-              />
-            </div>
-            <div>
-              <label className="text-xs text-slate-400 font-medium block mb-1">To Date</label>
-              <input
-                type="date"
-                value={endDate}
-                onChange={(e) => setEndDate(e.target.value)}
-                className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-xs text-slate-200 focus:outline-none focus:border-amber-500"
-              />
-            </div>
+            <DateInput
+              label="From Date"
+              value={startDate}
+              onChange={setStartDate}
+              clearable={false}
+            />
+            <DateInput
+              label="To Date"
+              value={endDate}
+              onChange={setEndDate}
+              clearable={false}
+            />
           </div>
         )}
       </Card>
@@ -582,54 +669,64 @@ export const ReportsPage: React.FC = () => {
       {activeTab === 'contractors' && (
         <div className="space-y-6">
           {selectedContractorId && settlementData ? (
-            /* Detailed Contractor Statement View */
             <div className="space-y-6">
-              {/* Back button & Title */}
               <div className="flex items-center justify-between">
-                <button
+                <Button
+                  variant="ghost"
+                  size="sm"
                   onClick={() => setSelectedContractorId(null)}
-                  className="flex items-center gap-2 text-xs font-semibold text-amber-400 hover:text-amber-300 transition"
+                  leftIcon={<ArrowLeft className="w-4 h-4 text-amber-400" />}
+                  className="text-amber-400 hover:text-amber-300 font-bold"
                 >
-                  <ArrowLeft className="w-4 h-4" />
                   Back to All Contractors
-                </button>
+                </Button>
                 <span className="text-xs text-slate-400">
                   Transporter Statement for <strong className="text-white">{settlementData.contractor.name}</strong>
                 </span>
               </div>
 
               {/* KPI Cards */}
-              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-                <Card className="bg-slate-900 border border-slate-800 p-4 rounded-2xl">
-                  <span className="text-xs text-slate-400 block mb-1">Total Trips Recorded</span>
-                  <span className="text-2xl font-bold text-white">{settlementData.summary.totalTrips}</span>
-                </Card>
-                <Card className="bg-slate-900 border border-slate-800 p-4 rounded-2xl">
-                  <span className="text-xs text-slate-400 block mb-1">Cash Purchases</span>
-                  <span className="text-2xl font-bold text-emerald-400">{formatINR(settlementData.summary.cashAmount)}</span>
-                  <span className="text-[10px] text-slate-500 block mt-1">{settlementData.summary.cashTrips} cash trips</span>
-                </Card>
-                <Card className="bg-slate-900 border border-slate-800 p-4 rounded-2xl">
-                  <span className="text-xs text-slate-400 block mb-1">Credit Purchases (Receivable)</span>
-                  <span className="text-2xl font-bold text-amber-400">{formatINR(settlementData.summary.creditAmount)}</span>
-                  <span className="text-[10px] text-slate-500 block mt-1">{settlementData.summary.creditTrips} credit trips</span>
-                </Card>
-                <Card className="bg-slate-900 border border-slate-800 p-4 rounded-2xl">
-                  <span className="text-xs text-slate-400 block mb-1">Grand Gross Billable</span>
-                  <span className="text-2xl font-bold text-white">{formatINR(settlementData.summary.totalAmount)}</span>
-                </Card>
+              <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
+                <MetricCard
+                  label="Total Trips Recorded"
+                  value={settlementData.summary.totalTrips}
+                  subtext="Verified load dispatches"
+                  icon={<Truck className="w-5 h-5 text-blue-400" />}
+                  variant="blue"
+                />
+                <MetricCard
+                  label="Cash Purchases"
+                  value={formatINR(settlementData.summary.cashAmount)}
+                  subtext={`${settlementData.summary.cashTrips} cash trips`}
+                  icon={<Receipt className="w-5 h-5 text-emerald-400" />}
+                  variant="emerald"
+                />
+                <MetricCard
+                  label="Credit Due (Receivable)"
+                  value={formatINR(settlementData.summary.creditAmount)}
+                  subtext={`${settlementData.summary.creditTrips} credit trips`}
+                  icon={<Wallet className="w-5 h-5 text-amber-400" />}
+                  variant="amber"
+                />
+                <MetricCard
+                  label="Grand Gross Billable"
+                  value={formatINR(settlementData.summary.totalAmount)}
+                  subtext="Combined billing volume"
+                  icon={<Coins className="w-5 h-5 text-purple-400" />}
+                  variant="default"
+                />
               </div>
 
               {/* Breakdown by Material & Vehicle */}
               <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-                <Card className="bg-slate-900 border border-slate-800 p-4 rounded-2xl">
+                <Card variant="glass" className="p-4 rounded-2xl">
                   <h3 className="text-sm font-semibold text-white mb-3 flex items-center gap-2">
                     <Layers className="w-4 h-4 text-amber-500" />
                     Material Aggregate Breakdown
                   </h3>
                   <div className="space-y-2">
                     {settlementData.materialBreakdown.map((m) => (
-                      <div key={m.materialTypeId} className="flex items-center justify-between text-xs p-2 rounded-xl bg-slate-950/60 border border-slate-800">
+                      <div key={m.materialTypeId} className="flex items-center justify-between text-xs p-2.5 rounded-xl bg-slate-950/60 border border-slate-800">
                         <span className="text-slate-200 font-medium">{m.materialName} ({m.tripCount} trips)</span>
                         <span className="font-semibold text-amber-400">{formatINR(m.totalAmount)}</span>
                       </div>
@@ -637,14 +734,14 @@ export const ReportsPage: React.FC = () => {
                   </div>
                 </Card>
 
-                <Card className="bg-slate-900 border border-slate-800 p-4 rounded-2xl">
+                <Card variant="glass" className="p-4 rounded-2xl">
                   <h3 className="text-sm font-semibold text-white mb-3 flex items-center gap-2">
                     <Truck className="w-4 h-4 text-emerald-400" />
                     Fleet Vehicle Utilization
                   </h3>
                   <div className="space-y-2">
                     {settlementData.vehicleBreakdown.map((v) => (
-                      <div key={v.vehicleId} className="flex items-center justify-between text-xs p-2 rounded-xl bg-slate-950/60 border border-slate-800">
+                      <div key={v.vehicleId} className="flex items-center justify-between text-xs p-2.5 rounded-xl bg-slate-950/60 border border-slate-800">
                         <span className="text-slate-200 font-medium">{v.vehicleNumber} ({v.vehicleType} • {v.tripCount} trips)</span>
                         <span className="font-semibold text-white">{formatINR(v.totalAmount)}</span>
                       </div>
@@ -654,7 +751,7 @@ export const ReportsPage: React.FC = () => {
               </div>
 
               {/* Trip Logs Table */}
-              <Card className="bg-slate-900 border border-slate-800 rounded-2xl overflow-hidden">
+              <div className="overflow-hidden rounded-2xl border border-slate-800 bg-slate-900/60 backdrop-blur-md shadow-xl">
                 <div className="p-4 border-b border-slate-800 flex items-center justify-between">
                   <h3 className="text-sm font-semibold text-white flex items-center gap-2">
                     <Receipt className="w-4 h-4 text-amber-500" />
@@ -693,46 +790,49 @@ export const ReportsPage: React.FC = () => {
                     </tbody>
                   </table>
                 </div>
-              </Card>
+              </div>
             </div>
           ) : (
-            /* Contractors Overview Directory */
             <div className="space-y-6">
-              {/* Grand Total Highlights */}
               {summaryData && (
-                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-                  <Card className="bg-slate-900 border border-slate-800 p-4 rounded-2xl">
-                    <span className="text-xs text-slate-400 block mb-1">Active Contractors</span>
-                    <span className="text-2xl font-bold text-white">{summaryData.grandTotal.contractorCount}</span>
-                  </Card>
-                  <Card className="bg-slate-900 border border-slate-800 p-4 rounded-2xl">
-                    <span className="text-xs text-slate-400 block mb-1">Total Dispatches</span>
-                    <span className="text-2xl font-bold text-white">{summaryData.grandTotal.totalTrips}</span>
-                  </Card>
-                  <Card className="bg-slate-900 border border-slate-800 p-4 rounded-2xl">
-                    <span className="text-xs text-slate-400 block mb-1">Spot Cash Sales</span>
-                    <span className="text-2xl font-bold text-emerald-400">{formatINR(summaryData.grandTotal.cashAmount)}</span>
-                  </Card>
-                  <Card className="bg-slate-900 border border-slate-800 p-4 rounded-2xl">
-                    <span className="text-xs text-slate-400 block mb-1">Credit Ledger (Receivable)</span>
-                    <span className="text-2xl font-bold text-amber-400">{formatINR(summaryData.grandTotal.creditAmount)}</span>
-                  </Card>
+                <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
+                  <MetricCard
+                    label="Active Contractors"
+                    value={summaryData.grandTotal.contractorCount}
+                    subtext="Transport partners"
+                    icon={<Users className="w-5 h-5 text-blue-400" />}
+                    variant="blue"
+                  />
+                  <MetricCard
+                    label="Total Dispatches"
+                    value={summaryData.grandTotal.totalTrips}
+                    subtext="Trips logged"
+                    icon={<Truck className="w-5 h-5 text-purple-400" />}
+                    variant="default"
+                  />
+                  <MetricCard
+                    label="Spot Cash Sales"
+                    value={formatINR(summaryData.grandTotal.cashAmount)}
+                    subtext="Direct on-site revenue"
+                    icon={<Receipt className="w-5 h-5 text-emerald-400" />}
+                    variant="emerald"
+                  />
+                  <MetricCard
+                    label="Credit Ledger (Due)"
+                    value={formatINR(summaryData.grandTotal.creditAmount)}
+                    subtext="Receivable settlement"
+                    icon={<Wallet className="w-5 h-5 text-amber-400" />}
+                    variant="amber"
+                  />
                 </div>
               )}
 
-              {/* Search filter for contractors */}
-              <div className="relative">
-                <Search className="w-4 h-4 absolute left-3 top-3 text-slate-500" />
-                <input
-                  type="text"
-                  placeholder="Search contractors by name or mobile..."
-                  value={contractorSearch}
-                  onChange={(e) => setContractorSearch(e.target.value)}
-                  className="w-full bg-slate-900 border border-slate-800 rounded-xl pl-9 pr-4 py-2 text-xs text-slate-200 focus:outline-none focus:border-amber-500"
-                />
-              </div>
+              <SearchBar
+                placeholder="Search contractors by name or mobile..."
+                value={contractorSearch}
+                onChange={setContractorSearch}
+              />
 
-              {/* Contractors Grid */}
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
                 {summaryData?.contractors.map((c) => (
                   <Card
@@ -745,7 +845,10 @@ export const ReportsPage: React.FC = () => {
                         <h4 className="font-semibold text-sm text-white group-hover:text-amber-400 transition">
                           {c.contractor.name}
                         </h4>
-                        <span className="text-xs text-slate-400">{c.contractor.mobile}</span>
+                        <span className="text-xs text-slate-400 flex items-center gap-1 mt-0.5">
+                          <Phone className="w-3 h-3 text-slate-500" />
+                          {c.contractor.mobile}
+                        </span>
                       </div>
                       <span className="p-2 rounded-xl bg-slate-800 text-slate-300 group-hover:bg-amber-500 group-hover:text-slate-950 transition">
                         <ArrowRight className="w-3.5 h-3.5" />
@@ -775,50 +878,39 @@ export const ReportsPage: React.FC = () => {
       {/* ========================================================= */}
       {activeTab === 'cashflow' && cashflowData && (
         <div className="space-y-6">
-          {/* Summary KPIs */}
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-            <Card className="bg-slate-900 border border-slate-800 p-4 rounded-2xl">
-              <div className="flex items-center justify-between mb-1">
-                <span className="text-xs text-slate-400">Total Cash Inflows</span>
-                <TrendingUp className="w-4 h-4 text-emerald-400" />
-              </div>
-              <span className="text-2xl font-bold text-emerald-400">{formatINR(cashflowData.summary.totalInflows)}</span>
-              <span className="text-[10px] text-slate-500 block mt-1">{cashflowData.summary.cashLoadsCount} spot cash loads</span>
-            </Card>
-
-            <Card className="bg-slate-900 border border-slate-800 p-4 rounded-2xl">
-              <div className="flex items-center justify-between mb-1">
-                <span className="text-xs text-slate-400">Total Cash Outflows</span>
-                <TrendingDown className="w-4 h-4 text-rose-400" />
-              </div>
-              <span className="text-2xl font-bold text-rose-400">{formatINR(cashflowData.summary.totalOutflows)}</span>
-              <span className="text-[10px] text-slate-500 block mt-1">{cashflowData.summary.cashExpensesCount} cash expenses</span>
-            </Card>
-
-            <Card className="bg-slate-900 border border-slate-800 p-4 rounded-2xl">
-              <div className="flex items-center justify-between mb-1">
-                <span className="text-xs text-slate-400">Net Cash Drawer Balance</span>
-                <Wallet className="w-4 h-4 text-amber-500" />
-              </div>
-              <span className={`text-2xl font-bold ${cashflowData.summary.netCashflow >= 0 ? 'text-amber-400' : 'text-rose-400'}`}>
-                {formatINR(cashflowData.summary.netCashflow)}
-              </span>
-              <span className="text-[10px] text-slate-500 block mt-1">Inflows - Outflows</span>
-            </Card>
-
-            <Card className="bg-slate-900 border border-slate-800 p-4 rounded-2xl">
-              <div className="flex items-center justify-between mb-1">
-                <span className="text-xs text-slate-400">Machinery Cash Advances</span>
-                <Coins className="w-4 h-4 text-indigo-400" />
-              </div>
-              <span className="text-2xl font-bold text-indigo-300">{formatINR(cashflowData.summary.machineryAdvancesTotal)}</span>
-              <span className="text-[10px] text-slate-500 block mt-1">Paid to operators on-site</span>
-            </Card>
+          <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
+            <MetricCard
+              label="Total Cash Inflows"
+              value={formatINR(cashflowData.summary.totalInflows)}
+              subtext={`${cashflowData.summary.cashLoadsCount} spot cash loads`}
+              icon={<TrendingUp className="w-5 h-5 text-emerald-400" />}
+              variant="emerald"
+            />
+            <MetricCard
+              label="Total Cash Outflows"
+              value={formatINR(cashflowData.summary.totalOutflows)}
+              subtext={`${cashflowData.summary.cashExpensesCount} cash expenses`}
+              icon={<TrendingDown className="w-5 h-5 text-rose-400" />}
+              variant="rose"
+            />
+            <MetricCard
+              label="Net Cash Drawer Balance"
+              value={formatINR(cashflowData.summary.netCashflow)}
+              subtext="Inflows - Outflows"
+              icon={<Wallet className="w-5 h-5 text-amber-400" />}
+              variant={cashflowData.summary.netCashflow >= 0 ? 'amber' : 'rose'}
+            />
+            <MetricCard
+              label="Machinery Advances"
+              value={formatINR(cashflowData.summary.machineryAdvancesTotal)}
+              subtext="Paid to operators on-site"
+              icon={<Coins className="w-5 h-5 text-blue-400" />}
+              variant="blue"
+            />
           </div>
 
-          {/* Cash Expense Category Breakdown */}
           {cashflowData.categoryBreakdown.length > 0 && (
-            <Card className="bg-slate-900 border border-slate-800 p-4 rounded-2xl">
+            <Card variant="glass" className="p-4 rounded-2xl">
               <h3 className="text-sm font-semibold text-white mb-3 flex items-center gap-2">
                 <BadgePercent className="w-4 h-4 text-amber-500" />
                 Cash Drawer Outflows by Category
@@ -838,8 +930,7 @@ export const ReportsPage: React.FC = () => {
             </Card>
           )}
 
-          {/* Daily Cashflow Timeline Table */}
-          <Card className="bg-slate-900 border border-slate-800 rounded-2xl overflow-hidden">
+          <div className="overflow-hidden rounded-2xl border border-slate-800 bg-slate-900/60 backdrop-blur-md shadow-xl">
             <div className="p-4 border-b border-slate-800 flex items-center justify-between">
               <h3 className="text-sm font-semibold text-white flex items-center gap-2">
                 <Calendar className="w-4 h-4 text-amber-500" />
@@ -874,7 +965,7 @@ export const ReportsPage: React.FC = () => {
                 </tbody>
               </table>
             </div>
-          </Card>
+          </div>
         </div>
       )}
 
@@ -883,56 +974,58 @@ export const ReportsPage: React.FC = () => {
       {/* ========================================================= */}
       {activeTab === 'partners' && partnerData && (
         <div className="space-y-6">
-          {/* Partner Selector */}
           {!isCoPartner && partnerData.partnersList.length > 0 && (
-            <Card className="bg-slate-900 border border-slate-800 p-4 rounded-2xl flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-              <div className="flex items-center gap-2 text-xs text-slate-400 font-medium">
+            <Card variant="glass" className="p-4 rounded-2xl flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+              <div className="flex items-center gap-2 text-xs text-slate-400 font-medium shrink-0">
                 <Users className="w-4 h-4 text-amber-500" />
                 Select Co-Partner Statement:
               </div>
-              <div className="w-full sm:w-72">
+              <div className="w-full sm:flex-1 sm:max-w-md">
                 <CustomSelect
                   value={partnerId}
                   onChange={setPartnerId}
-                  options={partnerData.partnersList.map((p) => ({
-                    value: p.id,
-                    label: `${p.name} (${p.mobile})`,
-                  }))}
+                  options={partnerSelectOptions}
                   placeholder="Select Partner"
                 />
               </div>
             </Card>
           )}
 
-          {/* Partner Summary KPIs */}
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-            <Card className="bg-slate-900 border border-slate-800 p-4 rounded-2xl">
-              <span className="text-xs text-slate-400 block mb-1">Gross Site Revenue</span>
-              <span className="text-2xl font-bold text-emerald-400">{formatINR(partnerData.summary.totalRevenue)}</span>
-              <span className="text-[10px] text-slate-500 block mt-1">Across assigned equity sites</span>
-            </Card>
-            <Card className="bg-slate-900 border border-slate-800 p-4 rounded-2xl">
-              <span className="text-xs text-slate-400 block mb-1">Operating & Machine Expenses</span>
-              <span className="text-2xl font-bold text-rose-400">{formatINR(partnerData.summary.totalExpenses)}</span>
-              <span className="text-[10px] text-slate-500 block mt-1">Deducted from gross revenue</span>
-            </Card>
-            <Card className="bg-slate-900 border border-slate-800 p-4 rounded-2xl">
-              <span className="text-xs text-slate-400 block mb-1">Net Operating Margin</span>
-              <span className="text-2xl font-bold text-white">{formatINR(partnerData.summary.totalNetMargin)}</span>
-              <span className="text-[10px] text-slate-500 block mt-1">Revenue - Expenses</span>
-            </Card>
-            <Card className="bg-slate-900 border border-slate-800 p-4 rounded-2xl">
-              <span className="text-xs text-slate-400 block mb-1">Net Dividend Payable</span>
-              <span className="text-2xl font-bold text-amber-400">{formatINR(partnerData.summary.netDividendPayable)}</span>
-              <span className="text-[10px] text-slate-500 block mt-1">Calculated via temporal slices</span>
-            </Card>
+          <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
+            <MetricCard
+              label="Gross Site Revenue"
+              value={formatINR(partnerData.summary.totalRevenue)}
+              subtext="Assigned equity sites"
+              icon={<TrendingUp className="w-5 h-5 text-emerald-400" />}
+              variant="emerald"
+            />
+            <MetricCard
+              label="Operating Expenses"
+              value={formatINR(partnerData.summary.totalExpenses)}
+              subtext="Deducted operating costs"
+              icon={<TrendingDown className="w-5 h-5 text-rose-400" />}
+              variant="rose"
+            />
+            <MetricCard
+              label="Net Operating Margin"
+              value={formatINR(partnerData.summary.totalNetMargin)}
+              subtext="Revenue - Expenses"
+              icon={<Coins className="w-5 h-5 text-blue-400" />}
+              variant="blue"
+            />
+            <MetricCard
+              label="Net Dividend Payable"
+              value={formatINR(partnerData.summary.netDividendPayable)}
+              subtext="Calculated via temporal slices"
+              icon={<Wallet className="w-5 h-5 text-amber-400" />}
+              variant="amber"
+            />
           </div>
 
-          {/* Temporal Slices Table */}
-          <Card className="bg-slate-900 border border-slate-800 rounded-2xl overflow-hidden">
+          <div className="overflow-hidden rounded-2xl border border-slate-800 bg-slate-900/60 backdrop-blur-md shadow-xl">
             <div className="p-4 border-b border-slate-800 flex items-center justify-between">
               <h3 className="text-sm font-semibold text-white flex items-center gap-2">
-                <Clock className="w-4 h-4 text-amber-500" />
+                <Receipt className="w-4 h-4 text-amber-500" />
                 Temporal Equity Slices & Dividend Calculation ({partnerData.slices.length})
               </h3>
             </div>
@@ -964,7 +1057,7 @@ export const ReportsPage: React.FC = () => {
                 </tbody>
               </table>
             </div>
-          </Card>
+          </div>
         </div>
       )}
 
@@ -973,56 +1066,57 @@ export const ReportsPage: React.FC = () => {
       {/* ========================================================= */}
       {activeTab === 'machinery' && machineryData && (
         <div className="space-y-6">
-          {/* Equipment Selector Filter */}
           {machineryData.machineryList.length > 0 && (
-            <Card className="bg-slate-900 border border-slate-800 p-4 rounded-2xl flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-              <div className="flex items-center gap-2 text-xs text-slate-400 font-medium">
+            <Card variant="glass" className="p-4 rounded-2xl flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+              <div className="flex items-center gap-2 text-xs text-slate-400 font-medium shrink-0">
                 <Wrench className="w-4 h-4 text-amber-500" />
                 Filter by Heavy Machinery / Vendor:
               </div>
-              <div className="w-full sm:w-72">
+              <div className="w-full sm:flex-1 sm:max-w-md">
                 <CustomSelect
                   value={machineryId}
                   onChange={setMachineryId}
-                  options={[
-                    { value: '', label: 'All Heavy Machinery & Excavators' },
-                    ...machineryData.machineryList.map((m) => ({
-                      value: m.id,
-                      label: `${m.name} (${m.code || 'N/A'}${m.vendorName ? ` - ${m.vendorName}` : ''})`,
-                    })),
-                  ]}
+                  options={machinerySelectOptions}
                   placeholder="All Equipment"
                 />
               </div>
             </Card>
           )}
 
-          {/* Machinery Summary KPIs */}
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-            <Card className="bg-slate-900 border border-slate-800 p-4 rounded-2xl">
-              <span className="text-xs text-slate-400 block mb-1">Total Operating Hours</span>
-              <span className="text-2xl font-bold text-white">{Number(machineryData.grandTotal.totalHours).toFixed(2)} hrs</span>
-              <span className="text-[10px] text-slate-500 block mt-1">{machineryData.grandTotal.totalLogs} work shifts recorded</span>
-            </Card>
-            <Card className="bg-slate-900 border border-slate-800 p-4 rounded-2xl">
-              <span className="text-xs text-slate-400 block mb-1">Gross Rental Billable</span>
-              <span className="text-2xl font-bold text-white">{formatINR(machineryData.grandTotal.totalGrossRent)}</span>
-              <span className="text-[10px] text-slate-500 block mt-1">Calculated @ hourly rates</span>
-            </Card>
-            <Card className="bg-slate-900 border border-slate-800 p-4 rounded-2xl">
-              <span className="text-xs text-slate-400 block mb-1">Operator Cash Advances</span>
-              <span className="text-2xl font-bold text-rose-400">{formatINR(machineryData.grandTotal.totalAdvancesPaid)}</span>
-              <span className="text-[10px] text-slate-500 block mt-1">Disbursed from cash drawer</span>
-            </Card>
-            <Card className="bg-slate-900 border border-slate-800 p-4 rounded-2xl">
-              <span className="text-xs text-slate-400 block mb-1">Net Balance Payable</span>
-              <span className="text-2xl font-bold text-amber-400">{formatINR(machineryData.grandTotal.balancePayable)}</span>
-              <span className="text-[10px] text-slate-500 block mt-1">Gross Rent - Advances</span>
-            </Card>
+
+
+          <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
+            <MetricCard
+              label="Total Operating Hours"
+              value={`${Number(machineryData.grandTotal.totalHours).toFixed(2)} hrs`}
+              subtext={`${machineryData.grandTotal.totalLogs} work shifts recorded`}
+              icon={<Wrench className="w-5 h-5 text-blue-400" />}
+              variant="blue"
+            />
+            <MetricCard
+              label="Gross Rental Billable"
+              value={formatINR(machineryData.grandTotal.totalGrossRent)}
+              subtext="Calculated @ hourly rates"
+              icon={<Coins className="w-5 h-5 text-purple-400" />}
+              variant="default"
+            />
+            <MetricCard
+              label="Operator Advances"
+              value={formatINR(machineryData.grandTotal.totalAdvancesPaid)}
+              subtext="Disbursed from cash drawer"
+              icon={<TrendingDown className="w-5 h-5 text-rose-400" />}
+              variant="rose"
+            />
+            <MetricCard
+              label="Net Balance Payable"
+              value={formatINR(machineryData.grandTotal.balancePayable)}
+              subtext="Gross Rent - Advances"
+              icon={<Wallet className="w-5 h-5 text-amber-400" />}
+              variant="amber"
+            />
           </div>
 
-          {/* Detailed Machinery Work Logbook */}
-          <Card className="bg-slate-900 border border-slate-800 rounded-2xl overflow-hidden">
+          <div className="overflow-hidden rounded-2xl border border-slate-800 bg-slate-900/60 backdrop-blur-md shadow-xl">
             <div className="p-4 border-b border-slate-800 flex items-center justify-between">
               <h3 className="text-sm font-semibold text-white flex items-center gap-2">
                 <Receipt className="w-4 h-4 text-amber-500" />
@@ -1059,7 +1153,7 @@ export const ReportsPage: React.FC = () => {
                 </tbody>
               </table>
             </div>
-          </Card>
+          </div>
         </div>
       )}
 

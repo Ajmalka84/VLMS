@@ -9,10 +9,15 @@ import { CreateLoadDto } from './dto/create-load.dto';
 import { UpdateLoadDto } from './dto/update-load.dto';
 import { QueryLoadsDto } from './dto/query-loads.dto';
 import { AuthUser } from '../auth/decorators/current-user.decorator';
+import { buildDateRangeFilter, buildTenantSiteScope } from '../common/utils/query-builder.util';
+import { MasterCacheService } from '../common/cache/master-cache.service';
 
 @Injectable()
 export class LoadsService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly masterCacheService: MasterCacheService,
+  ) {}
 
   async create(user: AuthUser, dto: CreateLoadDto) {
     const ownerId = user.ownerId;
@@ -97,15 +102,24 @@ export class LoadsService {
       if (rate) {
         rateId = rate.id;
       } else {
-        const createdRate = await this.prisma.rate.create({
-          data: {
+        const rateRecord = await this.prisma.rate.upsert({
+          where: {
+            siteId_vehicleTypeId_materialTypeId: {
+              siteId: dto.siteId,
+              vehicleTypeId: vehicle.vehicleTypeId,
+              materialTypeId: dto.materialTypeId,
+            },
+          },
+          update: {},
+          create: {
             siteId: dto.siteId,
             vehicleTypeId: vehicle.vehicleTypeId,
             materialTypeId: dto.materialTypeId,
             amount: finalAmount,
           },
         });
-        rateId = createdRate.id;
+        rateId = rateRecord.id;
+        this.masterCacheService.invalidateTenant(ownerId);
       }
     } else {
       if (!rate) {
@@ -161,24 +175,15 @@ export class LoadsService {
     const limit = Number(query.limit) || 20;
     const skip = (page - 1) * limit;
 
+    const { whereSiteClause, siteIdFilter } = buildTenantSiteScope(user, query.siteId, ownerId);
+
     const where: any = {
-      site: {
-        userId: ownerId,
-      },
+      site: whereSiteClause,
       deletedAt: null,
     };
 
-    if (user.role !== 'OWNER' && user.role !== 'SUPER_ADMIN') {
-      where.siteId = { in: user.assignedSiteIds || [] };
-    }
-
-    if (query.siteId) {
-      if (user.role !== 'OWNER' && user.role !== 'SUPER_ADMIN') {
-        if (!user.assignedSiteIds.includes(query.siteId)) {
-          throw new ForbiddenException('You are not authorized to view loads for this site');
-        }
-      }
-      where.siteId = query.siteId;
+    if (siteIdFilter) {
+      where.siteId = siteIdFilter;
     }
 
     if (query.vehicleId) where.vehicleId = query.vehicleId;
@@ -192,16 +197,9 @@ export class LoadsService {
     if (query.materialTypeId) where.materialTypeId = query.materialTypeId;
     if (query.paymentType) where.paymentType = query.paymentType;
 
-    if (query.startDate || query.endDate) {
-      where.date = {};
-      if (query.startDate) {
-        where.date.gte = new Date(query.startDate);
-      }
-      if (query.endDate) {
-        const end = new Date(query.endDate);
-        end.setHours(23, 59, 59, 999);
-        where.date.lte = end;
-      }
+    const dateFilter = buildDateRangeFilter(query.startDate, query.endDate);
+    if (dateFilter) {
+      where.date = dateFilter;
     }
 
     if (query.search && query.search.trim()) {
@@ -213,7 +211,8 @@ export class LoadsService {
       ];
     }
 
-    const [loads, total, allMatchingLoads] = await Promise.all([
+    // High-performance single-pass database query with SQL aggregation via groupBy
+    const [loads, total, paymentTypeGroups] = await Promise.all([
       this.prisma.load.findMany({
         where,
         skip,
@@ -232,12 +231,11 @@ export class LoadsService {
         },
       }),
       this.prisma.load.count({ where }),
-      this.prisma.load.findMany({
+      this.prisma.load.groupBy({
+        by: ['paymentType'],
         where,
-        select: {
-          amount: true,
-          paymentType: true,
-        },
+        _sum: { amount: true },
+        _count: { id: true },
       }),
     ]);
 
@@ -247,15 +245,16 @@ export class LoadsService {
     let cashCount = 0;
     let creditCount = 0;
 
-    for (const item of allMatchingLoads) {
-      const amt = Number(item.amount);
-      totalAmount += amt;
-      if (item.paymentType === 'CASH') {
-        totalCashAmount += amt;
-        cashCount++;
+    for (const group of paymentTypeGroups) {
+      const sumAmt = Number(group._sum?.amount || 0);
+      const count = Number(group._count?.id || 0);
+      totalAmount += sumAmt;
+      if (group.paymentType === 'CASH') {
+        totalCashAmount = sumAmt;
+        cashCount = count;
       } else {
-        totalCreditAmount += amt;
-        creditCount++;
+        totalCreditAmount = sumAmt;
+        creditCount = count;
       }
     }
 

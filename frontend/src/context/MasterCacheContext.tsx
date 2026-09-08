@@ -28,18 +28,35 @@ interface MasterCacheContextType {
 
 const MasterCacheContext = createContext<MasterCacheContextType | undefined>(undefined);
 
+const MASTER_BUNDLE_CACHE_KEY = 'vlms_master_bundle';
+
 export const MasterCacheProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const { user } = useAuth();
-  const [data, setData] = useState<MasterDataBundle>({
-    sites: [],
-    vehicles: [],
-    vehicleTypes: [],
-    materialTypes: [],
-    contractors: [],
-    rates: [],
+  const [data, setData] = useState<MasterDataBundle>(() => {
+    try {
+      const cached = localStorage.getItem(MASTER_BUNDLE_CACHE_KEY);
+      if (cached) {
+        return JSON.parse(cached);
+      }
+    } catch {}
+    return {
+      sites: [],
+      vehicles: [],
+      vehicleTypes: [],
+      materialTypes: [],
+      contractors: [],
+      rates: [],
+    };
   });
   const [isLoading, setIsLoading] = useState<boolean>(false);
-  const [isInitialized, setIsInitialized] = useState<boolean>(false);
+  const [isInitialized, setIsInitialized] = useState<boolean>(() => {
+    try {
+      const cached = localStorage.getItem(MASTER_BUNDLE_CACHE_KEY);
+      return !!cached;
+    } catch {
+      return false;
+    }
+  });
   const isFetchingRef = useRef(false);
 
   // Fast In-Memory Rate Matrix Map: "siteId_vehicleTypeId_materialTypeId" -> Rate
@@ -75,6 +92,9 @@ export const MasterCacheProvider: React.FC<{ children: React.ReactNode }> = ({ c
       const bundle = await getMasterDataBundleApi(force);
       setData(bundle);
       setIsInitialized(true);
+      try {
+        localStorage.setItem(MASTER_BUNDLE_CACHE_KEY, JSON.stringify(bundle));
+      } catch {}
     } catch (err) {
       console.error('Failed to load master data bundle:', err);
     } finally {
@@ -97,6 +117,9 @@ export const MasterCacheProvider: React.FC<{ children: React.ReactNode }> = ({ c
         rates: [],
       });
       setIsInitialized(false);
+      try {
+        localStorage.removeItem(MASTER_BUNDLE_CACHE_KEY);
+      } catch {}
     }
   }, [userId, isSuperAdmin, refreshMasterData]);
 

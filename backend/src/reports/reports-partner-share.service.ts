@@ -7,27 +7,14 @@ import {
 import { PrismaService } from '../prisma/prisma.service';
 import { QueryPartnerSettlementDto } from './dto/query-partner-settlement.dto';
 import { AuthUser } from '../auth/decorators/current-user.decorator';
+import { resolveTargetUserId } from '../common/utils/query-builder.util';
 
 @Injectable()
 export class ReportsPartnerShareService {
   constructor(private readonly prisma: PrismaService) {}
 
   async getPartnerSettlement(user: AuthUser, query: QueryPartnerSettlementDto) {
-    let targetUserId = user.ownerId || user.id;
-
-    if (user.role === 'SUPER_ADMIN') {
-      if (query.customerId) {
-        targetUserId = query.customerId;
-      } else {
-        const firstCust = await this.prisma.user.findFirst({
-          where: { isActive: true },
-          orderBy: { createdAt: 'asc' },
-        });
-        if (firstCust) {
-          targetUserId = firstCust.id;
-        }
-      }
-    }
+    const targetUserId = await resolveTargetUserId(this.prisma, user, query.customerId);
 
     const business = await this.prisma.user.findUnique({
       where: { id: targetUserId },
@@ -140,32 +127,35 @@ export class ReportsPartnerShareService {
         continue; // No overlap
       }
 
-      // Query Loads within overlap window on share.siteId
-      const loads = await this.prisma.load.findMany({
-        where: {
-          siteId: share.siteId,
-          date: { gte: overlapStart, lte: overlapEnd },
-          deletedAt: null,
-        },
-        select: { amount: true },
-      });
+      // Query Loads and Expenses aggregates within overlap window via PostgreSQL SQL
+      const [loadAgg, expenseAgg] = await Promise.all([
+        this.prisma.load.aggregate({
+          where: {
+            siteId: share.siteId,
+            date: { gte: overlapStart, lte: overlapEnd },
+            deletedAt: null,
+          },
+          _sum: { amount: true },
+          _count: { id: true },
+        }),
+        this.prisma.expense.aggregate({
+          where: {
+            siteId: share.siteId,
+            date: { gte: overlapStart, lte: overlapEnd },
+            deletedAt: null,
+          },
+          _sum: { amount: true },
+          _count: { id: true },
+        }),
+      ]);
 
-      const sliceRevenue = loads.reduce((sum, l) => sum + Number(l.amount), 0);
-
-      // Query Expenses within overlap window on share.siteId
-      const expenses = await this.prisma.expense.findMany({
-        where: {
-          siteId: share.siteId,
-          date: { gte: overlapStart, lte: overlapEnd },
-          deletedAt: null,
-        },
-        select: { amount: true },
-      });
-
-      const sliceExpenses = expenses.reduce((sum, e) => sum + Number(e.amount), 0);
+      const sliceRevenue = Number(loadAgg._sum?.amount || 0);
+      const sliceExpenses = Number(expenseAgg._sum?.amount || 0);
       const sliceNetMargin = sliceRevenue - sliceExpenses;
       const pct = Number(share.sharePercentage);
       const sliceGrossDividend = Number(((sliceNetMargin * pct) / 100).toFixed(2));
+      const loadsCount = Number(loadAgg._count?.id || 0);
+      const expensesCount = Number(expenseAgg._count?.id || 0);
 
       grandRevenue += sliceRevenue;
       grandExpenses += sliceExpenses;
@@ -185,8 +175,8 @@ export class ReportsPartnerShareService {
         expenses: sliceExpenses,
         netMargin: sliceNetMargin,
         grossDividend: sliceGrossDividend,
-        loadsCount: loads.length,
-        expensesCount: expenses.length,
+        loadsCount,
+        expensesCount,
         isActive: share.isActive,
       });
     }

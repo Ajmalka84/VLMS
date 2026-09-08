@@ -88,16 +88,19 @@ export interface UpdateExpensePayload extends Partial<CreateExpensePayload> {}
 
 // --- API Calls ---
 
-export async function fetchExpensesApi(params: {
-  siteId?: string;
-  startDate?: string;
-  endDate?: string;
-  categoryId?: string;
-  machineryId?: string;
-  paymentMode?: PaymentMode;
-  page?: number;
-  limit?: number;
-}): Promise<ExpensesResponse> {
+export async function fetchExpensesApi(
+  params: {
+    siteId?: string;
+    startDate?: string;
+    endDate?: string;
+    categoryId?: string;
+    machineryId?: string;
+    paymentMode?: PaymentMode;
+    page?: number;
+    limit?: number;
+  },
+  options?: { signal?: AbortSignal }
+): Promise<ExpensesResponse> {
   const query = new URLSearchParams();
   if (params.siteId) query.set('siteId', params.siteId);
   if (params.startDate) query.set('startDate', params.startDate);
@@ -110,7 +113,7 @@ export async function fetchExpensesApi(params: {
 
   const qs = query.toString();
   const url = qs ? `/expenses?${qs}` : '/expenses';
-  return apiClient<ExpensesResponse>(url);
+  return apiClient<ExpensesResponse>(url, { signal: options?.signal });
 }
 
 export async function createExpenseApi(payload: CreateExpensePayload): Promise<Expense> {
