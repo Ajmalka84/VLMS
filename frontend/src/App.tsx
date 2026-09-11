@@ -27,7 +27,7 @@ const RouteLoadingFallback: React.FC = () => (
   <div className="min-h-[60vh] flex flex-col items-center justify-center p-6 text-center animate-fade-in">
     <div className="relative flex items-center justify-center mb-4">
       <div className="w-12 h-12 rounded-2xl bg-amber-500/20 border border-amber-500/40 animate-ping absolute" />
-      <div className="w-12 h-12 rounded-2xl bg-slate-900 border border-amber-500/50 flex items-center justify-center shadow-lg shadow-amber-500/20 relative z-10">
+      <div className="w-12 h-12 rounded-2xl bg-surface-solid border border-amber-500/50 flex items-center justify-center shadow-lg shadow-amber-500/20 relative z-10">
         <div className="w-4 h-4 rounded-full bg-amber-500 animate-pulse" />
       </div>
     </div>
@@ -92,7 +92,7 @@ export function App() {
                       <Route
                         path="loads"
                         element={
-                          <ProtectedRoute allowedRoles={['OWNER', 'SITE_BOY', 'SUPER_ADMIN']}>
+                          <ProtectedRoute allowedRoles={['OWNER', 'CO_PARTNER', 'SITE_BOY', 'SUPER_ADMIN']}>
                             <LoadsPage />
                           </ProtectedRoute>
                         }

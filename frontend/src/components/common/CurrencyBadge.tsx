@@ -27,10 +27,10 @@ export const CurrencyBadge: React.FC<CurrencyBadgeProps> = React.memo(
     }[size];
 
     const variantClasses = {
-      emerald: 'bg-emerald-500/10 border-emerald-500/30 text-emerald-400',
-      amber: 'bg-amber-500/10 border-amber-500/30 text-amber-400',
-      rose: 'bg-rose-500/10 border-rose-500/30 text-rose-400',
-      slate: 'bg-slate-800/80 border-slate-700 text-slate-300',
+      emerald: 'badge-emerald',
+      amber: 'badge-amber',
+      rose: 'badge-rose',
+      slate: 'badge-slate',
     }[effectiveVariant as 'emerald' | 'amber' | 'rose' | 'slate'];
 
     return (

@@ -48,10 +48,10 @@ export const Pagination = React.memo<PaginationProps>(({
       className={`flex flex-col sm:flex-row items-center justify-between gap-3 py-3 px-1 text-xs select-none ${className}`}
     >
       {/* Total Items & Page Size Selector */}
-      <div className="flex items-center gap-3 text-slate-400 font-medium">
+      <div className="flex items-center gap-3 text-secondary font-medium">
         {totalItems !== undefined && (
           <span>
-            Total <strong className="text-white font-bold">{totalItems}</strong> records
+            Total <strong className="text-primary font-bold">{totalItems}</strong> records
           </span>
         )}
 
@@ -61,7 +61,7 @@ export const Pagination = React.memo<PaginationProps>(({
             <select
               value={pageSize}
               onChange={(e) => onPageSizeChange(Number(e.target.value))}
-              className="bg-slate-950 border border-slate-800 rounded-lg px-2 py-1 text-xs text-white font-bold outline-none focus:border-amber-500 cursor-pointer"
+              className="bg-surface border border-subtle rounded-lg px-2 py-1 text-xs text-primary font-bold outline-none focus:border-amber-500 cursor-pointer"
             >
               {pageSizeOptions.map((opt) => (
                 <option key={opt} value={opt}>
@@ -101,7 +101,7 @@ export const Pagination = React.memo<PaginationProps>(({
           {pageNumbers.map((p, idx) => {
             if (typeof p === 'string') {
               return (
-                <span key={`ellipsis-${idx}`} className="px-1 text-slate-500 font-bold">
+                <span key={`ellipsis-${idx}`} className="px-1 text-muted font-bold">
                   ...
                 </span>
               );
@@ -115,7 +115,7 @@ export const Pagination = React.memo<PaginationProps>(({
                 className={`w-8 h-8 rounded-xl font-black text-xs transition cursor-pointer select-none touch-manipulation ${
                   isActive
                     ? 'bg-amber-500 text-slate-950 shadow-md shadow-amber-500/20'
-                    : 'text-slate-400 hover:text-white hover:bg-slate-800'
+                    : 'text-secondary hover:text-primary hover:bg-surface-elevated'
                 }`}
               >
                 {p}

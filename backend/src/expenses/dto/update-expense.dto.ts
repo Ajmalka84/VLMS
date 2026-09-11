@@ -33,6 +33,20 @@ export class UpdateExpenseDto {
   paymentMode?: PaymentModeDto;
 
   @IsOptional()
+  @IsUUID()
+  payerPartnerUserId?: string;
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(50)
+  transferMethod?: string;
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(100)
+  referenceNumber?: string;
+
+  @IsOptional()
   @IsString()
   @MaxLength(100)
   paidTo?: string;

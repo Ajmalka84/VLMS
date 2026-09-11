@@ -27,6 +27,12 @@ export class ExpenseCategoriesService {
   ) {}
 
   async listCategories(ownerId: string) {
+    const cacheKey = `expense_categories:${ownerId}`;
+    const cached = this.cacheService.get<any>(cacheKey);
+    if (cached) {
+      return cached;
+    }
+
     let categories = await this.prisma.expenseCategory.findMany({
       where: { userId: ownerId },
       orderBy: { name: 'asc' },
@@ -40,6 +46,7 @@ export class ExpenseCategoriesService {
       });
     }
 
+    this.cacheService.set(cacheKey, categories);
     return categories;
   }
 

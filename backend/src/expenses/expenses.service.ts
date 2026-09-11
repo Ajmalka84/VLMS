@@ -84,7 +84,29 @@ export class ExpensesService {
       );
     }
 
-    // 3. Handle Machinery & Hours Calculation
+    // 3. Handle CO_PARTNER_DIRECT Payer Validation
+    let payerPartnerUserId: string | null = null;
+    if (dto.paymentMode === 'CO_PARTNER_DIRECT') {
+      if (!dto.payerPartnerUserId) {
+        throw new BadRequestException('payerPartnerUserId is required when paymentMode is CO_PARTNER_DIRECT');
+      }
+      const partner = await this.prisma.user.findFirst({
+        where: {
+          id: dto.payerPartnerUserId,
+          ownerId: ownerId,
+          role: 'CO_PARTNER',
+          isActive: true,
+        },
+      });
+      if (!partner) {
+        throw new NotFoundException(
+          `Co-Partner with ID "${dto.payerPartnerUserId}" not found for this business`,
+        );
+      }
+      payerPartnerUserId = partner.id;
+    }
+
+    // 4. Handle Machinery & Hours Calculation
     let calculatedHours = dto.totalHours !== undefined ? Number(dto.totalHours) : undefined;
     let rentPerHour = dto.rentPerHour !== undefined ? Number(dto.rentPerHour) : undefined;
     let finalAmount = dto.amount !== undefined ? Number(dto.amount) : undefined;
@@ -135,9 +157,12 @@ export class ExpensesService {
         siteId: dto.siteId,
         categoryId: dto.categoryId,
         recordedByUserId: userId,
+        payerPartnerUserId,
         date: expenseDate,
         amount: new Prisma.Decimal(finalAmount),
         paymentMode: dto.paymentMode || 'CASH_DRAWER',
+        transferMethod: dto.transferMethod?.trim() || null,
+        referenceNumber: dto.referenceNumber?.trim() || null,
         paidTo: dto.paidTo?.trim() || null,
         remarks: dto.remarks?.trim() || null,
         machineryId: dto.machineryId || null,
@@ -165,6 +190,7 @@ export class ExpensesService {
         category: { select: { id: true, name: true } },
         machinery: { select: { id: true, name: true, code: true, defaultRentPerHour: true } },
         recordedBy: { select: { id: true, name: true, role: true, mobile: true } },
+        payerPartner: { select: { id: true, name: true, role: true, mobile: true } },
       },
     });
   }
@@ -174,8 +200,10 @@ export class ExpensesService {
     const limit = Math.min(100, Math.max(1, parseInt(query.limit || '50', 10)));
     const skip = (page - 1) * limit;
 
+    const targetOwnerId = query.customerId || ownerId;
+
     const where: any = {
-      site: { userId: ownerId },
+      site: { userId: targetOwnerId },
       deletedAt: null,
     };
 
@@ -195,6 +223,10 @@ export class ExpensesService {
       where.paymentMode = query.paymentMode;
     }
 
+    if (query.payerPartnerUserId) {
+      where.payerPartnerUserId = query.payerPartnerUserId;
+    }
+
     const dateFilter = buildDateRangeFilter(query.startDate, query.endDate);
     if (dateFilter) {
       where.date = dateFilter;
@@ -212,6 +244,7 @@ export class ExpensesService {
           category: { select: { id: true, name: true } },
           machinery: { select: { id: true, name: true, code: true, defaultRentPerHour: true } },
           recordedBy: { select: { id: true, name: true, role: true, mobile: true } },
+          payerPartner: { select: { id: true, name: true, role: true, mobile: true } },
         },
       }),
       this.prisma.expense.count({ where }),
@@ -227,6 +260,7 @@ export class ExpensesService {
         where,
         _sum: {
           amount: true,
+          advanceAmount: true,
         },
       }),
       this.prisma.expense.aggregate({
@@ -247,9 +281,14 @@ export class ExpensesService {
     const totalMachineHours = Number(machineAggregates._sum?.totalHours || 0);
 
     let totalCashDrawerExpenses = 0;
+    let totalPendingSettlement = 0;
     for (const group of paymentModeGroups) {
+      const grpAmount = Number(group._sum?.amount || 0);
+      const grpAdvance = Number(group._sum?.advanceAmount || 0);
       if (group.paymentMode === 'CASH_DRAWER') {
-        totalCashDrawerExpenses = Number(group._sum?.amount || 0);
+        totalCashDrawerExpenses = grpAmount;
+      } else if (group.paymentMode === 'VENDOR_CREDIT') {
+        totalPendingSettlement = Math.max(0, grpAmount - grpAdvance);
       }
     }
 
@@ -260,6 +299,7 @@ export class ExpensesService {
         totalCashDrawerExpenses: Math.round(totalCashDrawerExpenses * 100) / 100,
         totalMachineRent: Math.round(totalMachineRent * 100) / 100,
         totalAdvancesPaid: Math.round(totalAdvancesPaid * 100) / 100,
+        totalPendingSettlement: Math.round(totalPendingSettlement * 100) / 100,
         totalMachineHours: Math.round(totalMachineHours * 100) / 100,
         count: total,
       },
@@ -282,6 +322,7 @@ export class ExpensesService {
         category: { select: { id: true, name: true } },
         machinery: { select: { id: true, name: true, code: true, defaultRentPerHour: true } },
         recordedBy: { select: { id: true, name: true, role: true, mobile: true } },
+        payerPartner: { select: { id: true, name: true, role: true, mobile: true } },
       },
     });
 
@@ -300,16 +341,6 @@ export class ExpensesService {
     dto: UpdateExpenseDto,
   ) {
     const existing = await this.getExpenseById(ownerId, id);
-
-    // Site Boy 2-hour edit restriction window
-    if (userRole === 'SITE_BOY') {
-      const twoHoursAgo = new Date(Date.now() - 2 * 60 * 60 * 1000);
-      if (existing.createdAt < twoHoursAgo) {
-        throw new ForbiddenException(
-          'Site boys can only edit expense entries within 2 hours of creation. Please contact the Owner.',
-        );
-      }
-    }
 
     const updateData: any = {};
 
@@ -335,8 +366,33 @@ export class ExpensesService {
       updateData.date = d;
     }
 
+    const effectivePaymentMode = dto.paymentMode !== undefined ? dto.paymentMode : existing.paymentMode;
     if (dto.paymentMode !== undefined) {
       updateData.paymentMode = dto.paymentMode;
+    }
+
+    if (effectivePaymentMode === 'CO_PARTNER_DIRECT') {
+      const targetPayerId = dto.payerPartnerUserId !== undefined ? dto.payerPartnerUserId : existing.payerPartnerUserId;
+      if (!targetPayerId) {
+        throw new BadRequestException('payerPartnerUserId is required when paymentMode is CO_PARTNER_DIRECT');
+      }
+      if (dto.payerPartnerUserId && dto.payerPartnerUserId !== existing.payerPartnerUserId) {
+        const partner = await this.prisma.user.findFirst({
+          where: { id: dto.payerPartnerUserId, ownerId, role: 'CO_PARTNER', isActive: true },
+        });
+        if (!partner) throw new NotFoundException(`Co-Partner with ID "${dto.payerPartnerUserId}" not found`);
+      }
+      updateData.payerPartnerUserId = targetPayerId;
+    } else if (dto.paymentMode !== undefined) {
+      updateData.payerPartnerUserId = null;
+    }
+
+    if (dto.transferMethod !== undefined) {
+      updateData.transferMethod = dto.transferMethod ? dto.transferMethod.trim() : null;
+    }
+
+    if (dto.referenceNumber !== undefined) {
+      updateData.referenceNumber = dto.referenceNumber ? dto.referenceNumber.trim() : null;
     }
 
     if (dto.paidTo !== undefined) {
@@ -426,6 +482,7 @@ export class ExpensesService {
         category: { select: { id: true, name: true } },
         machinery: { select: { id: true, name: true, code: true, defaultRentPerHour: true } },
         recordedBy: { select: { id: true, name: true, role: true, mobile: true } },
+        payerPartner: { select: { id: true, name: true, role: true, mobile: true } },
       },
     });
   }

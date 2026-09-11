@@ -35,35 +35,14 @@ export const Badge = React.memo<BadgeProps>(({
   className = '',
   title,
 }) => {
-  const variantStyles: Record<BadgeVariant, { bg: string; dot: string }> = {
-    amber: {
-      bg: 'bg-amber-500/15 border-amber-500/30 text-amber-300',
-      dot: 'bg-amber-400',
-    },
-    emerald: {
-      bg: 'bg-emerald-500/15 border-emerald-500/30 text-emerald-300',
-      dot: 'bg-emerald-400',
-    },
-    rose: {
-      bg: 'bg-rose-500/15 border-rose-500/30 text-rose-300',
-      dot: 'bg-rose-400',
-    },
-    blue: {
-      bg: 'bg-blue-500/15 border-blue-500/30 text-blue-300',
-      dot: 'bg-blue-400',
-    },
-    purple: {
-      bg: 'bg-purple-500/15 border-purple-500/30 text-purple-300',
-      dot: 'bg-purple-400',
-    },
-    cyan: {
-      bg: 'bg-cyan-500/15 border-cyan-500/30 text-cyan-300',
-      dot: 'bg-cyan-400',
-    },
-    slate: {
-      bg: 'bg-slate-800/80 border-slate-700/80 text-slate-300',
-      dot: 'bg-slate-400',
-    },
+  const variantClasses: Record<BadgeVariant, { class: string; dot: string }> = {
+    amber: { class: 'badge-amber', dot: 'var(--badge-amber-dot)' },
+    emerald: { class: 'badge-emerald', dot: 'var(--badge-emerald-dot)' },
+    rose: { class: 'badge-rose', dot: 'var(--badge-rose-dot)' },
+    blue: { class: 'badge-blue', dot: 'var(--badge-blue-dot)' },
+    purple: { class: 'badge-purple', dot: 'var(--badge-purple-dot)' },
+    cyan: { class: 'badge-cyan', dot: 'var(--badge-cyan-dot)' },
+    slate: { class: 'badge-slate', dot: 'var(--badge-slate-dot)' },
   };
 
   const sizeStyles: Record<BadgeSize, string> = {
@@ -72,23 +51,27 @@ export const Badge = React.memo<BadgeProps>(({
     lg: 'px-3 py-1.5 text-xs sm:text-sm gap-2 rounded-full font-extrabold',
   };
 
-  const current = variantStyles[variant];
+  const current = variantClasses[variant];
 
   return (
     <span
       title={title}
       className={`inline-flex items-center border shadow-sm select-none whitespace-nowrap ${
-        current.bg
+        current.class
       } ${sizeStyles[size]} ${className}`}
     >
       {dot && (
         <span className="relative flex h-2 w-2 shrink-0">
           {dotPulse && (
             <span
-              className={`animate-ping absolute inline-flex h-full w-full rounded-full opacity-75 ${current.dot}`}
+              style={{ backgroundColor: current.dot }}
+              className="animate-ping absolute inline-flex h-full w-full rounded-full opacity-75"
             />
           )}
-          <span className={`relative inline-flex rounded-full h-2 w-2 ${current.dot}`} />
+          <span
+            style={{ backgroundColor: current.dot }}
+            className="relative inline-flex rounded-full h-2 w-2"
+          />
         </span>
       )}
 
@@ -103,7 +86,7 @@ export const Badge = React.memo<BadgeProps>(({
             onRemove();
           }}
           aria-label="Remove badge"
-          className="p-0.5 hover:bg-slate-950/40 rounded-full transition cursor-pointer"
+          className="p-0.5 opacity-70 hover:opacity-100 rounded-full transition cursor-pointer"
         >
           <X className="w-3 h-3" />
         </button>

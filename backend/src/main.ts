@@ -3,6 +3,7 @@ import { ValidationPipe } from '@nestjs/common';
 import { NestFactory } from '@nestjs/core';
 import { AppModule } from './app.module';
 import { json, urlencoded } from 'express';
+import compression from 'compression';
 
 async function bootstrap() {
   const app = await NestFactory.create(AppModule);
@@ -15,6 +16,9 @@ async function bootstrap() {
       expressApp.set('trust proxy', 1);
     }
   }
+
+  // HTTP Gzip/Brotli Compression
+  app.use(compression());
 
   // Request payload limits
   app.use(json({ limit: '10mb' }));
@@ -31,10 +35,19 @@ async function bootstrap() {
     origin: origins,
     credentials: true,
     methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
-    allowedHeaders: ['Content-Type', 'Authorization'],
+    allowedHeaders: ['Content-Type', 'Authorization', 'Accept'],
+    maxAge: 86400, // Cache CORS preflights for 24 hours to prevent redundant OPTIONS requests
   });
 
   app.setGlobalPrefix('api/v1');
+
+  // Ensure browsers and proxies never serve stale cached API data
+  app.use((req: any, res: any, next: any) => {
+    res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate');
+    res.setHeader('Pragma', 'no-cache');
+    res.setHeader('Expires', '0');
+    next();
+  });
   app.useGlobalPipes(
     new ValidationPipe({
       whitelist: true,

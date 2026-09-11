@@ -88,11 +88,11 @@ export const SearchBar = React.memo<SearchBarProps>(({
   return (
     <div className={`relative flex items-center w-full ${containerClassName}`}>
       {/* Search Icon / Spinner */}
-      <div className="absolute left-3.5 flex items-center justify-center text-slate-400 pointer-events-none">
+      <div className="absolute left-3.5 flex items-center justify-center text-muted pointer-events-none">
         {loading ? (
-          <Loader2 className="w-4 h-4 text-amber-400 animate-spin" />
+          <Loader2 className="w-4 h-4 text-amber-500 animate-spin" />
         ) : (
-          <Search className="w-4 h-4 text-slate-400" />
+          <Search className="w-4 h-4 text-muted" />
         )}
       </div>
 
@@ -106,7 +106,7 @@ export const SearchBar = React.memo<SearchBarProps>(({
         placeholder={placeholder}
         autoFocus={autoFocus}
         disabled={disabled}
-        className={`w-full pl-10 pr-16 py-2.5 bg-slate-950/80 border border-slate-800 rounded-2xl text-xs sm:text-sm font-semibold text-white placeholder:text-slate-500 focus:outline-none focus:border-amber-500 focus:ring-1 focus:ring-amber-500/50 min-h-[44px] transition-all select-none disabled:opacity-50 ${className}`}
+        className={`w-full pl-10 pr-16 py-2.5 bg-surface-solid border border-subtle rounded-2xl text-xs sm:text-sm font-semibold text-primary placeholder:text-muted focus:outline-none focus:border-amber-500 focus:ring-1 focus:ring-amber-500/50 min-h-[44px] transition-all select-none disabled:opacity-50 ${className}`}
       />
 
       {/* Right Slot: Clear button & Shortcut indicator */}
@@ -116,14 +116,14 @@ export const SearchBar = React.memo<SearchBarProps>(({
             type="button"
             onClick={handleClear}
             aria-label="Clear search"
-            className="p-1 rounded-lg text-slate-400 hover:text-white hover:bg-slate-800 transition cursor-pointer"
+            className="p-1 rounded-lg text-secondary hover:text-primary hover:bg-surface-elevated transition cursor-pointer"
           >
             <X className="w-3.5 h-3.5" />
           </button>
         )}
 
         {shortcutHint && !activeValue && (
-          <kbd className="hidden sm:inline-flex items-center px-1.5 py-0.5 text-[10px] font-bold text-slate-500 bg-slate-900 border border-slate-800 rounded-lg shadow-inner select-none pointer-events-none">
+          <kbd className="hidden sm:inline-flex items-center px-1.5 py-0.5 text-[10px] font-bold text-muted bg-surface border border-subtle rounded-lg shadow-inner select-none pointer-events-none">
             {shortcutHint}
           </kbd>
         )}

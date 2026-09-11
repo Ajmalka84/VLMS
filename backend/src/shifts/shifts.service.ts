@@ -58,12 +58,11 @@ export class ShiftsService {
       throw new ForbiddenException('You do not have access to this site');
     }
 
-    // 1. Find previous approved shift's actualHandoverCash to use as openingCash
+    // 1. Find previous shift's actualHandoverCash to use as openingCash
     const previousShift = await this.prisma.shiftReconciliation.findFirst({
       where: {
         siteId,
         date: { lt: targetDate },
-        isApproved: true,
       },
       orderBy: { date: 'desc' },
       select: { actualHandoverCash: true, date: true },
@@ -86,22 +85,34 @@ export class ShiftsService {
     const cashInflows = Number(loadAgg._sum?.amount || 0);
     const cashLoadsCount = Number(loadAgg._count?.id || 0);
 
-    // 3. Query cash expenses & machine advances (outflows) via PostgreSQL SQL aggregation
-    const expenseAgg = await this.prisma.expense.aggregate({
-      where: {
-        siteId,
-        date: targetDate,
-        paymentMode: 'CASH_DRAWER',
-        deletedAt: null,
-      },
-      _sum: { amount: true, advanceAmount: true },
-      _count: { id: true },
-    });
+    // 3. Query cash expenses & vendor credit advances (outflows) via PostgreSQL SQL aggregation
+    const [cashDrawerAgg, creditAdvanceAgg] = await Promise.all([
+      this.prisma.expense.aggregate({
+        where: {
+          siteId,
+          date: targetDate,
+          paymentMode: 'CASH_DRAWER',
+          deletedAt: null,
+        },
+        _sum: { amount: true },
+        _count: { id: true },
+      }),
+      this.prisma.expense.aggregate({
+        where: {
+          siteId,
+          date: targetDate,
+          paymentMode: 'VENDOR_CREDIT',
+          deletedAt: null,
+        },
+        _sum: { advanceAmount: true },
+        _count: { id: true },
+      }),
+    ]);
 
-    const generalExpensesOutflow = Number(expenseAgg._sum?.amount || 0);
-    const machineryAdvanceOutflow = Number(expenseAgg._sum?.advanceAmount || 0);
+    const generalExpensesOutflow = Number(cashDrawerAgg._sum?.amount || 0);
+    const machineryAdvanceOutflow = Number(creditAdvanceAgg._sum?.advanceAmount || 0);
     const cashOutflows = generalExpensesOutflow + machineryAdvanceOutflow;
-    const expensesCount = Number(expenseAgg._count?.id || 0);
+    const expensesCount = Number(cashDrawerAgg._count?.id || 0) + Number(creditAdvanceAgg._count?.id || 0);
     const expectedCash = openingCash + cashInflows - cashOutflows;
 
     // 4. Check if today's shift is already recorded / submitted
@@ -163,10 +174,6 @@ export class ShiftsService {
     // Compute live expected values
     const drawer = await this.getCurrentDrawer(user, siteId, dto.date);
 
-    if (drawer.existingShift && drawer.existingShift.isApproved) {
-      throw new BadRequestException('This shift handover has already been approved and locked by the owner.');
-    }
-
     const effectiveOpeningCash =
       dto.openingCash !== undefined ? Number(dto.openingCash) : drawer.openingCash;
     const expectedCash = effectiveOpeningCash + drawer.cashInflows - drawer.cashOutflows;
@@ -185,7 +192,7 @@ export class ShiftsService {
       actualHandoverCash: new Prisma.Decimal(actualHandover),
       discrepancy: new Prisma.Decimal(discrepancy),
       remarks: dto.remarks || null,
-      isApproved: false,
+      isApproved: true,
     };
 
     if (drawer.existingShift) {
@@ -235,6 +242,27 @@ export class ShiftsService {
         approvedBy: { select: { id: true, name: true, mobile: true } },
       },
     });
+  }
+
+  async reopenShift(user: AuthUser, shiftId: string) {
+    const shift = await this.prisma.shiftReconciliation.findUnique({
+      where: { id: shiftId },
+      include: { site: true },
+    });
+
+    if (!shift) {
+      throw new NotFoundException('Shift reconciliation record not found');
+    }
+
+    if (shift.site.userId !== user.ownerId && user.role !== 'SUPER_ADMIN') {
+      throw new ForbiddenException('You do not have permission to reopen shifts for this site');
+    }
+
+    await this.prisma.shiftReconciliation.delete({
+      where: { id: shiftId },
+    });
+
+    return { message: 'Shift reopened successfully' };
   }
 
   async listShifts(user: AuthUser, query: QueryShiftsDto) {

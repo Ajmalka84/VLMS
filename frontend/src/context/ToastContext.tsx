@@ -83,27 +83,27 @@ export const ToastProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     <ToastContext.Provider value={value}>
       {children}
 
-      {/* Fixed Floating Toast Container (Always visible on top of modals and backdrops) */}
+      {/* Fixed Floating Toast Container */}
       <div className="fixed top-5 left-1/2 -translate-x-1/2 z-[9999] w-[92%] max-w-md flex flex-col gap-2 pointer-events-none">
         {toasts.map((t) => (
           <div
             key={t.id}
             className={`pointer-events-auto p-4 rounded-2xl border shadow-2xl backdrop-blur-xl flex items-center justify-between gap-3 transition-all transform animate-slide-down ${
               t.type === 'success'
-                ? 'bg-emerald-950/90 border-emerald-500/50 text-emerald-100 shadow-emerald-950/50'
+                ? 'bg-emerald-50 dark:bg-emerald-950/90 border-emerald-300 dark:border-emerald-500/50 text-emerald-900 dark:text-emerald-100 shadow-emerald-950/20'
                 : t.type === 'error'
-                ? 'bg-rose-950/90 border-rose-500/50 text-rose-100 shadow-rose-950/50'
+                ? 'bg-rose-50 dark:bg-rose-950/90 border-rose-300 dark:border-rose-500/50 text-rose-900 dark:text-rose-100 shadow-rose-950/20'
                 : t.type === 'warning'
-                ? 'bg-amber-950/90 border-amber-500/50 text-amber-100 shadow-amber-950/50'
-                : 'bg-slate-900/90 border-slate-700 text-slate-100 shadow-slate-950/50'
+                ? 'bg-amber-50 dark:bg-amber-950/90 border-amber-300 dark:border-amber-500/50 text-amber-900 dark:text-amber-100 shadow-amber-950/20'
+                : 'bg-white dark:bg-slate-900/90 border-slate-300 dark:border-slate-700 text-slate-900 dark:text-slate-100 shadow-slate-950/20'
             }`}
           >
             <div className="flex items-center gap-3 min-w-0">
               <div className="shrink-0">
-                {t.type === 'success' && <CheckCircle2 className="w-5 h-5 text-emerald-400" />}
-                {t.type === 'error' && <AlertCircle className="w-5 h-5 text-rose-400" />}
-                {t.type === 'warning' && <AlertTriangle className="w-5 h-5 text-amber-400" />}
-                {t.type === 'info' && <Info className="w-5 h-5 text-blue-400" />}
+                {t.type === 'success' && <CheckCircle2 className="w-5 h-5 text-emerald-600 dark:text-emerald-400" />}
+                {t.type === 'error' && <AlertCircle className="w-5 h-5 text-rose-600 dark:text-rose-400" />}
+                {t.type === 'warning' && <AlertTriangle className="w-5 h-5 text-amber-600 dark:text-amber-400" />}
+                {t.type === 'info' && <Info className="w-5 h-5 text-blue-600 dark:text-blue-400" />}
               </div>
               <span className="text-xs sm:text-sm font-bold leading-snug break-words">
                 {t.message}
@@ -112,7 +112,7 @@ export const ToastProvider: React.FC<{ children: React.ReactNode }> = ({ childre
 
             <button
               onClick={() => removeToast(t.id)}
-              className="p-1 rounded-lg text-slate-400 hover:text-white shrink-0 cursor-pointer"
+              className="p-1 rounded-lg text-secondary hover:text-primary shrink-0 cursor-pointer"
             >
               <X className="w-4 h-4" />
             </button>

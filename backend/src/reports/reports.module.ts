@@ -3,6 +3,7 @@ import { ReportsService } from './reports.service';
 import { ReportsCashflowService } from './reports-cashflow.service';
 import { ReportsPartnerShareService } from './reports-partner-share.service';
 import { ReportsMachineryService } from './reports-machinery.service';
+import { ReportsBalanceSheetService } from './reports-balance-sheet.service';
 import { ReportsController } from './reports.controller';
 import { PrismaModule } from '../prisma/prisma.module';
 import { AuthModule } from '../auth/auth.module';
@@ -15,12 +16,14 @@ import { AuthModule } from '../auth/auth.module';
     ReportsCashflowService,
     ReportsPartnerShareService,
     ReportsMachineryService,
+    ReportsBalanceSheetService,
   ],
   exports: [
     ReportsService,
     ReportsCashflowService,
     ReportsPartnerShareService,
     ReportsMachineryService,
+    ReportsBalanceSheetService,
   ],
 })
 export class ReportsModule {}

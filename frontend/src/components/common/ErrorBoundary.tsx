@@ -51,17 +51,17 @@ export class ErrorBoundary extends Component<Props, State> {
             </div>
 
             <div className="space-y-2">
-              <h2 className="text-xl sm:text-2xl font-black text-white tracking-tight">
+              <h2 className="text-xl sm:text-2xl font-black text-primary tracking-tight">
                 {this.props.fallbackTitle || 'Something went wrong in this module'}
               </h2>
-              <p className="text-sm text-slate-400 leading-relaxed">
+              <p className="text-sm text-muted leading-relaxed">
                 {this.props.fallbackMessage ||
                   'The application encountered an unexpected state. Your saved records remain secure on the server.'}
               </p>
             </div>
 
             {this.state.error && (
-              <div className="p-3 bg-slate-950/80 border border-slate-800 rounded-xl text-left text-xs font-mono text-rose-300 overflow-x-auto max-h-32">
+              <div className="p-3 bg-surface-solid border border-subtle rounded-xl text-left text-xs font-mono text-rose-300 overflow-x-auto max-h-32">
                 {this.state.error.toString()}
               </div>
             )}

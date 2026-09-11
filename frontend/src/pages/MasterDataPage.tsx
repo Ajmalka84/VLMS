@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { useSearchParams } from 'react-router-dom';
+import { useSearchParams, Link } from 'react-router-dom';
 import {
   MapPin,
   Truck,
@@ -16,6 +16,8 @@ import {
   Power,
   Zap,
   Users,
+  BookOpen,
+  PlusCircle,
 } from 'lucide-react';
 import {
   Card,
@@ -33,6 +35,15 @@ import {
 import { TeamManagement } from '../components/team/TeamManagement';
 import { ExpenseCategoriesManagement } from '../components/expenses/ExpenseCategoriesManagement';
 import { MachineryManagement } from '../components/expenses/MachineryManagement';
+import { RecordPaymentModal } from '../components/contractors/RecordPaymentModal';
+import {
+  SiteModal,
+  VehicleModal,
+  VehicleTypeModal,
+  MaterialTypeModal,
+  ContractorModal,
+  RateModal,
+} from '../components/masters';
 import { useAuth } from '../context/AuthContext';
 import { useToast } from '../context/ToastContext';
 import { formatINR } from '../utils/formatters';
@@ -43,22 +54,11 @@ import {
   MaterialType,
   Contractor,
   Rate,
-  createSiteApi,
   updateSiteApi,
-  createVehicleApi,
-  updateVehicleApi,
   deleteVehicleApi,
-  createVehicleTypeApi,
-  updateVehicleTypeApi,
   deleteVehicleTypeApi,
-  createMaterialTypeApi,
-  updateMaterialTypeApi,
   deleteMaterialTypeApi,
-  createContractorApi,
-  updateContractorApi,
   deleteContractorApi,
-  createRateApi,
-  updateRateApi,
   deleteRateApi,
 } from '../api/masterData';
 import { useMasterCache } from '../context/MasterCacheContext';
@@ -139,37 +139,29 @@ export const MasterDataPage: React.FC = () => {
 
   // Modals state
   const [modalMode, setModalMode] = useState<
-    | 'site-add'
-    | 'site-edit'
-    | 'vehicle-add'
-    | 'vehicle-edit'
-    | 'vtype-add'
-    | 'vtype-edit'
-    | 'mtype-add'
-    | 'mtype-edit'
-    | 'contractor-add'
-    | 'contractor-edit'
-    | 'rate-add'
-    | 'rate-edit'
+    | 'site'
+    | 'vehicle'
+    | 'vtype'
+    | 'mtype'
+    | 'contractor'
+    | 'rate'
     | null
   >(null);
 
   const [activeItem, setActiveItem] = useState<any>(null);
 
-  // Form states
-  const [siteForm, setSiteForm] = useState({ siteName: '', location: '', pincode: '' });
-  const [vehicleForm, setVehicleForm] = useState({ vehicleNumber: '', vehicleTypeId: '' });
-  const [vtypeForm, setVtypeForm] = useState({ name: '' });
-  const [mtypeForm, setMtypeForm] = useState({ name: '' });
-  const [contractorForm, setContractorForm] = useState({ name: '', mobile: '' });
-  const [rateForm, setRateForm] = useState({
-    siteId: '',
-    vehicleTypeId: '',
-    materialTypeId: '',
-    amount: '',
-  });
-  const [submitting, setSubmitting] = useState(false);
-  const [formError, setFormError] = useState<string | null>(null);
+  // Contractor Payment modal
+  const [paymentModalOpen, setPaymentModalOpen] = useState(false);
+  const [paymentContractorId, setPaymentContractorId] = useState<string | undefined>(undefined);
+
+  // Confirm Modal state
+  const [confirmState, setConfirmState] = useState<{
+    isOpen: boolean;
+    title: string;
+    message: string;
+    confirmText?: string;
+    onConfirm: () => void;
+  } | null>(null);
 
   const loadAllData = async (force = false) => {
     try {
@@ -187,167 +179,36 @@ export const MasterDataPage: React.FC = () => {
 
   // ----------------- MODAL OPENERS -----------------
   const openSiteModal = (site?: Site) => {
-    setFormError(null);
-    if (site) {
-      setActiveItem(site);
-      setSiteForm({ siteName: site.siteName, location: site.location, pincode: site.pincode });
-      setModalMode('site-edit');
-    } else {
-      setActiveItem(null);
-      setSiteForm({ siteName: '', location: '', pincode: '' });
-      setModalMode('site-add');
-    }
+    setActiveItem(site || null);
+    setModalMode('site');
   };
 
   const openVehicleModal = (veh?: Vehicle) => {
-    setFormError(null);
-    if (veh) {
-      setActiveItem(veh);
-      setVehicleForm({ vehicleNumber: veh.vehicleNumber, vehicleTypeId: veh.vehicleTypeId });
-      setModalMode('vehicle-edit');
-    } else {
-      setActiveItem(null);
-      setVehicleForm({
-        vehicleNumber: '',
-        vehicleTypeId: vehicleTypes[0]?.id || '',
-      });
-      setModalMode('vehicle-add');
-    }
+    setActiveItem(veh || null);
+    setModalMode('vehicle');
   };
 
   const openVTypeModal = (vt?: VehicleType) => {
-    setFormError(null);
-    if (vt) {
-      setActiveItem(vt);
-      setVtypeForm({ name: vt.name });
-      setModalMode('vtype-edit');
-    } else {
-      setActiveItem(null);
-      setVtypeForm({ name: '' });
-      setModalMode('vtype-add');
-    }
+    setActiveItem(vt || null);
+    setModalMode('vtype');
   };
 
   const openMTypeModal = (mt?: MaterialType) => {
-    setFormError(null);
-    if (mt) {
-      setActiveItem(mt);
-      setMtypeForm({ name: mt.name });
-      setModalMode('mtype-edit');
-    } else {
-      setActiveItem(null);
-      setMtypeForm({ name: '' });
-      setModalMode('mtype-add');
-    }
+    setActiveItem(mt || null);
+    setModalMode('mtype');
   };
 
   const openContractorModal = (c?: Contractor) => {
-    setFormError(null);
-    if (c) {
-      setActiveItem(c);
-      setContractorForm({ name: c.name, mobile: c.mobile });
-      setModalMode('contractor-edit');
-    } else {
-      setActiveItem(null);
-      setContractorForm({ name: '', mobile: '' });
-      setModalMode('contractor-add');
-    }
+    setActiveItem(c || null);
+    setModalMode('contractor');
   };
 
   const openRateModal = (r?: Rate) => {
-    setFormError(null);
-    if (r) {
-      setActiveItem(r);
-      setRateForm({
-        siteId: r.siteId,
-        vehicleTypeId: r.vehicleTypeId,
-        materialTypeId: r.materialTypeId,
-        amount: String(r.amount),
-      });
-      setModalMode('rate-edit');
-    } else {
-      setActiveItem(null);
-      setRateForm({
-        siteId: sites[0]?.id || '',
-        vehicleTypeId: vehicleTypes[0]?.id || '',
-        materialTypeId: materialTypes[0]?.id || '',
-        amount: '',
-      });
-      setModalMode('rate-add');
-    }
+    setActiveItem(r || null);
+    setModalMode('rate');
   };
 
-  // ----------------- SUBMIT HANDLERS -----------------
-  const handleSiteSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setFormError(null);
-
-    const cleanSiteName = siteForm.siteName.trim();
-    if (!cleanSiteName || cleanSiteName.length < 2) {
-      const msg = 'Site name must be at least 2 characters.';
-      setFormError(msg);
-      toast.error(msg);
-      return;
-    }
-
-    const cleanLocation = siteForm.location.trim();
-    if (!cleanLocation || cleanLocation.length < 2) {
-      const msg = 'Location must be at least 2 characters.';
-      setFormError(msg);
-      toast.error(msg);
-      return;
-    }
-
-    const cleanPincode = siteForm.pincode.replace(/\D/g, '').slice(0, 6);
-    if (!/^[1-9][0-9]{5}$/.test(cleanPincode)) {
-      const msg = 'Pincode must be a valid 6-digit Indian postal code (e.g. 682001).';
-      setFormError(msg);
-      toast.error(msg);
-      return;
-    }
-
-    const isDuplicate = sites.some(
-      (s) =>
-        s.siteName.trim().toLowerCase() === cleanSiteName.toLowerCase() &&
-        (modalMode === 'site-add' || s.id !== activeItem?.id),
-    );
-    if (isDuplicate) {
-      const msg = `A site named "${cleanSiteName}" already exists in your account.`;
-      setFormError(msg);
-      toast.error(msg);
-      return;
-    }
-
-    setSubmitting(true);
-    try {
-      if (modalMode === 'site-add') {
-        await createSiteApi({ siteName: cleanSiteName, location: cleanLocation, pincode: cleanPincode });
-        toast.success('Site added successfully!');
-      } else {
-        await updateSiteApi(activeItem.id, { siteName: cleanSiteName, location: cleanLocation, pincode: cleanPincode });
-        toast.success('Site updated successfully!');
-      }
-      setModalMode(null);
-      setFormError(null);
-      void loadAllData(true);
-    } catch (err: any) {
-      const msg = err.message || 'Action failed';
-      setFormError(msg);
-      toast.error(msg);
-    } finally {
-      setSubmitting(false);
-    }
-  };
-
-  // Confirm Modal state
-  const [confirmState, setConfirmState] = useState<{
-    isOpen: boolean;
-    title: string;
-    message: string;
-    confirmText?: string;
-    onConfirm: () => void;
-  } | null>(null);
-
+  // ----------------- DELETE & TOGGLE HANDLERS -----------------
   const handleToggleSiteStatus = async (site: Site) => {
     const nextStatus = site.isActive === false ? true : false;
     try {
@@ -358,58 +219,6 @@ export const MasterDataPage: React.FC = () => {
       void loadAllData(true);
     } catch (err: any) {
       toast.error(err.message || 'Failed to update site status');
-    }
-  };
-
-  const handleVehicleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setFormError(null);
-
-    const cleanVehicleNumber = vehicleForm.vehicleNumber.replace(/[^a-zA-Z0-9]/g, '').toUpperCase();
-    if (!cleanVehicleNumber || cleanVehicleNumber.length < 4 || cleanVehicleNumber.length > 15) {
-      const msg = 'Vehicle number must contain 4 to 15 alphanumeric characters.';
-      setFormError(msg);
-      toast.error(msg);
-      return;
-    }
-
-    if (!vehicleForm.vehicleTypeId) {
-      const msg = 'Please select a valid vehicle category.';
-      setFormError(msg);
-      toast.error(msg);
-      return;
-    }
-
-    const isDuplicate = vehicles.some(
-      (v) =>
-        v.vehicleNumber.replace(/[^a-zA-Z0-9]/g, '').toUpperCase() === cleanVehicleNumber &&
-        (modalMode === 'vehicle-add' || v.id !== activeItem?.id),
-    );
-    if (isDuplicate) {
-      const msg = `Vehicle "${cleanVehicleNumber}" is already registered in your fleet.`;
-      setFormError(msg);
-      toast.error(msg);
-      return;
-    }
-
-    setSubmitting(true);
-    try {
-      if (modalMode === 'vehicle-add') {
-        await createVehicleApi({ vehicleNumber: cleanVehicleNumber, vehicleTypeId: vehicleForm.vehicleTypeId });
-        toast.success('Vehicle registered successfully!');
-      } else {
-        await updateVehicleApi(activeItem.id, { vehicleNumber: cleanVehicleNumber, vehicleTypeId: vehicleForm.vehicleTypeId });
-        toast.success('Vehicle updated successfully!');
-      }
-      setModalMode(null);
-      setFormError(null);
-      void loadAllData(true);
-    } catch (err: any) {
-      const msg = err.message || 'Action failed';
-      setFormError(msg);
-      toast.error(msg);
-    } finally {
-      setSubmitting(false);
     }
   };
 
@@ -432,52 +241,6 @@ export const MasterDataPage: React.FC = () => {
     });
   };
 
-  // ----------------- VEHICLE TYPES CRUD HANDLERS -----------------
-  const handleVTypeSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setFormError(null);
-
-    const cleanName = vtypeForm.name.trim();
-    if (!cleanName || cleanName.length < 2) {
-      const msg = 'Category name must be at least 2 characters.';
-      setFormError(msg);
-      toast.error(msg);
-      return;
-    }
-
-    const isDuplicate = vehicleTypes.some(
-      (vt) =>
-        vt.name.trim().toLowerCase() === cleanName.toLowerCase() &&
-        (modalMode === 'vtype-add' || vt.id !== activeItem?.id),
-    );
-    if (isDuplicate) {
-      const msg = `Vehicle category "${cleanName}" already exists in your account.`;
-      setFormError(msg);
-      toast.error(msg);
-      return;
-    }
-
-    setSubmitting(true);
-    try {
-      if (modalMode === 'vtype-add') {
-        await createVehicleTypeApi({ name: cleanName });
-        toast.success('Vehicle category added successfully!');
-      } else {
-        await updateVehicleTypeApi(activeItem.id, { name: cleanName });
-        toast.success('Vehicle category updated successfully!');
-      }
-      setModalMode(null);
-      setFormError(null);
-      void loadAllData(true);
-    } catch (err: any) {
-      const msg = err.message || 'Action failed';
-      setFormError(msg);
-      toast.error(msg);
-    } finally {
-      setSubmitting(false);
-    }
-  };
-
   const handleDeleteVType = (id: string, name: string) => {
     setConfirmState({
       isOpen: true,
@@ -495,52 +258,6 @@ export const MasterDataPage: React.FC = () => {
         }
       },
     });
-  };
-
-  // ----------------- MATERIAL TYPES CRUD HANDLERS -----------------
-  const handleMTypeSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setFormError(null);
-
-    const cleanName = mtypeForm.name.trim();
-    if (!cleanName || cleanName.length < 2) {
-      const msg = 'Material name must be at least 2 characters.';
-      setFormError(msg);
-      toast.error(msg);
-      return;
-    }
-
-    const isDuplicate = materialTypes.some(
-      (mt) =>
-        mt.name.trim().toLowerCase() === cleanName.toLowerCase() &&
-        (modalMode === 'mtype-add' || mt.id !== activeItem?.id),
-    );
-    if (isDuplicate) {
-      const msg = `Material specification "${cleanName}" already exists in your account.`;
-      setFormError(msg);
-      toast.error(msg);
-      return;
-    }
-
-    setSubmitting(true);
-    try {
-      if (modalMode === 'mtype-add') {
-        await createMaterialTypeApi({ name: cleanName });
-        toast.success('Material type added successfully!');
-      } else {
-        await updateMaterialTypeApi(activeItem.id, { name: cleanName });
-        toast.success('Material type updated successfully!');
-      }
-      setModalMode(null);
-      setFormError(null);
-      void loadAllData(true);
-    } catch (err: any) {
-      const msg = err.message || 'Action failed';
-      setFormError(msg);
-      toast.error(msg);
-    } finally {
-      setSubmitting(false);
-    }
   };
 
   const handleDeleteMType = (id: string, name: string) => {
@@ -562,61 +279,6 @@ export const MasterDataPage: React.FC = () => {
     });
   };
 
-  const handleContractorSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setFormError(null);
-
-    const cleanName = contractorForm.name.trim();
-    const cleanMobile = contractorForm.mobile.replace(/\D/g, '').slice(0, 10);
-
-    if (!cleanName || cleanName.length < 2) {
-      const msg = 'Contractor name must be at least 2 characters.';
-      setFormError(msg);
-      toast.error(msg);
-      return;
-    }
-
-    if (!/^[0-9]{10}$/.test(cleanMobile)) {
-      const msg = 'Mobile number must be a valid 10-digit number.';
-      setFormError(msg);
-      toast.error(msg);
-      return;
-    }
-
-    const isDuplicate = contractors.some(
-      (c) =>
-        c.mobile.trim() === cleanMobile &&
-        (modalMode === 'contractor-add' || c.id !== activeItem?.id),
-    );
-    if (isDuplicate) {
-      const existing = contractors.find((c) => c.mobile.trim() === cleanMobile);
-      const msg = `A contractor with mobile number "${cleanMobile}" already exists (${existing?.name}).`;
-      setFormError(msg);
-      toast.error(msg);
-      return;
-    }
-
-    setSubmitting(true);
-    try {
-      if (modalMode === 'contractor-add') {
-        await createContractorApi({ name: cleanName, mobile: cleanMobile });
-        toast.success('Contractor added successfully!');
-      } else {
-        await updateContractorApi(activeItem.id, { name: cleanName, mobile: cleanMobile });
-        toast.success('Contractor updated successfully!');
-      }
-      setModalMode(null);
-      setFormError(null);
-      void loadAllData(true);
-    } catch (err: any) {
-      const msg = err.message || 'Action failed';
-      setFormError(msg);
-      toast.error(msg);
-    } finally {
-      setSubmitting(false);
-    }
-  };
-
   const handleDeleteContractor = (id: string, name: string) => {
     setConfirmState({
       isOpen: true,
@@ -634,66 +296,6 @@ export const MasterDataPage: React.FC = () => {
         }
       },
     });
-  };
-
-  const handleRateSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setFormError(null);
-
-    const amt = parseFloat(rateForm.amount);
-    if (isNaN(amt) || amt <= 0) {
-      const msg = 'Please enter a valid rate amount greater than 0.';
-      setFormError(msg);
-      toast.error(msg);
-      return;
-    }
-
-    if (!rateForm.siteId || !rateForm.vehicleTypeId || !rateForm.materialTypeId) {
-      const msg = 'Please select a Site, Vehicle Category, and Material Type.';
-      setFormError(msg);
-      toast.error(msg);
-      return;
-    }
-
-    if (modalMode === 'rate-add') {
-      const isDuplicate = rates.some(
-        (r) =>
-          r.siteId === rateForm.siteId &&
-          r.vehicleTypeId === rateForm.vehicleTypeId &&
-          r.materialTypeId === rateForm.materialTypeId,
-      );
-      if (isDuplicate) {
-        const msg = 'A rate is already configured for this Site, Vehicle Category, and Material combination.';
-        setFormError(msg);
-        toast.error(msg);
-        return;
-      }
-    }
-
-    setSubmitting(true);
-    try {
-      if (modalMode === 'rate-add') {
-        await createRateApi({
-          siteId: rateForm.siteId,
-          vehicleTypeId: rateForm.vehicleTypeId,
-          materialTypeId: rateForm.materialTypeId,
-          amount: amt,
-        });
-        toast.success('Rate configured successfully!');
-      } else {
-        await updateRateApi(activeItem.id, { amount: amt });
-        toast.success('Rate amount updated successfully!');
-      }
-      setModalMode(null);
-      setFormError(null);
-      void loadAllData(true);
-    } catch (err: any) {
-      const msg = err.message || 'Action failed';
-      setFormError(msg);
-      toast.error(msg);
-    } finally {
-      setSubmitting(false);
-    }
   };
 
   const handleDeleteRate = (id: string) => {
@@ -837,31 +439,31 @@ export const MasterDataPage: React.FC = () => {
                 s.pincode.includes(search),
             )
             .map((site) => (
-              <Card key={site.id} variant="glass" className="space-y-4 hover:border-slate-700 transition-all">
+              <Card key={site.id} variant="glass" className="space-y-4 hover:border-amber-500/50 transition-all border-subtle">
                 <div className="flex items-start justify-between gap-3">
                   <div className="flex items-center gap-3">
-                    <div className="w-10 h-10 rounded-xl bg-amber-500/10 text-amber-400 flex items-center justify-center border border-amber-500/20">
+                    <div className="w-10 h-10 rounded-xl bg-amber-500/10 text-amber-500 flex items-center justify-center border border-amber-500/20">
                       <MapPin className="w-5 h-5" />
                     </div>
                     <div>
                       <div className="flex items-center gap-2">
-                        <h3 className="font-bold text-white text-base">{site.siteName}</h3>
+                        <h3 className="font-bold text-primary text-base">{site.siteName}</h3>
                         <span
                           className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-extrabold uppercase tracking-wider border ${
                             site.isActive !== false
-                              ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/30'
-                              : 'bg-amber-500/10 text-amber-400 border-amber-500/30'
+                              ? 'badge-emerald'
+                              : 'badge-amber'
                           }`}
                         >
                           <span
                             className={`w-1.5 h-1.5 rounded-full ${
-                              site.isActive !== false ? 'bg-emerald-400' : 'bg-amber-400'
+                              site.isActive !== false ? 'bg-emerald-500' : 'bg-amber-500'
                             }`}
                           />
                           {site.isActive !== false ? 'Active' : 'Inactive'}
                         </span>
                       </div>
-                      <p className="text-xs text-slate-400">{site.location} • {site.pincode}</p>
+                      <p className="text-xs text-secondary">{site.location} • {site.pincode}</p>
                     </div>
                   </div>
                   <div className="flex items-center gap-1">
@@ -869,8 +471,8 @@ export const MasterDataPage: React.FC = () => {
                       onClick={() => handleToggleSiteStatus(site)}
                       className={`p-1.5 rounded-lg transition-colors cursor-pointer ${
                         site.isActive !== false
-                          ? 'text-slate-400 hover:text-amber-400 hover:bg-amber-500/10'
-                          : 'text-amber-400 hover:text-emerald-400 hover:bg-emerald-500/10'
+                          ? 'text-secondary hover:text-amber-500 hover:bg-amber-500/10'
+                          : 'text-amber-500 hover:text-emerald-500 hover:bg-emerald-500/10'
                       }`}
                       title={site.isActive !== false ? 'Deactivate Site (Hides from Dispatch Picker)' : 'Reactivate Site'}
                     >
@@ -878,7 +480,7 @@ export const MasterDataPage: React.FC = () => {
                     </button>
                     <button
                       onClick={() => openSiteModal(site)}
-                      className="p-1.5 rounded-lg text-slate-400 hover:text-amber-400 hover:bg-amber-500/10 transition-colors cursor-pointer"
+                      className="p-1.5 rounded-lg text-secondary hover:text-amber-500 hover:bg-amber-500/10 transition-colors cursor-pointer"
                       title="Edit Site"
                     >
                       <Edit2 className="w-4 h-4" />
@@ -886,15 +488,15 @@ export const MasterDataPage: React.FC = () => {
                   </div>
                 </div>
 
-                <div className="pt-2 border-t border-slate-800/80 flex items-center justify-between text-[11px] text-slate-400">
-                  <span>Configured Rates: <strong className="text-slate-200">{site._count?.rates || 0}</strong></span>
-                  <span>Recorded Loads: <strong className="text-slate-200">{site._count?.loads || 0}</strong></span>
+                <div className="pt-2 border-t border-subtle flex items-center justify-between text-[11px] text-secondary">
+                  <span>Configured Rates: <strong className="text-primary">{site._count?.rates || 0}</strong></span>
+                  <span>Recorded Loads: <strong className="text-primary">{site._count?.loads || 0}</strong></span>
                 </div>
               </Card>
             ))}
 
           {sites.length === 0 && !loading && (
-            <div className="col-span-full p-8 text-center bg-slate-900/30 rounded-3xl border border-slate-800 text-slate-400 text-sm">
+            <div className="col-span-full p-8 text-center bg-surface-solid rounded-3xl border border-subtle text-secondary text-sm">
               No sites configured yet. Click <strong>+ Add Site</strong> above to register your first operational location.
             </div>
           )}
@@ -911,17 +513,17 @@ export const MasterDataPage: React.FC = () => {
                 v.vehicleType?.name.toLowerCase().includes(search.toLowerCase()),
             )
             .map((veh) => (
-              <Card key={veh.id} variant="glass" className="space-y-4 hover:border-slate-700 transition-all">
+              <Card key={veh.id} variant="glass" className="space-y-4 hover:border-amber-500/50 transition-all border-subtle">
                 <div className="flex items-start justify-between gap-3">
                   <div className="flex items-center gap-3">
-                    <div className="w-10 h-10 rounded-xl bg-blue-500/10 text-blue-400 flex items-center justify-center border border-blue-500/20">
+                    <div className="w-10 h-10 rounded-xl bg-blue-500/10 text-blue-500 flex items-center justify-center border border-blue-500/20">
                       <Truck className="w-5 h-5" />
                     </div>
                     <div>
-                      <h3 className="font-extrabold text-white text-base tracking-wide font-mono">
+                      <h3 className="font-extrabold text-primary text-base tracking-wide font-mono">
                         {veh.vehicleNumber}
                       </h3>
-                      <span className="inline-block mt-0.5 px-2 py-0.5 rounded-full bg-blue-500/10 border border-blue-500/20 text-blue-300 text-[11px] font-semibold">
+                      <span className="inline-block mt-0.5 px-2 py-0.5 rounded-full badge-blue text-[11px] font-semibold">
                         {veh.vehicleType?.name || 'Standard'}
                       </span>
                     </div>
@@ -929,7 +531,7 @@ export const MasterDataPage: React.FC = () => {
                   <div className="flex items-center gap-1">
                     <button
                       onClick={() => openVehicleModal(veh)}
-                      className="p-1.5 rounded-lg text-slate-400 hover:text-amber-400 hover:bg-amber-500/10 transition-colors cursor-pointer"
+                      className="p-1.5 rounded-lg text-secondary hover:text-amber-500 hover:bg-amber-500/10 transition-colors cursor-pointer"
                       title="Edit Vehicle"
                     >
                       <Edit2 className="w-4 h-4" />
@@ -937,7 +539,7 @@ export const MasterDataPage: React.FC = () => {
                     {!isSiteBoy && (
                       <button
                         onClick={() => handleDeleteVehicle(veh.id, veh.vehicleNumber)}
-                        className="p-1.5 rounded-lg text-slate-400 hover:text-rose-400 hover:bg-rose-500/10 transition-colors cursor-pointer"
+                        className="p-1.5 rounded-lg text-secondary hover:text-rose-500 hover:bg-rose-500/10 transition-colors cursor-pointer"
                         title="Delete Vehicle"
                       >
                         <Trash2 className="w-4 h-4" />
@@ -946,15 +548,15 @@ export const MasterDataPage: React.FC = () => {
                   </div>
                 </div>
 
-                <div className="pt-2 border-t border-slate-800/80 flex items-center justify-between text-[11px] text-slate-400">
+                <div className="pt-2 border-t border-subtle flex items-center justify-between text-[11px] text-secondary">
                   <span>Registered: {new Date(veh.createdAt).toLocaleDateString()}</span>
-                  <span>Loads: <strong className="text-slate-200">{veh._count?.loads || 0}</strong></span>
+                  <span>Loads: <strong className="text-primary">{veh._count?.loads || 0}</strong></span>
                 </div>
               </Card>
             ))}
 
           {vehicles.length === 0 && !loading && (
-            <div className="col-span-full p-8 text-center bg-slate-900/30 rounded-3xl border border-slate-800 text-slate-400 text-sm">
+            <div className="col-span-full p-8 text-center bg-surface-solid rounded-3xl border border-subtle text-secondary text-sm">
               No vehicles in fleet. Click <strong>+ Add Vehicle</strong> above to register transport trucks.
             </div>
           )}
@@ -967,28 +569,28 @@ export const MasterDataPage: React.FC = () => {
           {vehicleTypes
             .filter((vt) => vt.name.toLowerCase().includes(search.toLowerCase()))
             .map((vt) => (
-              <Card key={vt.id} variant="glass" className="space-y-4 hover:border-slate-700 transition-all">
+              <Card key={vt.id} variant="glass" className="space-y-4 hover:border-amber-500/50 transition-all border-subtle">
                 <div className="flex items-start justify-between gap-3">
                   <div className="flex items-center gap-3">
-                    <div className="w-10 h-10 rounded-xl bg-purple-500/10 text-purple-400 flex items-center justify-center border border-purple-500/20">
+                    <div className="w-10 h-10 rounded-xl bg-purple-500/10 text-purple-500 flex items-center justify-center border border-purple-500/20">
                       <Truck className="w-5 h-5" />
                     </div>
                     <div>
-                      <h3 className="font-bold text-white text-base">{vt.name}</h3>
-                      <p className="text-xs text-slate-400">Vehicle Category</p>
+                      <h3 className="font-bold text-primary text-base">{vt.name}</h3>
+                      <p className="text-xs text-secondary">Vehicle Category</p>
                     </div>
                   </div>
                   <div className="flex items-center gap-1">
                     <button
                       onClick={() => openVTypeModal(vt)}
-                      className="p-1.5 rounded-lg text-slate-400 hover:text-amber-400 hover:bg-amber-500/10 transition-colors cursor-pointer"
+                      className="p-1.5 rounded-lg text-secondary hover:text-amber-500 hover:bg-amber-500/10 transition-colors cursor-pointer"
                       title="Edit Category"
                     >
                       <Edit2 className="w-4 h-4" />
                     </button>
                     <button
                       onClick={() => handleDeleteVType(vt.id, vt.name)}
-                      className="p-1.5 rounded-lg text-slate-400 hover:text-rose-400 hover:bg-rose-500/10 transition-colors cursor-pointer"
+                      className="p-1.5 rounded-lg text-secondary hover:text-rose-500 hover:bg-rose-500/10 transition-colors cursor-pointer"
                       title="Delete Category"
                     >
                       <Trash2 className="w-4 h-4" />
@@ -996,19 +598,19 @@ export const MasterDataPage: React.FC = () => {
                   </div>
                 </div>
 
-                <div className="pt-2 border-t border-slate-800/80 flex items-center justify-between text-[11px] text-slate-400">
+                <div className="pt-2 border-t border-subtle flex items-center justify-between text-[11px] text-secondary">
                   <span>
-                    Fleet Vehicles: <strong className="text-slate-200">{vt._count?.vehicles || 0}</strong>
+                    Fleet Vehicles: <strong className="text-primary">{vt._count?.vehicles || 0}</strong>
                   </span>
                   <span>
-                    Active Rates: <strong className="text-slate-200">{vt._count?.rates || 0}</strong>
+                    Active Rates: <strong className="text-primary">{vt._count?.rates || 0}</strong>
                   </span>
                 </div>
               </Card>
             ))}
 
           {vehicleTypes.length === 0 && !loading && (
-            <div className="col-span-full p-8 text-center bg-slate-900/30 rounded-3xl border border-slate-800 text-slate-400 text-sm">
+            <div className="col-span-full p-8 text-center bg-surface-solid rounded-3xl border border-subtle text-secondary text-sm">
               No vehicle categories defined. Click <strong>+ Add Vehicle Category</strong> above to configure tippers, lorries, etc.
             </div>
           )}
@@ -1021,28 +623,28 @@ export const MasterDataPage: React.FC = () => {
           {materialTypes
             .filter((mt) => mt.name.toLowerCase().includes(search.toLowerCase()))
             .map((mt) => (
-              <Card key={mt.id} variant="glass" className="space-y-4 hover:border-slate-700 transition-all">
+              <Card key={mt.id} variant="glass" className="space-y-4 hover:border-amber-500/50 transition-all border-subtle">
                 <div className="flex items-start justify-between gap-3">
                   <div className="flex items-center gap-3">
-                    <div className="w-10 h-10 rounded-xl bg-indigo-500/10 text-indigo-400 flex items-center justify-center border border-indigo-500/20">
+                    <div className="w-10 h-10 rounded-xl bg-indigo-500/10 text-indigo-500 flex items-center justify-center border border-indigo-500/20">
                       <Layers className="w-5 h-5" />
                     </div>
                     <div>
-                      <h3 className="font-bold text-white text-base">{mt.name}</h3>
-                      <p className="text-xs text-slate-400">Material Specification</p>
+                      <h3 className="font-bold text-primary text-base">{mt.name}</h3>
+                      <p className="text-xs text-secondary">Material Specification</p>
                     </div>
                   </div>
                   <div className="flex items-center gap-1">
                     <button
                       onClick={() => openMTypeModal(mt)}
-                      className="p-1.5 rounded-lg text-slate-400 hover:text-amber-400 hover:bg-amber-500/10 transition-colors cursor-pointer"
+                      className="p-1.5 rounded-lg text-secondary hover:text-amber-500 hover:bg-amber-500/10 transition-colors cursor-pointer"
                       title="Edit Material"
                     >
                       <Edit2 className="w-4 h-4" />
                     </button>
                     <button
                       onClick={() => handleDeleteMType(mt.id, mt.name)}
-                      className="p-1.5 rounded-lg text-slate-400 hover:text-rose-400 hover:bg-rose-500/10 transition-colors cursor-pointer"
+                      className="p-1.5 rounded-lg text-secondary hover:text-rose-500 hover:bg-rose-500/10 transition-colors cursor-pointer"
                       title="Delete Material"
                     >
                       <Trash2 className="w-4 h-4" />
@@ -1050,19 +652,19 @@ export const MasterDataPage: React.FC = () => {
                   </div>
                 </div>
 
-                <div className="pt-2 border-t border-slate-800/80 flex items-center justify-between text-[11px] text-slate-400">
+                <div className="pt-2 border-t border-subtle flex items-center justify-between text-[11px] text-secondary">
                   <span>
-                    Configured Rates: <strong className="text-slate-200">{mt._count?.rates || 0}</strong>
+                    Configured Rates: <strong className="text-primary">{mt._count?.rates || 0}</strong>
                   </span>
                   <span>
-                    Recorded Loads: <strong className="text-slate-200">{mt._count?.loads || 0}</strong>
+                    Recorded Loads: <strong className="text-primary">{mt._count?.loads || 0}</strong>
                   </span>
                 </div>
               </Card>
             ))}
 
           {materialTypes.length === 0 && !loading && (
-            <div className="col-span-full p-8 text-center bg-slate-900/30 rounded-3xl border border-slate-800 text-slate-400 text-sm">
+            <div className="col-span-full p-8 text-center bg-surface-solid rounded-3xl border border-subtle text-secondary text-sm">
               No material types defined. Click <strong>+ Add Material Type</strong> above to add aggregates, sand, etc.
             </div>
           )}
@@ -1076,27 +678,27 @@ export const MasterDataPage: React.FC = () => {
             .filter(
               (c) =>
                 c.name.toLowerCase().includes(search.toLowerCase()) ||
-                c.mobile.includes(search),
+                (c.mobile && c.mobile.includes(search)),
             )
             .map((c) => (
-              <Card key={c.id} variant="glass" className="space-y-4 hover:border-slate-700 transition-all">
+              <Card key={c.id} variant="glass" className="space-y-4 hover:border-amber-500/50 transition-all border-subtle">
                 <div className="flex items-start justify-between gap-3">
                   <div className="flex items-center gap-3">
-                    <div className="w-10 h-10 rounded-xl bg-emerald-500/10 text-emerald-400 flex items-center justify-center border border-emerald-500/20">
+                    <div className="w-10 h-10 rounded-xl bg-emerald-500/10 text-emerald-500 flex items-center justify-center border border-emerald-500/20">
                       <UserCheck className="w-5 h-5" />
                     </div>
                     <div>
-                      <h3 className="font-bold text-white text-base">{c.name}</h3>
-                      <div className="flex items-center gap-1.5 text-xs text-slate-400 mt-0.5">
-                        <Phone className="w-3 h-3 text-emerald-400" />
-                        <span>+91 {c.mobile}</span>
+                      <h3 className="font-bold text-primary text-base">{c.name}</h3>
+                      <div className="flex items-center gap-1.5 text-xs text-secondary mt-0.5">
+                        <Phone className="w-3 h-3 text-emerald-500" />
+                        <span>{c.mobile ? `+91 ${c.mobile}` : 'No phone linked'}</span>
                       </div>
                     </div>
                   </div>
                   <div className="flex items-center gap-1">
                     <button
                       onClick={() => openContractorModal(c)}
-                      className="p-1.5 rounded-lg text-slate-400 hover:text-amber-400 hover:bg-amber-500/10 transition-colors cursor-pointer"
+                      className="p-1.5 rounded-lg text-secondary hover:text-amber-500 hover:bg-amber-500/10 transition-colors cursor-pointer"
                       title="Edit Contractor"
                     >
                       <Edit2 className="w-4 h-4" />
@@ -1104,7 +706,7 @@ export const MasterDataPage: React.FC = () => {
                     {!isSiteBoy && (
                       <button
                         onClick={() => handleDeleteContractor(c.id, c.name)}
-                        className="p-1.5 rounded-lg text-slate-400 hover:text-rose-400 hover:bg-rose-500/10 transition-colors cursor-pointer"
+                        className="p-1.5 rounded-lg text-secondary hover:text-rose-500 hover:bg-rose-500/10 transition-colors cursor-pointer"
                         title="Delete Contractor"
                       >
                         <Trash2 className="w-4 h-4" />
@@ -1113,15 +715,34 @@ export const MasterDataPage: React.FC = () => {
                   </div>
                 </div>
 
-                <div className="pt-2 border-t border-slate-800/80 flex items-center justify-between text-[11px] text-slate-400">
-                  <span>Created: {new Date(c.createdAt).toLocaleDateString()}</span>
-                  <span>Loads Handled: <strong className="text-slate-200">{c._count?.loads || 0}</strong></span>
+                <div className="pt-2.5 border-t border-subtle flex flex-wrap items-center justify-between gap-2 text-[11px] text-secondary">
+                  <span>Loads: <strong className="text-primary">{c._count?.loads || 0}</strong></span>
+                  <div className="flex items-center gap-1.5">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setPaymentContractorId(c.id);
+                        setPaymentModalOpen(true);
+                      }}
+                      className="px-2 py-1 rounded-lg badge-emerald text-[10px] font-semibold flex items-center gap-1 transition cursor-pointer"
+                      title="Record Payment Collection"
+                    >
+                      <PlusCircle className="w-3 h-3" /> Record Payment
+                    </button>
+                    <Link
+                      to={`/reports?tab=contractors&contractorId=${c.id}`}
+                      className="px-2 py-1 rounded-lg badge-amber text-[10px] font-semibold flex items-center gap-1 transition cursor-pointer"
+                      title="View Passbook / Ledger"
+                    >
+                      <BookOpen className="w-3 h-3" /> Passbook
+                    </Link>
+                  </div>
                 </div>
               </Card>
             ))}
 
           {contractors.length === 0 && !loading && (
-            <div className="col-span-full p-8 text-center bg-slate-900/30 rounded-3xl border border-slate-800 text-slate-400 text-sm">
+            <div className="col-span-full p-8 text-center bg-surface-solid rounded-3xl border border-subtle text-secondary text-sm">
               No C/O contractors added. Click <strong>+ Add Contractor</strong> above to register transport contractors.
             </div>
           )}
@@ -1133,11 +754,11 @@ export const MasterDataPage: React.FC = () => {
         <div className="space-y-4">
           <Card variant="highlight" className="p-4 flex items-center justify-between gap-4">
             <div className="flex items-center gap-3">
-              <div className="p-2 rounded-xl bg-amber-500/10 text-amber-400 border border-amber-500/20">
+              <div className="p-2 rounded-xl bg-amber-500/10 text-amber-500 border border-amber-500/20">
                 <Zap className="w-4 h-4" />
               </div>
-              <div className="text-xs text-slate-300">
-                <strong>Automatic Rate Resolution:</strong> Each rate is strictly determined by <span className="text-amber-300">Site + Vehicle Type + Material Type</span>.
+              <div className="text-xs text-secondary">
+                <strong className="text-primary">Automatic Rate Resolution:</strong> Each rate is strictly determined by <span className="text-amber-500 font-bold">Site + Vehicle Type + Material Type</span>.
               </div>
             </div>
           </Card>
@@ -1151,41 +772,41 @@ export const MasterDataPage: React.FC = () => {
                   r.materialType?.name.toLowerCase().includes(search.toLowerCase()),
               )
               .map((r) => (
-                <Card key={r.id} variant="glass" className="space-y-3 hover:border-slate-700 transition-all">
+                <Card key={r.id} variant="glass" className="space-y-3 hover:border-amber-500/50 transition-all border-subtle">
                   <div className="flex items-start justify-between gap-2">
                     <div>
-                      <div className="text-xs font-semibold text-amber-400 uppercase tracking-wider">
+                      <div className="text-xs font-semibold text-amber-500 uppercase tracking-wider">
                         {r.site?.siteName}
                       </div>
-                      <div className="text-base font-extrabold text-white mt-1">
+                      <div className="text-base font-extrabold text-primary mt-1">
                         {r.vehicleType?.name}
                       </div>
-                      <div className="text-xs text-slate-400">
-                        Material: <span className="text-slate-200 font-medium">{r.materialType?.name}</span>
+                      <div className="text-xs text-secondary">
+                        Material: <span className="text-primary font-medium">{r.materialType?.name}</span>
                       </div>
                     </div>
                     <div className="text-right">
-                      <div className="text-lg font-extrabold text-emerald-400">
+                      <div className="text-lg font-extrabold text-emerald-500">
                         {formatINR(r.amount)}
                       </div>
-                      <div className="text-[10px] text-slate-500 uppercase">per trip / load</div>
+                      <div className="text-[10px] text-muted uppercase font-medium">per trip / load</div>
                     </div>
                   </div>
 
-                  <div className="pt-3 border-t border-slate-800/80 flex items-center justify-between">
-                    <span className="text-[10px] text-slate-500">
+                  <div className="pt-3 border-t border-subtle flex items-center justify-between">
+                    <span className="text-[10px] text-muted font-medium">
                       Updated {new Date(r.updatedAt).toLocaleDateString()}
                     </span>
                     <div className="flex items-center gap-1">
                       <button
                         onClick={() => openRateModal(r)}
-                        className="px-2.5 py-1 rounded-lg bg-slate-800 hover:bg-slate-700 text-xs font-semibold text-slate-200 transition-colors cursor-pointer"
+                        className="px-2.5 py-1 rounded-lg bg-surface-solid hover:bg-surface-hover text-xs font-semibold text-primary border border-subtle transition-colors cursor-pointer"
                       >
                         Edit Price
                       </button>
                       <button
                         onClick={() => handleDeleteRate(r.id)}
-                        className="p-1.5 rounded-lg text-slate-400 hover:text-rose-400 hover:bg-rose-500/10 transition-colors cursor-pointer"
+                        className="p-1.5 rounded-lg text-secondary hover:text-rose-500 hover:bg-rose-500/10 transition-colors cursor-pointer"
                         title="Delete Rate"
                       >
                         <Trash2 className="w-3.5 h-3.5" />
@@ -1196,7 +817,7 @@ export const MasterDataPage: React.FC = () => {
               ))}
 
             {rates.length === 0 && !loading && (
-              <div className="col-span-full p-8 text-center bg-slate-900/30 rounded-3xl border border-slate-800 text-slate-400 text-sm">
+              <div className="col-span-full p-8 text-center bg-surface-solid rounded-3xl border border-subtle text-secondary text-sm">
                 No rates configured yet. Click <strong>+ Configure Rate</strong> above to establish load pricing.
               </div>
             )}
@@ -1223,386 +844,42 @@ export const MasterDataPage: React.FC = () => {
       {/*                                 MODALS                                    */}
       {/* ========================================================================= */}
 
-      {/* 1. Site Modal */}
-      <Modal
-        isOpen={modalMode === 'site-add' || modalMode === 'site-edit'}
-        onClose={() => { setModalMode(null); setFormError(null); }}
-        title={modalMode === 'site-add' ? 'Add New Quarry / Yard Site' : 'Edit Site Details'}
-        maxWidth="md"
-      >
-        {formError && (
-          <div className="p-3.5 rounded-xl bg-rose-500/15 border border-rose-500/40 text-rose-200 text-xs font-semibold flex items-center gap-2.5 mb-4 animate-fade-in">
-            <AlertTriangle className="w-4 h-4 text-rose-400 shrink-0" />
-            <span className="leading-snug">{formError}</span>
-          </div>
-        )}
+      {/* Modular Shared Master Modals */}
+      <SiteModal
+        isOpen={modalMode === 'site'}
+        onClose={() => setModalMode(null)}
+        editItem={activeItem}
+      />
 
-        <form onSubmit={handleSiteSubmit} className="space-y-4">
-          <Input
-            label="Site Name"
-            required
-            placeholder="e.g. Kolenchery Crusher Unit"
-            value={siteForm.siteName}
-            onChange={(e) => { setSiteForm({ ...siteForm, siteName: e.target.value }); setFormError(null); }}
-          />
+      <VehicleModal
+        isOpen={modalMode === 'vehicle'}
+        onClose={() => setModalMode(null)}
+        editItem={activeItem}
+      />
 
-          <Input
-            label="Location / Area"
-            required
-            placeholder="e.g. Kolenchery, Ernakulam"
-            value={siteForm.location}
-            onChange={(e) => { setSiteForm({ ...siteForm, location: e.target.value }); setFormError(null); }}
-          />
+      <VehicleTypeModal
+        isOpen={modalMode === 'vtype'}
+        onClose={() => setModalMode(null)}
+        editItem={activeItem}
+      />
 
-          <Input
-            label="6-Digit Postal Pincode"
-            required
-            maxLength={6}
-            placeholder="e.g. 682311"
-            value={siteForm.pincode}
-            onChange={(e) => { setSiteForm({ ...siteForm, pincode: e.target.value.replace(/\D/g, '').slice(0, 6) }); setFormError(null); }}
-          />
+      <MaterialTypeModal
+        isOpen={modalMode === 'mtype'}
+        onClose={() => setModalMode(null)}
+        editItem={activeItem}
+      />
 
-          <div className="flex justify-end gap-2 pt-2 border-t border-slate-800">
-            <Button
-              type="button"
-              variant="ghost"
-              size="sm"
-              onClick={() => { setModalMode(null); setFormError(null); }}
-            >
-              Cancel
-            </Button>
-            <Button
-              type="submit"
-              variant="primary"
-              size="sm"
-              loading={submitting}
-            >
-              Save Site
-            </Button>
-          </div>
-        </form>
-      </Modal>
+      <ContractorModal
+        isOpen={modalMode === 'contractor'}
+        onClose={() => setModalMode(null)}
+        editItem={activeItem}
+      />
 
-      {/* 2. Vehicle Modal */}
-      <Modal
-        isOpen={modalMode === 'vehicle-add' || modalMode === 'vehicle-edit'}
-        onClose={() => { setModalMode(null); setFormError(null); }}
-        title={modalMode === 'vehicle-add' ? 'Register Fleet Vehicle' : 'Edit Vehicle'}
-        maxWidth="md"
-      >
-        {formError && (
-          <div className="p-3.5 rounded-xl bg-rose-500/15 border border-rose-500/40 text-rose-200 text-xs font-semibold flex items-center gap-2.5 mb-4 animate-fade-in">
-            <AlertTriangle className="w-4 h-4 text-rose-400 shrink-0" />
-            <span className="leading-snug">{formError}</span>
-          </div>
-        )}
-
-        <form onSubmit={handleVehicleSubmit} className="space-y-4">
-          <div>
-            <Input
-              label="Vehicle Registration Number"
-              required
-              maxLength={15}
-              placeholder="e.g. KL41A5621"
-              value={vehicleForm.vehicleNumber}
-              onChange={(e) => {
-                const val = e.target.value.replace(/[^a-zA-Z0-9]/g, '').toUpperCase();
-                setVehicleForm({ ...vehicleForm, vehicleNumber: val });
-                setFormError(null);
-              }}
-            />
-            <p className="text-[11px] text-slate-400 mt-1">
-              Letters & numbers only (e.g. <span className="text-amber-400 font-mono">KL41A5621</span>). Spaces and symbols are automatically stripped.
-            </p>
-          </div>
-
-          <CustomSelect
-            label="Vehicle Category / Type"
-            required
-            options={vehicleTypes.map((vt) => ({
-              value: vt.id,
-              label: vt.name,
-              icon: <Truck className="w-4 h-4" />,
-            }))}
-            value={vehicleForm.vehicleTypeId}
-            onChange={(val) => {
-              setVehicleForm({ ...vehicleForm, vehicleTypeId: val });
-              setFormError(null);
-            }}
-            placeholder="Select Vehicle Category"
-          />
-
-          <div className="flex justify-end gap-2 pt-2 border-t border-slate-800">
-            <Button
-              type="button"
-              variant="ghost"
-              size="sm"
-              onClick={() => { setModalMode(null); setFormError(null); }}
-            >
-              Cancel
-            </Button>
-            <Button
-              type="submit"
-              variant="primary"
-              size="sm"
-              loading={submitting}
-            >
-              Save Vehicle
-            </Button>
-          </div>
-        </form>
-      </Modal>
-
-      {/* 2B. Vehicle Category Modal (Owner) */}
-      <Modal
-        isOpen={modalMode === 'vtype-add' || modalMode === 'vtype-edit'}
-        onClose={() => { setModalMode(null); setFormError(null); }}
-        title={modalMode === 'vtype-add' ? 'Add Vehicle Category' : 'Edit Vehicle Category'}
-        maxWidth="sm"
-      >
-        {formError && (
-          <div className="p-3.5 rounded-xl bg-rose-500/15 border border-rose-500/40 text-rose-200 text-xs font-semibold flex items-center gap-2.5 mb-4 animate-fade-in">
-            <AlertTriangle className="w-4 h-4 text-rose-400 shrink-0" />
-            <span className="leading-snug">{formError}</span>
-          </div>
-        )}
-
-        <form onSubmit={handleVTypeSubmit} className="space-y-4">
-          <Input
-            label="Category Name"
-            required
-            placeholder="e.g. Tipper, Lorry, 10-Wheeler, Tractor"
-            value={vtypeForm.name}
-            onChange={(e) => { setVtypeForm({ name: e.target.value }); setFormError(null); }}
-          />
-
-          <div className="flex justify-end gap-2 pt-2 border-t border-slate-800">
-            <Button
-              type="button"
-              variant="ghost"
-              size="sm"
-              onClick={() => { setModalMode(null); setFormError(null); }}
-            >
-              Cancel
-            </Button>
-            <Button
-              type="submit"
-              variant="primary"
-              size="sm"
-              loading={submitting}
-            >
-              Save Category
-            </Button>
-          </div>
-        </form>
-      </Modal>
-
-      {/* 2C. Material Type Modal (Owner) */}
-      <Modal
-        isOpen={modalMode === 'mtype-add' || modalMode === 'mtype-edit'}
-        onClose={() => { setModalMode(null); setFormError(null); }}
-        title={modalMode === 'mtype-add' ? 'Add Material Specification' : 'Edit Material Specification'}
-        maxWidth="sm"
-      >
-        {formError && (
-          <div className="p-3.5 rounded-xl bg-rose-500/15 border border-rose-500/40 text-rose-200 text-xs font-semibold flex items-center gap-2.5 mb-4 animate-fade-in">
-            <AlertTriangle className="w-4 h-4 text-rose-400 shrink-0" />
-            <span className="leading-snug">{formError}</span>
-          </div>
-        )}
-
-        <form onSubmit={handleMTypeSubmit} className="space-y-4">
-          <Input
-            label="Material Name"
-            required
-            placeholder="e.g. Aggregates 20mm, Sand, Rubble, Quarry Dust"
-            value={mtypeForm.name}
-            onChange={(e) => { setMtypeForm({ name: e.target.value }); setFormError(null); }}
-          />
-
-          <div className="flex justify-end gap-2 pt-2 border-t border-slate-800">
-            <Button
-              type="button"
-              variant="ghost"
-              size="sm"
-              onClick={() => { setModalMode(null); setFormError(null); }}
-            >
-              Cancel
-            </Button>
-            <Button
-              type="submit"
-              variant="primary"
-              size="sm"
-              loading={submitting}
-            >
-              Save Material
-            </Button>
-          </div>
-        </form>
-      </Modal>
-
-      {/* 3. Contractor Modal */}
-      <Modal
-        isOpen={modalMode === 'contractor-add' || modalMode === 'contractor-edit'}
-        onClose={() => { setModalMode(null); setFormError(null); }}
-        title={modalMode === 'contractor-add' ? 'Add C/O Contractor' : 'Edit Contractor'}
-        maxWidth="md"
-      >
-        {formError && (
-          <div className="p-3.5 rounded-xl bg-rose-500/15 border border-rose-500/40 text-rose-200 text-xs font-semibold flex items-center gap-2.5 mb-4 animate-fade-in">
-            <AlertTriangle className="w-4 h-4 text-rose-400 shrink-0" />
-            <span className="leading-snug">{formError}</span>
-          </div>
-        )}
-
-        <form onSubmit={handleContractorSubmit} className="space-y-4">
-          <Input
-            label="Contractor Name"
-            required
-            placeholder="e.g. Sathar Pattimattom"
-            value={contractorForm.name}
-            onChange={(e) => {
-              setContractorForm({ ...contractorForm, name: e.target.value });
-              setFormError(null);
-            }}
-          />
-
-          <div>
-            <Input
-              label="10-Digit Mobile Number"
-              required
-              maxLength={10}
-              placeholder="e.g. 9845012345"
-              value={contractorForm.mobile}
-              onChange={(e) => {
-                setContractorForm({ ...contractorForm, mobile: e.target.value.replace(/\D/g, '').slice(0, 10) });
-                setFormError(null);
-              }}
-            />
-            <p className="text-[11px] text-slate-400 mt-1">
-              Unique 10-digit mobile number for dispatch matching and statements.
-            </p>
-          </div>
-
-          <div className="flex justify-end gap-2 pt-2 border-t border-slate-800">
-            <Button
-              type="button"
-              variant="ghost"
-              size="sm"
-              onClick={() => { setModalMode(null); setFormError(null); }}
-            >
-              Cancel
-            </Button>
-            <Button
-              type="submit"
-              variant="primary"
-              size="sm"
-              loading={submitting}
-            >
-              Save Contractor
-            </Button>
-          </div>
-        </form>
-      </Modal>
-
-      {/* 4. Rate Modal */}
-      <Modal
-        isOpen={modalMode === 'rate-add' || modalMode === 'rate-edit'}
-        onClose={() => { setModalMode(null); setFormError(null); }}
-        title={modalMode === 'rate-add' ? 'Configure Rate Matrix' : 'Update Rate Price'}
-        maxWidth="md"
-      >
-        {formError && (
-          <div className="p-3.5 rounded-xl bg-rose-500/15 border border-rose-500/40 text-rose-200 text-xs font-semibold flex items-center gap-2.5 mb-4 animate-fade-in">
-            <AlertTriangle className="w-4 h-4 text-rose-400 shrink-0" />
-            <span className="leading-snug">{formError}</span>
-          </div>
-        )}
-
-        <form onSubmit={handleRateSubmit} className="space-y-4">
-          {modalMode === 'rate-add' ? (
-            <>
-              <CustomSelect
-                label="Site"
-                required
-                options={sites.map((s) => ({
-                  value: s.id,
-                  label: s.siteName,
-                  subLabel: s.location,
-                  icon: <MapPin className="w-4 h-4" />,
-                }))}
-                value={rateForm.siteId}
-                onChange={(val) => { setRateForm({ ...rateForm, siteId: val }); setFormError(null); }}
-                placeholder="Select Operational Site"
-              />
-
-              <CustomSelect
-                label="Vehicle Category"
-                required
-                options={vehicleTypes.map((vt) => ({
-                  value: vt.id,
-                  label: vt.name,
-                  icon: <Truck className="w-4 h-4" />,
-                }))}
-                value={rateForm.vehicleTypeId}
-                onChange={(val) => { setRateForm({ ...rateForm, vehicleTypeId: val }); setFormError(null); }}
-                placeholder="Select Vehicle Category"
-              />
-
-              <CustomSelect
-                label="Material Type"
-                required
-                options={materialTypes.map((mt) => ({
-                  value: mt.id,
-                  label: mt.name,
-                  icon: <Layers className="w-4 h-4" />,
-                }))}
-                value={rateForm.materialTypeId}
-                onChange={(val) => { setRateForm({ ...rateForm, materialTypeId: val }); setFormError(null); }}
-                placeholder="Select Material Type"
-              />
-            </>
-          ) : (
-            <div className="p-3 rounded-xl bg-slate-900 border border-slate-800 space-y-1 text-xs text-slate-300">
-              <div>Site: <strong className="text-white">{activeItem?.site?.siteName}</strong></div>
-              <div>Vehicle Category: <strong className="text-white">{activeItem?.vehicleType?.name}</strong></div>
-              <div>Material: <strong className="text-white">{activeItem?.materialType?.name}</strong></div>
-            </div>
-          )}
-
-          <Input
-            label="Rate Amount (₹ per load)"
-            required
-            type="number"
-            inputMode="numeric"
-            step="any"
-            min="1"
-            placeholder="3500.00"
-            value={rateForm.amount}
-            onChange={(e) => { setRateForm({ ...rateForm, amount: e.target.value }); setFormError(null); }}
-          />
-
-          <div className="flex justify-end gap-2 pt-2 border-t border-slate-800">
-            <Button
-              type="button"
-              variant="ghost"
-              size="sm"
-              onClick={() => { setModalMode(null); setFormError(null); }}
-            >
-              Cancel
-            </Button>
-            <Button
-              type="submit"
-              variant="primary"
-              size="sm"
-              loading={submitting}
-            >
-              Save Rate
-            </Button>
-          </div>
-        </form>
-      </Modal>
+      <RateModal
+        isOpen={modalMode === 'rate'}
+        onClose={() => setModalMode(null)}
+        editItem={activeItem}
+      />
 
       {/* Custom Confirmation Modal */}
       {confirmState && (
@@ -1614,6 +891,20 @@ export const MasterDataPage: React.FC = () => {
           variant="danger"
           onConfirm={confirmState.onConfirm}
           onCancel={() => setConfirmState(null)}
+        />
+      )}
+
+      {/* Record Contractor Payment Collection Modal */}
+      {paymentModalOpen && (
+        <RecordPaymentModal
+          isOpen={paymentModalOpen}
+          onClose={() => setPaymentModalOpen(false)}
+          onSuccess={() => {
+            void loadAllData(true);
+          }}
+          initialContractorId={paymentContractorId}
+          sites={sites}
+          contractors={contractors}
         />
       )}
     </div>

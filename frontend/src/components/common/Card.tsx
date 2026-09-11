@@ -13,10 +13,10 @@ export const Card: React.FC<CardProps> = React.memo(({
   ...props
 }) => {
   const variantStyles = {
-    default: 'bg-slate-900 border border-slate-800',
-    glass: 'glass-card text-slate-100 shadow-xl',
+    default: 'bg-surface-solid border border-subtle text-primary shadow-sm',
+    glass: 'glass-card text-primary shadow-xl',
     highlight:
-      'glass-card border-amber-500/30 glow-amber bg-slate-900/80 text-slate-100 shadow-xl',
+      'glass-card border-amber-500/30 text-primary shadow-xl',
   };
 
   return (

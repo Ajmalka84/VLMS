@@ -1,8 +1,16 @@
 -- CreateEnum
-CREATE TYPE "user_role" AS ENUM ('SUPER_ADMIN', 'OWNER', 'CO_PARTNER', 'SITE_BOY');
+DO $$ BEGIN
+    CREATE TYPE "user_role" AS ENUM ('SUPER_ADMIN', 'OWNER', 'CO_PARTNER', 'SITE_BOY');
+EXCEPTION
+    WHEN duplicate_object THEN null;
+END $$;
 
 -- CreateEnum
-CREATE TYPE "payment_mode" AS ENUM ('CASH_DRAWER', 'BANK_TRANSFER', 'UPI_ONLINE', 'VENDOR_CREDIT', 'OWNER_DIRECT');
+DO $$ BEGIN
+    CREATE TYPE "payment_mode" AS ENUM ('CASH_DRAWER', 'BANK_TRANSFER', 'UPI_ONLINE', 'VENDOR_CREDIT', 'OWNER_DIRECT');
+EXCEPTION
+    WHEN duplicate_object THEN null;
+END $$;
 
 -- AlterTable
 ALTER TABLE "users" 

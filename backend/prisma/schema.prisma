@@ -24,10 +24,9 @@ enum PaymentType {
 
 enum PaymentMode {
   CASH_DRAWER
-  BANK_TRANSFER
-  UPI_ONLINE
   VENDOR_CREDIT
   OWNER_DIRECT
+  CO_PARTNER_DIRECT
 
   @@map("payment_mode")
 }
@@ -66,6 +65,8 @@ model User {
   expenseCategories     ExpenseCategory[]
   machinery             Machinery[]
   recordedExpenses      Expense[]             @relation("ExpenseRecorder")
+  paidDirectExpenses    Expense[]             @relation("ExpensePayerPartner")
+  collectedContractorPayments ContractorPayment[] @relation("ContractorPaymentCollector")
   shiftReconciliations  ShiftReconciliation[] @relation("ShiftSupervisor")
   approvedReconciliations ShiftReconciliation[] @relation("ShiftApprover")
   quotaTransactions     QuotaTransaction[]
@@ -90,11 +91,14 @@ model Site {
   rates                Rate[]
   loads                Load[]
   expenses             Expense[]
+  contractorPayments   ContractorPayment[]
   partnerShares        PartnerSiteShare[]
   partnerPayouts       PartnerPayout[]
   siteBoys             User[]                @relation("SiteBoyAssignment")
   shiftReconciliations ShiftReconciliation[]
 
+  @@index([userId])
+  @@index([userId])
   @@map("sites")
 }
 
@@ -123,7 +127,7 @@ model PartnerPayout {
   recordedByUserId String      @map("recorded_by_user_id") @db.Uuid
   date             DateTime    @map("date") @db.Date
   amount           Decimal     @map("amount") @db.Decimal(12, 2)
-  paymentMode      PaymentMode @default(BANK_TRANSFER) @map("payment_mode")
+  paymentMode      PaymentMode @default(OWNER_DIRECT) @map("payment_mode")
   referenceNumber  String?     @map("reference_number") @db.VarChar(100)
   remarks          String?     @map("remarks") @db.VarChar(255)
   createdAt        DateTime    @default(now()) @map("created_at") @db.Timestamp
@@ -184,16 +188,18 @@ model Vehicle {
 }
 
 model Contractor {
-  id        String   @id @default(uuid()) @db.Uuid
-  userId    String   @map("user_id") @db.Uuid
-  name      String   @map("name") @db.VarChar
-  mobile    String   @map("mobile") @db.VarChar
-  createdAt DateTime @default(now()) @map("created_at") @db.Timestamp
-  updatedAt DateTime @updatedAt @map("updated_at") @db.Timestamp
+  id        String              @id @default(uuid()) @db.Uuid
+  userId    String              @map("user_id") @db.Uuid
+  name      String              @map("name") @db.VarChar
+  mobile    String              @map("mobile") @db.VarChar
+  createdAt DateTime            @default(now()) @map("created_at") @db.Timestamp
+  updatedAt DateTime            @updatedAt @map("updated_at") @db.Timestamp
 
-  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  user      User                @relation(fields: [userId], references: [id], onDelete: Cascade)
   loads     Load[]
+  payments  ContractorPayment[]
 
+  @@index([userId])
   @@map("contractors")
 }
 
@@ -245,6 +251,8 @@ model Machinery {
   user               User      @relation(fields: [userId], references: [id], onDelete: Cascade)
   expenses           Expense[]
 
+  @@index([userId])
+  @@index([userId, isActive])
   @@map("machinery")
 }
 
@@ -253,9 +261,12 @@ model Expense {
   siteId             String          @map("site_id") @db.Uuid
   categoryId         String          @map("category_id") @db.Uuid
   recordedByUserId   String          @map("recorded_by_user_id") @db.Uuid
+  payerPartnerUserId String?         @map("payer_partner_user_id") @db.Uuid
   date               DateTime        @map("date") @db.Date
   amount             Decimal         @map("amount") @db.Decimal(12, 2)
   paymentMode        PaymentMode     @default(CASH_DRAWER) @map("payment_mode")
+  transferMethod     String?         @map("transfer_method") @db.VarChar(50)
+  referenceNumber    String?         @map("reference_number") @db.VarChar(100)
   paidTo             String?         @map("paid_to") @db.VarChar(100)
   remarks            String?         @map("remarks") @db.VarChar(255)
   
@@ -275,11 +286,14 @@ model Expense {
   site               Site            @relation(fields: [siteId], references: [id], onDelete: Cascade)
   category           ExpenseCategory @relation(fields: [categoryId], references: [id], onDelete: Restrict)
   recordedBy         User            @relation("ExpenseRecorder", fields: [recordedByUserId], references: [id], onDelete: Restrict)
+  payerPartner       User?           @relation("ExpensePayerPartner", fields: [payerPartnerUserId], references: [id], onDelete: SetNull)
   machinery          Machinery?      @relation(fields: [machineryId], references: [id], onDelete: SetNull)
 
   @@index([siteId, date])
   @@index([siteId, deletedAt, date])
   @@index([paymentMode, siteId, deletedAt])
+  @@index([payerPartnerUserId, date])
+  @@index([payerPartnerUserId, deletedAt, date])
   @@index([categoryId, date])
   @@index([machineryId, date])
   @@index([machineryId, deletedAt, date])
@@ -359,5 +373,34 @@ model QuotaTransaction {
 
   user            User     @relation(fields: [userId], references: [id], onDelete: Cascade)
 
+  @@index([userId])
+  @@index([userId])
   @@map("quota_transactions")
+}
+
+model ContractorPayment {
+  id                String      @id @default(uuid()) @db.Uuid
+  siteId            String      @map("site_id") @db.Uuid
+  contractorId      String      @map("contractor_id") @db.Uuid
+  collectedByUserId String      @map("collected_by_user_id") @db.Uuid
+  date              DateTime    @map("date") @db.Date
+  amount            Decimal     @map("amount") @db.Decimal(12, 2)
+  paymentMode       PaymentMode @default(CASH_DRAWER) @map("payment_mode")
+  transferMethod    String?     @map("transfer_method") @db.VarChar(50)
+  referenceNumber   String?     @map("reference_number") @db.VarChar(100)
+  remarks           String?     @map("remarks") @db.VarChar(255)
+  createdAt         DateTime    @default(now()) @map("created_at") @db.Timestamp
+  updatedAt         DateTime    @updatedAt @map("updated_at") @db.Timestamp
+  deletedAt         DateTime?   @map("deleted_at") @db.Timestamp
+
+  site              Site        @relation(fields: [siteId], references: [id], onDelete: Cascade)
+  contractor        Contractor  @relation(fields: [contractorId], references: [id], onDelete: Cascade)
+  collectedBy       User        @relation("ContractorPaymentCollector", fields: [collectedByUserId], references: [id], onDelete: Restrict)
+
+  @@index([contractorId, date])
+  @@index([contractorId, deletedAt, date])
+  @@index([siteId, date])
+  @@index([collectedByUserId, date])
+  @@index([deletedAt])
+  @@map("contractor_payments")
 }

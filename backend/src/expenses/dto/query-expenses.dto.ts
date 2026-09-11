@@ -4,6 +4,10 @@ import { PaymentModeDto } from './create-expense.dto';
 export class QueryExpensesDto {
   @IsOptional()
   @IsUUID()
+  customerId?: string;
+
+  @IsOptional()
+  @IsUUID()
   siteId?: string;
 
   @IsOptional()
@@ -25,6 +29,10 @@ export class QueryExpensesDto {
   @IsOptional()
   @IsEnum(PaymentModeDto)
   paymentMode?: PaymentModeDto;
+
+  @IsOptional()
+  @IsUUID()
+  payerPartnerUserId?: string;
 
   @IsOptional()
   @IsString()

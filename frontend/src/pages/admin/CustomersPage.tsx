@@ -501,7 +501,7 @@ export const CustomersPage: React.FC = () => {
             />
           </div>
 
-          <div className="flex flex-wrap items-center gap-1 rounded-2xl bg-slate-900/90 p-1.5 border border-slate-800">
+          <div className="flex flex-wrap items-center gap-1 rounded-2xl bg-surface-solid p-1.5 border border-subtle">
             {[
               { key: 'all', label: 'All' },
               { key: 'active_paid', label: 'Active Paid' },
@@ -517,7 +517,7 @@ export const CustomersPage: React.FC = () => {
                 className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer select-none ${
                   statusFilter === f.key
                     ? 'bg-amber-500 text-slate-950 font-black shadow-sm'
-                    : 'text-slate-400 hover:text-slate-200'
+                    : 'text-secondary hover:text-primary'
                 }`}
               >
                 {f.label}
@@ -530,12 +530,12 @@ export const CustomersPage: React.FC = () => {
       {/* Customers List */}
       {loading && customers.length === 0 ? (
         <div className="py-12 flex flex-col items-center justify-center gap-3">
-          <RefreshCw className="w-8 h-8 animate-spin text-amber-400" />
-          <p className="text-sm text-slate-400">Loading customers...</p>
+          <RefreshCw className="w-8 h-8 animate-spin text-amber-500" />
+          <p className="text-sm text-secondary">Loading customers...</p>
         </div>
       ) : customers.length === 0 ? (
         <EmptyState
-          icon={<Users className="w-8 h-8 text-slate-500" />}
+          icon={<Users className="w-8 h-8 text-muted" />}
           title="No Customers Found"
           description={
             search || statusFilter !== 'all'
@@ -562,56 +562,56 @@ export const CustomersPage: React.FC = () => {
             <Card
               key={customer.id}
               variant="glass"
-              className="p-4 sm:p-5 flex flex-col lg:flex-row lg:items-center justify-between gap-4 hover:border-slate-700 transition-all"
+              className="p-4 sm:p-5 flex flex-col lg:flex-row lg:items-center justify-between gap-4 hover:border-amber-500/50 transition-all border-subtle"
             >
               <div className="space-y-2">
                 <div className="flex flex-wrap items-center gap-2.5">
-                  <h3 className="text-base font-bold text-white">{customer.businessName}</h3>
+                  <h3 className="text-base font-bold text-primary">{customer.businessName}</h3>
                   {renderSubscriptionBadge(customer)}
                 </div>
 
-                <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-slate-400">
+                <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-secondary">
                   <div className="flex items-center gap-1.5">
-                    <Phone className="w-3.5 h-3.5 text-amber-400" />
+                    <Phone className="w-3.5 h-3.5 text-amber-500" />
                     <span>{customer.mobile}</span>
                   </div>
                   {customer.gstin && (
                     <div className="flex items-center gap-1.5">
-                      <Building2 className="w-3.5 h-3.5 text-indigo-400" />
+                      <Building2 className="w-3.5 h-3.5 text-indigo-500" />
                       <span>GSTIN: {customer.gstin}</span>
                     </div>
                   )}
                   <div className="flex items-center gap-1.5">
-                    <Calendar className="w-3.5 h-3.5 text-slate-500" />
+                    <Calendar className="w-3.5 h-3.5 text-muted" />
                     <span>Joined: {new Date(customer.createdAt).toLocaleDateString('en-IN')}</span>
                   </div>
                   {customer.subscriptionExpiresAt && (
                     <div className="flex items-center gap-1.5">
-                      <Clock className="w-3.5 h-3.5 text-amber-400" />
-                      <span className="font-semibold text-slate-300">
+                      <Clock className="w-3.5 h-3.5 text-amber-500" />
+                      <span className="font-semibold text-primary">
                         Expires: {new Date(customer.subscriptionExpiresAt).toLocaleDateString('en-IN')}
                       </span>
                     </div>
                   )}
-                  <div className="flex items-center gap-1.5 px-2 py-0.5 rounded-md bg-slate-800/80 border border-slate-700/60 text-slate-300 font-medium">
-                    <Users className="w-3.5 h-3.5 text-amber-400" />
+                  <div className="flex items-center gap-1.5 px-2 py-0.5 rounded-md bg-surface-solid border border-subtle text-secondary font-medium">
+                    <Users className="w-3.5 h-3.5 text-amber-500" />
                     <span>CP: {customer.quotaUsage?.coPartner.active ?? 0}/{customer.coPartnerQuota ?? 3}</span>
-                    <span className="text-slate-600">•</span>
+                    <span className="text-muted">•</span>
                     <span>SB: {customer.quotaUsage?.siteBoy.active ?? 0}/{customer.siteBoyQuota ?? 2}</span>
                   </div>
                 </div>
               </div>
 
               {/* 1-Click Renewal & Action Bar */}
-              <div className="flex flex-wrap items-center gap-2 pt-3 lg:pt-0 border-t lg:border-t-0 border-slate-800">
+              <div className="flex flex-wrap items-center gap-2 pt-3 lg:pt-0 border-t lg:border-t-0 border-subtle">
                 {/* 1-Click Renew +1 Year */}
                 <button
                   type="button"
                   onClick={() => handleQuickRenew(customer, 'RENEW_ANNUAL_1Y', 'Renewed for 1 Year (+₹9,999)')}
                   title="Renew for 1 Year (365 Days)"
-                  className="px-3 py-1.5 rounded-xl bg-emerald-950/60 border border-emerald-700/60 hover:bg-emerald-900/80 text-emerald-300 text-xs font-bold transition-all cursor-pointer flex items-center gap-1 shadow-sm"
+                  className="px-3 py-1.5 rounded-xl badge-emerald hover:opacity-90 text-xs font-bold transition-all cursor-pointer flex items-center gap-1 shadow-sm"
                 >
-                  <Sparkles className="w-3.5 h-3.5 text-emerald-400" /> Renew 1-Yr (₹9,999)
+                  <Sparkles className="w-3.5 h-3.5 text-emerald-500" /> Renew 1-Yr (₹9,999)
                 </button>
 
                 {/* Extend Shutdown +30 Days */}
@@ -619,7 +619,7 @@ export const CustomersPage: React.FC = () => {
                   type="button"
                   onClick={() => handleQuickRenew(customer, 'EXTEND_SHUTDOWN_30D', 'Extended validity by +30 Days')}
                   title="Extend validity by 30 days for monsoon or government shutdown compensation"
-                  className="px-2.5 py-1.5 rounded-xl bg-slate-900 border border-slate-800 hover:border-slate-700 text-slate-300 hover:text-white text-xs font-semibold transition-all cursor-pointer flex items-center gap-1"
+                  className="px-2.5 py-1.5 rounded-xl bg-surface-solid border border-subtle hover:border-amber-500/50 text-secondary hover:text-primary text-xs font-semibold transition-all cursor-pointer flex items-center gap-1"
                 >
                   +30d Shutdown
                 </button>
@@ -640,7 +640,7 @@ export const CustomersPage: React.FC = () => {
                     setShowSubModal(true);
                   }}
                   title="Configure Subscription Dates"
-                  className="p-2 rounded-xl bg-slate-900 border border-slate-800 hover:border-slate-700 text-slate-300 hover:text-amber-400 transition-colors cursor-pointer"
+                  className="p-2 rounded-xl bg-surface-solid border border-subtle hover:border-amber-500/50 text-secondary hover:text-amber-500 transition-colors cursor-pointer"
                 >
                   <CreditCard className="w-4 h-4" />
                 </button>
@@ -661,9 +661,9 @@ export const CustomersPage: React.FC = () => {
                     setShowQuotaModal(true);
                   }}
                   title="Expand Team Quotas (+₹2,000 / slot)"
-                  className="p-2 rounded-xl bg-slate-900 border border-slate-800 hover:border-slate-700 text-slate-300 hover:text-amber-400 transition-colors cursor-pointer"
+                  className="p-2 rounded-xl bg-surface-solid border border-subtle hover:border-amber-500/50 text-secondary hover:text-amber-500 transition-colors cursor-pointer"
                 >
-                  <Users className="w-4 h-4 text-amber-400" />
+                  <Users className="w-4 h-4 text-amber-500" />
                 </button>
 
                 {/* Status Toggle */}
@@ -673,8 +673,8 @@ export const CustomersPage: React.FC = () => {
                   title={customer.isActive ? 'Deactivate Account' : 'Activate Account'}
                   className={`px-3 py-1.5 rounded-xl border text-xs font-semibold transition-all cursor-pointer ${
                     customer.isActive
-                      ? 'border-rose-800/60 bg-rose-950/40 text-rose-300 hover:bg-rose-900/60'
-                      : 'border-emerald-800/60 bg-emerald-950/40 text-emerald-300 hover:bg-emerald-900/60'
+                      ? 'border-rose-500/30 bg-rose-500/10 text-rose-500 hover:bg-rose-500/20'
+                      : 'border-emerald-500/30 bg-emerald-500/10 text-emerald-500 hover:bg-emerald-500/20'
                   }`}
                 >
                   {customer.isActive ? 'Deactivate' : 'Activate'}
@@ -693,7 +693,7 @@ export const CustomersPage: React.FC = () => {
                     setShowEditModal(true);
                   }}
                   title="Edit Customer"
-                  className="p-2 rounded-xl bg-slate-900 border border-slate-800 hover:border-slate-700 text-slate-300 hover:text-amber-400 transition-colors cursor-pointer"
+                  className="p-2 rounded-xl bg-surface-solid border border-subtle hover:border-amber-500/50 text-secondary hover:text-amber-500 transition-colors cursor-pointer"
                 >
                   <Edit2 className="w-4 h-4" />
                 </button>
@@ -708,7 +708,7 @@ export const CustomersPage: React.FC = () => {
                     setShowResetModal(true);
                   }}
                   title="Reset Password"
-                  className="p-2 rounded-xl bg-slate-900 border border-slate-800 hover:border-slate-700 text-slate-300 hover:text-amber-400 transition-colors cursor-pointer"
+                  className="p-2 rounded-xl bg-surface-solid border border-subtle hover:border-amber-500/50 text-secondary hover:text-amber-500 transition-colors cursor-pointer"
                 >
                   <KeyRound className="w-4 h-4" />
                 </button>

@@ -213,7 +213,7 @@ export async function getContractorsApi(): Promise<Contractor[]> {
 
 export async function createContractorApi(dto: {
   name: string;
-  mobile: string;
+  mobile?: string;
 }): Promise<Contractor> {
   return apiClient<Contractor>('/contractors', {
     method: 'POST',

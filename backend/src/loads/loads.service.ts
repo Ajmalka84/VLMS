@@ -36,10 +36,19 @@ export class LoadsService {
       }
     }
 
-    // 1. Verify Site belongs to tenant
-    const site = await this.prisma.site.findUnique({
-      where: { id: dto.siteId },
-    });
+    // 1-4. Parallel Entity Lookups
+    const [site, vehicle, contractor, materialType] = await Promise.all([
+      this.prisma.site.findUnique({ where: { id: dto.siteId } }),
+      this.prisma.vehicle.findUnique({
+        where: { id: dto.vehicleId },
+        include: { vehicleType: true },
+      }),
+      dto.contractorId
+        ? this.prisma.contractor.findUnique({ where: { id: dto.contractorId } })
+        : Promise.resolve(null),
+      this.prisma.materialType.findUnique({ where: { id: dto.materialTypeId } }),
+    ]);
+
     if (!site) {
       throw new NotFoundException(`Site with ID "${dto.siteId}" not found`);
     }
@@ -47,11 +56,6 @@ export class LoadsService {
       throw new ForbiddenException('You do not have permission to access this site');
     }
 
-    // 2. Verify Vehicle belongs to tenant
-    const vehicle = await this.prisma.vehicle.findUnique({
-      where: { id: dto.vehicleId },
-      include: { vehicleType: true },
-    });
     if (!vehicle) {
       throw new NotFoundException(`Vehicle with ID "${dto.vehicleId}" not found`);
     }
@@ -59,11 +63,7 @@ export class LoadsService {
       throw new ForbiddenException('You do not have permission to access this vehicle');
     }
 
-    // 3. Verify Contractor belongs to tenant (if contractor is provided)
     if (dto.contractorId) {
-      const contractor = await this.prisma.contractor.findUnique({
-        where: { id: dto.contractorId },
-      });
       if (!contractor) {
         throw new NotFoundException(`Contractor with ID "${dto.contractorId}" not found`);
       }
@@ -72,10 +72,6 @@ export class LoadsService {
       }
     }
 
-    // 4. Verify Material Type exists and belongs to tenant
-    const materialType = await this.prisma.materialType.findUnique({
-      where: { id: dto.materialTypeId },
-    });
     if (!materialType || materialType.userId !== ownerId) {
       throw new NotFoundException(
         `Material type with ID "${dto.materialTypeId}" not found`,
@@ -314,10 +310,6 @@ export class LoadsService {
     const ownerId = user.ownerId;
 
     if (user.role === 'SITE_BOY') {
-      const diffHours = (Date.now() - new Date(current.createdAt).getTime()) / (1000 * 60 * 60);
-      if (diffHours > 2) {
-        throw new ForbiddenException('Site supervisors can only edit loads within 2 hours of creation.');
-      }
       if (dto.siteId && dto.siteId !== user.assignedSiteId) {
         throw new ForbiddenException('Site supervisor cannot reassign loads to another site.');
       }

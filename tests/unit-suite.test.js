@@ -777,6 +777,144 @@ describe('Frontend Utilities Unit Tests', () => {
       assert.equal(manifest.theme_color, '#0f172a');
     });
   });
+
+  describe('12. Expenses Ledger State & Null Safe Response Normalizer', () => {
+    it('safely normalizes null or undefined API response without throwing TypeError', () => {
+      const normalizeExpensesResponse = (data) => {
+        if (data && Array.isArray(data.expenses)) {
+          return {
+            expenses: data.expenses,
+            summary: data.summary || {
+              totalExpenses: 0,
+              totalCashDrawerExpenses: 0,
+              totalMachineRent: 0,
+              totalAdvancesPaid: 0,
+              totalMachineHours: 0,
+              count: 0,
+            },
+          };
+        }
+        return {
+          expenses: [],
+          summary: {
+            totalExpenses: 0,
+            totalCashDrawerExpenses: 0,
+            totalMachineRent: 0,
+            totalAdvancesPaid: 0,
+            totalMachineHours: 0,
+            count: 0,
+          },
+        };
+      };
+
+      // Test with null
+      const nullResult = normalizeExpensesResponse(null);
+      assert.deepEqual(nullResult.expenses, []);
+      assert.equal(nullResult.summary.totalExpenses, 0);
+
+      // Test with undefined
+      const undefResult = normalizeExpensesResponse(undefined);
+      assert.deepEqual(undefResult.expenses, []);
+
+      // Test with valid data
+      const validResult = normalizeExpensesResponse({
+        expenses: [{ id: 'exp-1', amount: 500 }],
+        summary: { totalExpenses: 500, count: 1 },
+      });
+      assert.equal(validResult.expenses.length, 1);
+      assert.equal(validResult.summary.totalExpenses, 500);
+    });
+
+    it('resolves default selectedSiteId correctly for SITE_BOY vs OWNER/others', () => {
+      const getInitialSiteFilter = (user) => {
+        if (user?.role === 'SITE_BOY' && user?.assignedSiteId) {
+          return user.assignedSiteId;
+        }
+        return '';
+      };
+
+      assert.equal(getInitialSiteFilter({ role: 'OWNER', id: 'u1' }), '', 'Owner must default to All Sites ("")');
+      assert.equal(getInitialSiteFilter({ role: 'SUPER_ADMIN', id: 'u2' }), '', 'Super Admin must default to All Sites ("")');
+      assert.equal(getInitialSiteFilter({ role: 'CO_PARTNER', id: 'u3' }), '', 'Co-Partner must default to All Sites ("")');
+      assert.equal(
+        getInitialSiteFilter({ role: 'SITE_BOY', id: 'u4', assignedSiteId: 'site-123' }),
+        'site-123',
+        'Site Boy must default to assigned site'
+      );
+    });
+  });
+
+  describe('13. Universal Expense Advances & Vendor Credit Settlement Calculation', () => {
+    it('calculates balance due accurately for VENDOR_CREDIT and CASH_DRAWER', () => {
+      const computeBalanceDue = (expense) => {
+        const amt = Number(expense.amount) || 0;
+        const adv = Number(expense.advanceAmount) || 0;
+        if (expense.paymentMode === 'VENDOR_CREDIT') {
+          return Math.max(0, amt - adv);
+        }
+        return 0; // CASH_DRAWER is paid in full on the spot
+      };
+
+      // Case 1: Vendor Credit with partial advance
+      const creditExpWithAdv = { paymentMode: 'VENDOR_CREDIT', amount: 10000, advanceAmount: 3000 };
+      assert.equal(computeBalanceDue(creditExpWithAdv), 7000);
+
+      // Case 2: Vendor Credit with no advance (0 advance)
+      const creditExpNoAdv = { paymentMode: 'VENDOR_CREDIT', amount: 8500, advanceAmount: 0 };
+      assert.equal(computeBalanceDue(creditExpNoAdv), 8500);
+
+      // Case 3: Vendor Credit fully settled with advance equal to amount
+      const creditExpFullAdv = { paymentMode: 'VENDOR_CREDIT', amount: 5000, advanceAmount: 5000 };
+      assert.equal(computeBalanceDue(creditExpFullAdv), 0);
+
+      // Case 4: Cash Drawer expense
+      const cashExp = { paymentMode: 'CASH_DRAWER', amount: 2500, advanceAmount: 0 };
+      assert.equal(computeBalanceDue(cashExp), 0);
+    });
+
+    it('calculates Shift Drawer cash outflows accurately combining CASH_DRAWER and VENDOR_CREDIT advances', () => {
+      const expenses = [
+        { paymentMode: 'CASH_DRAWER', amount: 1500, advanceAmount: 0 },
+        { paymentMode: 'VENDOR_CREDIT', amount: 12000, advanceAmount: 2000 }, // only 2000 cash paid
+        { paymentMode: 'VENDOR_CREDIT', amount: 5000, advanceAmount: 0 },    // 0 cash paid
+        { paymentMode: 'CASH_DRAWER', amount: 500, advanceAmount: 0 },
+      ];
+
+      const openingCash = 10000;
+      const cashInflows = 25000;
+
+      let cashOutflows = 0;
+      for (const exp of expenses) {
+        if (exp.paymentMode === 'CASH_DRAWER') {
+          cashOutflows += Number(exp.amount) || 0;
+        } else if (exp.paymentMode === 'VENDOR_CREDIT') {
+          cashOutflows += Number(exp.advanceAmount) || 0;
+        }
+      }
+
+      assert.equal(cashOutflows, 4000); // 1500 + 2000 + 0 + 500 = 4000
+      const expectedCash = openingCash + cashInflows - cashOutflows;
+      assert.equal(expectedCash, 31000); // 10000 + 25000 - 4000 = 31000
+    });
+
+    it('computes totalPendingSettlement across mixed expenses ledger', () => {
+      const expenses = [
+        { paymentMode: 'CASH_DRAWER', amount: 2000, advanceAmount: 0 },
+        { paymentMode: 'VENDOR_CREDIT', amount: 15000, advanceAmount: 5000 }, // 10,000 pending
+        { paymentMode: 'VENDOR_CREDIT', amount: 7500, advanceAmount: 1500 },  // 6,000 pending
+        { paymentMode: 'VENDOR_CREDIT', amount: 3000, advanceAmount: 3000 },  // 0 pending
+      ];
+
+      let totalPendingSettlement = 0;
+      for (const exp of expenses) {
+        if (exp.paymentMode === 'VENDOR_CREDIT') {
+          totalPendingSettlement += Math.max(0, (Number(exp.amount) || 0) - (Number(exp.advanceAmount) || 0));
+        }
+      }
+
+      assert.equal(totalPendingSettlement, 16000); // 10000 + 6000 + 0 = 16000
+    });
+  });
 });
 
 

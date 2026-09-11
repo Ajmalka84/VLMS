@@ -302,15 +302,15 @@ export const TeamManagement: React.FC = () => {
       {/* Quota Progress Overview Cards */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
         {/* Co-Partner Quota Card */}
-        <Card variant="glass" className="p-5 border border-slate-800 bg-slate-900/80">
+        <Card variant="glass" className="p-5 border border-subtle bg-surface">
           <div className="flex items-start justify-between">
             <div className="flex items-center gap-3">
               <div className="w-10 h-10 rounded-xl bg-amber-500/10 border border-amber-500/20 flex items-center justify-center text-amber-400">
                 <Users className="w-5 h-5" />
               </div>
               <div>
-                <h3 className="font-bold text-white text-base">Co-Partner Quota</h3>
-                <p className="text-xs text-slate-400">Multi-site equity partners with report access</p>
+                <h3 className="font-bold text-primary text-base">Co-Partner Quota</h3>
+                <p className="text-xs text-muted">Multi-site equity partners with report access</p>
               </div>
             </div>
             <span
@@ -325,7 +325,7 @@ export const TeamManagement: React.FC = () => {
           </div>
 
           <div className="mt-4">
-            <div className="w-full h-2.5 bg-slate-950 rounded-full overflow-hidden border border-slate-800">
+            <div className="w-full h-2.5 bg-surface-solid rounded-full overflow-hidden border border-subtle">
               <div
                 className={`h-full transition-all duration-500 rounded-full ${
                   cpQuota.active >= cpQuota.max
@@ -340,7 +340,7 @@ export const TeamManagement: React.FC = () => {
           </div>
 
           <div className="mt-3 flex items-center justify-between text-xs">
-            <span className="text-slate-400">Plan limit: {cpQuota.max} Active Partners</span>
+            <span className="text-muted">Plan limit: {cpQuota.max} Active Partners</span>
             {cpQuota.active >= cpQuota.max && (
               <span className="text-amber-400 font-semibold flex items-center gap-1">
                 <Sparkles className="w-3.5 h-3.5" /> Quota reached (+₹2,000 / slot)
@@ -350,15 +350,15 @@ export const TeamManagement: React.FC = () => {
         </Card>
 
         {/* Site Boy Quota Card */}
-        <Card variant="glass" className="p-5 border border-slate-800 bg-slate-900/80">
+        <Card variant="glass" className="p-5 border border-subtle bg-surface">
           <div className="flex items-start justify-between">
             <div className="flex items-center gap-3">
               <div className="w-10 h-10 rounded-xl bg-blue-500/10 border border-blue-500/20 flex items-center justify-center text-blue-400">
                 <UserCheck className="w-5 h-5" />
               </div>
               <div>
-                <h3 className="font-bold text-white text-base">Site Supervisor Quota</h3>
-                <p className="text-xs text-slate-400">Gate & weighbridge operators locked to 1 site</p>
+                <h3 className="font-bold text-primary text-base">Site Supervisor Quota</h3>
+                <p className="text-xs text-muted">Gate & weighbridge operators locked to 1 site</p>
               </div>
             </div>
             <span
@@ -373,7 +373,7 @@ export const TeamManagement: React.FC = () => {
           </div>
 
           <div className="mt-4">
-            <div className="w-full h-2.5 bg-slate-950 rounded-full overflow-hidden border border-slate-800">
+            <div className="w-full h-2.5 bg-surface-solid rounded-full overflow-hidden border border-subtle">
               <div
                 className={`h-full transition-all duration-500 rounded-full ${
                   sbQuota.active >= sbQuota.max
@@ -388,7 +388,7 @@ export const TeamManagement: React.FC = () => {
           </div>
 
           <div className="mt-3 flex items-center justify-between text-xs">
-            <span className="text-slate-400">Plan limit: {sbQuota.max} Active Supervisors</span>
+            <span className="text-muted">Plan limit: {sbQuota.max} Active Supervisors</span>
             {sbQuota.active >= sbQuota.max && (
               <span className="text-blue-400 font-semibold flex items-center gap-1">
                 <Sparkles className="w-3.5 h-3.5" /> Quota reached (+₹2,000 / slot)
@@ -402,11 +402,11 @@ export const TeamManagement: React.FC = () => {
       <div className="space-y-4">
         <div className="flex items-center justify-between gap-3">
           <div>
-            <h2 className="text-lg font-bold text-white flex items-center gap-2">
+            <h2 className="text-lg font-bold text-primary flex items-center gap-2">
               <Users className="w-5 h-5 text-amber-400" />
               Co-Partners & Joint Venture Investors
             </h2>
-            <p className="text-xs text-slate-400">
+            <p className="text-xs text-muted">
               Partners can access dashboard and financial reports for their assigned sites.
             </p>
           </div>
@@ -421,9 +421,9 @@ export const TeamManagement: React.FC = () => {
           </Button>
         </div>
 
-        <Card variant="glass" className="overflow-hidden border border-slate-800 bg-slate-900/60 p-0">
+        <Card variant="glass" className="overflow-hidden border border-subtle bg-surface p-0">
           {loading ? (
-            <div className="p-8 text-center text-slate-400 flex items-center justify-center gap-2">
+            <div className="p-8 text-center text-muted flex items-center justify-center gap-2">
               <RefreshCw className="w-5 h-5 animate-spin text-amber-400" />
               <span>Loading team members...</span>
             </div>
@@ -440,7 +440,7 @@ export const TeamManagement: React.FC = () => {
           ) : (
             <div className="overflow-x-auto">
               <table className="w-full text-left text-sm">
-                <thead className="bg-slate-950/80 text-slate-400 text-xs uppercase tracking-wider border-b border-slate-800">
+                <thead className="bg-surface-solid text-secondary text-xs uppercase tracking-wider border-b border-subtle">
                   <tr>
                     <th className="p-4 font-semibold">Partner</th>
                     <th className="p-4 font-semibold">Mobile (Login)</th>
@@ -449,7 +449,7 @@ export const TeamManagement: React.FC = () => {
                     <th className="p-4 font-semibold text-right">Actions</th>
                   </tr>
                 </thead>
-                <tbody className="divide-y divide-slate-800/60">
+                <tbody className="divide-y divide-subtle">
                   {data.coPartners.map((partner) => {
                     const activeShares = (partner.partnerShares || []).filter(
                       (s) => s.isActive && !s.effectiveTo
@@ -458,16 +458,16 @@ export const TeamManagement: React.FC = () => {
                     const avatarLetter = (partner.name || partner.mobile || 'P').charAt(0).toUpperCase();
 
                     return (
-                      <tr key={partner.id} className="hover:bg-slate-800/30 transition-colors">
-                        <td className="p-4 font-medium text-slate-200">
+                      <tr key={partner.id} className="hover:bg-surface-hover transition-colors">
+                        <td className="p-4 font-medium text-primary">
                           <div className="flex items-center gap-3">
                             <div className="w-8 h-8 rounded-xl bg-amber-500/10 border border-amber-500/30 flex items-center justify-center text-xs font-bold text-amber-400 shrink-0">
                               {avatarLetter}
                             </div>
-                            <span className="font-bold text-white text-sm">{displayName}</span>
+                            <span className="font-bold text-primary text-sm">{displayName}</span>
                           </div>
                         </td>
-                        <td className="p-4 text-slate-300 font-mono text-xs">
+                        <td className="p-4 text-secondary font-mono text-xs">
                           {partner.mobile}
                         </td>
                         <td className="p-4">
@@ -501,7 +501,7 @@ export const TeamManagement: React.FC = () => {
                               variant="ghost"
                               size="icon"
                               onClick={() => openEditCoPartner(partner)}
-                              className="p-1.5 text-slate-400 hover:text-amber-400 min-h-[32px] min-w-[32px]"
+                              className="p-1.5 text-muted hover:text-amber-400 min-h-[32px] min-w-[32px]"
                               title="Edit Shares & Details"
                             >
                               <Edit2 className="w-3.5 h-3.5" />
@@ -512,7 +512,7 @@ export const TeamManagement: React.FC = () => {
                               onClick={() =>
                                 confirmDelete(partner.id, displayName, 'Co-Partner')
                               }
-                              className="p-1.5 text-slate-400 hover:text-rose-400 min-h-[32px] min-w-[32px]"
+                              className="p-1.5 text-muted hover:text-rose-400 min-h-[32px] min-w-[32px]"
                               title="Deactivate Account"
                             >
                               <Trash2 className="w-3.5 h-3.5" />
@@ -533,11 +533,11 @@ export const TeamManagement: React.FC = () => {
       <div className="space-y-4">
         <div className="flex items-center justify-between gap-3">
           <div>
-            <h2 className="text-lg font-bold text-white flex items-center gap-2">
+            <h2 className="text-lg font-bold text-primary flex items-center gap-2">
               <UserCheck className="w-5 h-5 text-blue-400" />
               Site Supervisors & Gate Boys
             </h2>
-            <p className="text-xs text-slate-400">
+            <p className="text-xs text-muted">
               Supervisors can enter loads, expenses, and close shift registers strictly for their 1 assigned quarry site.
             </p>
           </div>
@@ -552,9 +552,9 @@ export const TeamManagement: React.FC = () => {
           </Button>
         </div>
 
-        <Card variant="glass" className="overflow-hidden border border-slate-800 bg-slate-900/60 p-0">
+        <Card variant="glass" className="overflow-hidden border border-subtle bg-surface p-0">
           {loading ? (
-            <div className="p-8 text-center text-slate-400 flex items-center justify-center gap-2">
+            <div className="p-8 text-center text-muted flex items-center justify-center gap-2">
               <RefreshCw className="w-5 h-5 animate-spin text-blue-400" />
               <span>Loading supervisors...</span>
             </div>
@@ -571,7 +571,7 @@ export const TeamManagement: React.FC = () => {
           ) : (
             <div className="overflow-x-auto">
               <table className="w-full text-left text-sm">
-                <thead className="bg-slate-950/80 text-slate-400 text-xs uppercase tracking-wider border-b border-slate-800">
+                <thead className="bg-surface-solid text-secondary text-xs uppercase tracking-wider border-b border-subtle">
                   <tr>
                     <th className="p-4 font-semibold">Supervisor</th>
                     <th className="p-4 font-semibold">Mobile (Login)</th>
@@ -580,22 +580,22 @@ export const TeamManagement: React.FC = () => {
                     <th className="p-4 font-semibold text-right">Actions</th>
                   </tr>
                 </thead>
-                <tbody className="divide-y divide-slate-800/60">
+                <tbody className="divide-y divide-subtle">
                   {data.siteBoys.map((sb) => {
                     const displayName = sb.name || sb.mobile || 'Unnamed Supervisor';
                     const avatarLetter = (sb.name || sb.mobile || 'S').charAt(0).toUpperCase();
 
                     return (
-                      <tr key={sb.id} className="hover:bg-slate-800/30 transition-colors">
-                        <td className="p-4 font-medium text-slate-200">
+                      <tr key={sb.id} className="hover:bg-surface-hover transition-colors">
+                        <td className="p-4 font-medium text-primary">
                           <div className="flex items-center gap-3">
                             <div className="w-8 h-8 rounded-xl bg-blue-500/10 border border-blue-500/30 flex items-center justify-center text-xs font-bold text-blue-400 shrink-0">
                               {avatarLetter}
                             </div>
-                            <span className="font-bold text-white text-sm">{displayName}</span>
+                            <span className="font-bold text-primary text-sm">{displayName}</span>
                           </div>
                         </td>
-                        <td className="p-4 text-slate-300 font-mono text-xs">
+                        <td className="p-4 text-secondary font-mono text-xs">
                           {sb.mobile}
                         </td>
                         <td className="p-4">
@@ -604,7 +604,7 @@ export const TeamManagement: React.FC = () => {
                               <MapPin className="w-3.5 h-3.5 text-blue-400 shrink-0" />
                               <span>{sb.assignedSite.siteName}</span>
                               {sb.assignedSite.location && (
-                                <span className="text-slate-400 text-[11px]">({sb.assignedSite.location})</span>
+                                <span className="text-muted text-[11px]">({sb.assignedSite.location})</span>
                               )}
                             </span>
                           ) : (
@@ -622,7 +622,7 @@ export const TeamManagement: React.FC = () => {
                               variant="ghost"
                               size="icon"
                               onClick={() => openEditSiteBoy(sb)}
-                              className="p-1.5 text-slate-400 hover:text-blue-400 min-h-[32px] min-w-[32px]"
+                              className="p-1.5 text-muted hover:text-blue-400 min-h-[32px] min-w-[32px]"
                               title="Edit Assignment & Details"
                             >
                               <Edit2 className="w-3.5 h-3.5" />
@@ -633,7 +633,7 @@ export const TeamManagement: React.FC = () => {
                               onClick={() =>
                                 confirmDelete(sb.id, displayName, 'Site Boy')
                               }
-                              className="p-1.5 text-slate-400 hover:text-rose-400 min-h-[32px] min-w-[32px]"
+                              className="p-1.5 text-muted hover:text-rose-400 min-h-[32px] min-w-[32px]"
                               title="Deactivate Account"
                             >
                               <Trash2 className="w-3.5 h-3.5" />
@@ -700,12 +700,12 @@ export const TeamManagement: React.FC = () => {
           </div>
 
           {/* Site Assignment & Percentage Share Matrix */}
-          <div className="pt-2 border-t border-slate-800/80">
+          <div className="pt-2 border-t border-subtle">
             <div className="flex items-center justify-between mb-2.5">
-              <label className="block text-xs font-bold text-slate-300 uppercase tracking-wider">
+              <label className="block text-xs font-bold text-secondary uppercase tracking-wider">
                 Assigned Quarry Sites & Equity Share *
               </label>
-              <span className="text-[11px] text-slate-400">Total ≤ 100% per site</span>
+              <span className="text-[11px] text-muted">Total ≤ 100% per site</span>
             </div>
 
             <div className="space-y-2 max-h-52 overflow-y-auto pr-1">
@@ -716,8 +716,8 @@ export const TeamManagement: React.FC = () => {
                     key={share.siteId}
                     className={`p-3 rounded-2xl border transition-all ${
                       share.isActive
-                        ? 'bg-slate-950/80 border-amber-500/30 ring-1 ring-amber-500/10'
-                        : 'bg-slate-950/30 border-slate-800/60 opacity-60'
+                        ? 'bg-surface-solid border-amber-500/30 ring-1 ring-amber-500/10'
+                        : 'bg-surface-solid/40 border-subtle opacity-60'
                     }`}
                   >
                     <div className="flex items-center justify-between gap-3">
@@ -753,7 +753,7 @@ export const TeamManagement: React.FC = () => {
                                 prev.map((s, i) => (i === idx ? { ...s, sharePercentage: val } : s))
                               );
                             }}
-                            rightSlot={<span className="text-slate-500 text-xs font-bold">%</span>}
+                            rightSlot={<span className="text-muted text-xs font-bold">%</span>}
                             className="text-right text-amber-400 font-bold"
                           />
                         </div>
@@ -761,8 +761,8 @@ export const TeamManagement: React.FC = () => {
                     </div>
 
                     {share.isActive && (
-                      <div className="mt-2.5 flex items-center justify-between text-[11px] text-slate-400 pt-2 border-t border-slate-900 gap-2">
-                        <span className="flex items-center gap-1.5 text-slate-400 shrink-0">
+                      <div className="mt-2.5 flex items-center justify-between text-[11px] text-muted pt-2 border-t border-subtle gap-2">
+                        <span className="flex items-center gap-1.5 text-muted shrink-0">
                           <Calendar className="w-3.5 h-3.5 text-amber-400" />
                           Effective from:
                         </span>
@@ -785,7 +785,7 @@ export const TeamManagement: React.FC = () => {
             </div>
           </div>
 
-          <div className="pt-4 border-t border-slate-800 flex items-center justify-end gap-3">
+          <div className="pt-4 border-t border-subtle flex items-center justify-end gap-3">
             <Button
               type="button"
               variant="ghost"
@@ -868,13 +868,13 @@ export const TeamManagement: React.FC = () => {
               }))}
               placeholder="Select Quarry Site"
             />
-            <p className="text-[11px] text-slate-400 mt-1.5 flex items-center gap-1">
+            <p className="text-[11px] text-muted mt-1.5 flex items-center gap-1">
               <Info className="w-3.5 h-3.5 text-blue-400 shrink-0" />
               Site supervisors can only record loads and expenses for their assigned quarry site.
             </p>
           </div>
 
-          <div className="pt-4 border-t border-slate-800 flex items-center justify-end gap-3">
+          <div className="pt-4 border-t border-subtle flex items-center justify-end gap-3">
             <Button
               type="button"
               variant="ghost"

@@ -20,9 +20,9 @@ export const StatusBadge: React.FC<StatusBadgeProps> = ({
   if (isLoading) {
     return (
       <span
-        className={`inline-flex items-center gap-1.5 rounded-full font-medium bg-slate-800 text-slate-300 border border-slate-700 ${sizeClasses}`}
+        className={`inline-flex items-center gap-1.5 rounded-full font-medium badge-slate ${sizeClasses}`}
       >
-        <RefreshCw className="w-3 h-3 animate-spin text-slate-400" />
+        <RefreshCw className="w-3 h-3 animate-spin text-muted" />
         {label ?? 'Checking'}
       </span>
     );
@@ -31,10 +31,10 @@ export const StatusBadge: React.FC<StatusBadgeProps> = ({
   if (isOk) {
     return (
       <span
-        className={`inline-flex items-center gap-1.5 rounded-full font-medium bg-emerald-950/80 text-emerald-300 border border-emerald-800/60 shadow-sm ${sizeClasses}`}
+        className={`inline-flex items-center gap-1.5 rounded-full font-medium badge-emerald ${sizeClasses}`}
       >
-        <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
-        <CheckCircle2 className="w-3 h-3 text-emerald-400" />
+        <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
+        <CheckCircle2 className="w-3 h-3 text-emerald-500" />
         {label ?? 'Online'}
       </span>
     );
@@ -42,10 +42,10 @@ export const StatusBadge: React.FC<StatusBadgeProps> = ({
 
   return (
     <span
-      className={`inline-flex items-center gap-1.5 rounded-full font-medium bg-rose-950/80 text-rose-300 border border-rose-800/60 shadow-sm ${sizeClasses}`}
+      className={`inline-flex items-center gap-1.5 rounded-full font-medium badge-rose ${sizeClasses}`}
     >
-      <span className="w-1.5 h-1.5 rounded-full bg-rose-400" />
-      <AlertCircle className="w-3 h-3 text-rose-400" />
+      <span className="w-1.5 h-1.5 rounded-full bg-rose-500" />
+      <AlertCircle className="w-3 h-3 text-rose-500" />
       {label ?? 'Offline'}
     </span>
   );

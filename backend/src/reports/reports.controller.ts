@@ -3,6 +3,7 @@ import { ReportsService } from './reports.service';
 import { ReportsCashflowService } from './reports-cashflow.service';
 import { ReportsPartnerShareService } from './reports-partner-share.service';
 import { ReportsMachineryService } from './reports-machinery.service';
+import { ReportsBalanceSheetService } from './reports-balance-sheet.service';
 import { QuerySettlementDto } from './dto/query-settlement.dto';
 import { QueryContractorSummaryDto } from './dto/query-contractor-summary.dto';
 import { QueryCashflowDto } from './dto/query-cashflow.dto';
@@ -21,6 +22,7 @@ export class ReportsController {
     private readonly reportsCashflowService: ReportsCashflowService,
     private readonly reportsPartnerShareService: ReportsPartnerShareService,
     private readonly reportsMachineryService: ReportsMachineryService,
+    private readonly reportsBalanceSheetService: ReportsBalanceSheetService,
   ) {}
 
   @Get('contractors-summary')
@@ -59,6 +61,15 @@ export class ReportsController {
     return this.reportsPartnerShareService.getPartnerSettlement(user, query);
   }
 
+  @Get('partner-rebalance')
+  @Roles('OWNER', 'CO_PARTNER', 'SUPER_ADMIN')
+  async getPartnerRebalance(
+    @CurrentUser() user: AuthUser,
+    @Query() query: QueryPartnerSettlementDto,
+  ) {
+    return this.reportsPartnerShareService.getMultiPartnerRebalanceReport(user, query);
+  }
+
   @Get('machinery-settlement')
   @Roles('OWNER', 'CO_PARTNER', 'SUPER_ADMIN')
   async getMachinerySettlement(
@@ -67,5 +78,13 @@ export class ReportsController {
   ) {
     return this.reportsMachineryService.getMachinerySettlement(user, query);
   }
-}
 
+  @Get('balance-sheet')
+  @Roles('OWNER', 'CO_PARTNER', 'SUPER_ADMIN')
+  async getSiteBalanceSheet(
+    @CurrentUser() user: AuthUser,
+    @Query() query: QueryCashflowDto,
+  ) {
+    return this.reportsBalanceSheetService.getSiteBalanceSheet(user, query);
+  }
+}

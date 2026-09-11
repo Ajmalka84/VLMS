@@ -94,11 +94,11 @@ export const ExpenseCategoriesManagement: React.FC = () => {
     <div className="space-y-6 animate-fade-in">
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
-          <h2 className="text-lg font-bold text-white flex items-center gap-2">
+          <h2 className="text-lg font-bold text-primary flex items-center gap-2">
             <Layers className="w-5 h-5 text-amber-400" />
             Expense Categories
           </h2>
-          <p className="text-xs text-slate-400 mt-0.5">
+          <p className="text-xs text-muted mt-0.5">
             Manage cost heads for site expenditure (Diesel, Labour, Explosives, Maintenance, Food, etc.)
           </p>
         </div>
@@ -113,7 +113,7 @@ export const ExpenseCategoriesManagement: React.FC = () => {
       </div>
 
       {isLoading ? (
-        <div className="p-12 text-center text-slate-400 animate-pulse">Loading categories...</div>
+        <div className="p-12 text-center text-muted animate-pulse">Loading categories...</div>
       ) : error ? (
         <div className="p-8 text-center text-rose-400 font-semibold">{error}</div>
       ) : categories.length === 0 ? (
@@ -125,19 +125,19 @@ export const ExpenseCategoriesManagement: React.FC = () => {
           onAction={openCreateModal}
         />
       ) : (
-        <div className="overflow-hidden rounded-2xl border border-slate-800 bg-slate-900/60 backdrop-blur-md shadow-xl">
-          <table className="w-full text-left text-sm text-slate-300">
-            <thead className="bg-slate-950/80 text-[11px] uppercase font-bold tracking-wider text-slate-400 border-b border-slate-800">
+        <div className="overflow-hidden rounded-2xl border border-subtle bg-surface shadow-xl">
+          <table className="w-full text-left text-sm text-secondary">
+            <thead className="bg-surface-solid text-[11px] uppercase font-bold tracking-wider text-secondary border-b border-subtle">
               <tr>
                 <th className="px-4 py-3.5">Category Name</th>
                 <th className="px-4 py-3.5">Type</th>
                 <th className="px-4 py-3.5 text-right">Actions</th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-slate-800/60">
+            <tbody className="divide-y divide-subtle">
               {categories.map((cat) => (
-                <tr key={cat.id} className="hover:bg-slate-800/40 transition">
-                  <td className="px-4 py-3.5 font-bold text-white flex items-center gap-2.5">
+                <tr key={cat.id} className="hover:bg-surface-hover transition">
+                  <td className="px-4 py-3.5 font-bold text-primary flex items-center gap-2.5">
                     <div className="w-7 h-7 rounded-lg bg-amber-500/10 border border-amber-500/20 flex items-center justify-center text-amber-400">
                       <Layers className="w-3.5 h-3.5" />
                     </div>
@@ -154,14 +154,14 @@ export const ExpenseCategoriesManagement: React.FC = () => {
                     <div className="flex items-center justify-end gap-1.5">
                       <button
                         onClick={() => openEditModal(cat)}
-                        className="p-1.5 text-slate-400 hover:text-amber-400 hover:bg-slate-800 rounded-lg transition"
+                        className="p-1.5 text-muted hover:text-amber-400 hover:bg-surface-hover rounded-lg transition"
                         title="Edit Name"
                       >
                         <Edit2 className="w-4 h-4" />
                       </button>
                       <button
                         onClick={() => setDeletingCat(cat)}
-                        className="p-1.5 text-slate-400 hover:text-rose-400 hover:bg-slate-800 rounded-lg transition"
+                        className="p-1.5 text-muted hover:text-rose-400 hover:bg-surface-hover rounded-lg transition"
                         title="Delete Category"
                       >
                         <Trash2 className="w-4 h-4" />
@@ -198,7 +198,7 @@ export const ExpenseCategoriesManagement: React.FC = () => {
             onChange={(e) => setCatName(e.target.value)}
           />
 
-          <div className="flex items-center justify-end gap-3 pt-2 border-t border-slate-800">
+          <div className="flex items-center justify-end gap-3 pt-2 border-t border-subtle">
             <Button
               type="button"
               variant="ghost"

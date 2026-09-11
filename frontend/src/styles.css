@@ -1,53 +1,166 @@
 @import "tailwindcss";
 @import "./styles/theme.css";
 
+@theme {
+  --color-app: var(--bg-app);
+  --color-surface: var(--bg-surface);
+  --color-surface-solid: var(--bg-surface-solid);
+  --color-surface-elevated: var(--bg-surface-elevated);
+  --color-surface-input: var(--bg-surface-input);
+  
+  --color-subtle: var(--border-subtle);
+  --color-highlight: var(--border-highlight);
+  --color-divider: var(--border-divider);
+  --color-focus: var(--border-focus);
+
+  --color-primary: var(--text-primary);
+  --color-secondary: var(--text-secondary);
+  --color-muted: var(--text-muted);
+}
+
 @layer base {
   :root {
     --font-sans: 'Inter', system-ui, -apple-system, BlinkMacSystemFont, sans-serif;
     --font-display: 'Outfit', 'Inter', system-ui, sans-serif;
   }
 
+  *, ::before, ::after {
+    border-color: var(--border-subtle);
+  }
+
   body {
     font-family: var(--font-sans);
+    background-color: var(--bg-app);
+    color: var(--text-primary);
     -webkit-tap-highlight-color: transparent;
+    transition: background-color 0.15s ease, color 0.15s ease;
   }
 
   h1, h2, h3, h4, h5, h6 {
     font-family: var(--font-display);
+    color: var(--text-primary);
   }
+}
+
+/* Explicit Global Token Utility Overrides */
+.bg-app {
+  background-color: var(--bg-app);
+}
+
+.bg-surface {
+  background-color: var(--bg-surface);
+}
+
+.bg-surface-solid {
+  background-color: var(--bg-surface-solid);
+}
+
+.bg-surface-elevated {
+  background-color: var(--bg-surface-elevated);
+}
+
+.bg-surface-input {
+  background-color: var(--bg-surface-input);
+}
+
+.border-subtle {
+  border-color: var(--border-subtle);
+}
+
+.border-highlight {
+  border-color: var(--border-highlight);
+}
+
+.border-divider {
+  border-color: var(--border-divider);
+}
+
+.text-primary {
+  color: var(--text-primary);
+}
+
+.text-secondary {
+  color: var(--text-secondary);
+}
+
+.text-muted {
+  color: var(--text-muted);
 }
 
 /* Custom Utilities for Premium Glassmorphism & UI Accents */
 .glass-panel {
-  background: rgba(15, 23, 42, 0.75);
+  background: var(--bg-glass);
   backdrop-filter: blur(12px);
   -webkit-backdrop-filter: blur(12px);
-  border: 1px solid rgba(51, 65, 85, 0.5);
+  border: 1px solid var(--border-subtle);
 }
 
 .glass-card {
-  background: rgba(30, 41, 59, 0.6);
+  background: var(--bg-surface);
   backdrop-filter: blur(8px);
   -webkit-backdrop-filter: blur(8px);
-  border: 1px solid rgba(51, 65, 85, 0.4);
+  border: 1px solid var(--border-subtle);
 }
 
 .glow-amber {
-  box-shadow: 0 0 25px -5px rgba(245, 158, 11, 0.2);
+  box-shadow: var(--shadow-glow-amber);
 }
 
 .glow-emerald {
-  box-shadow: 0 0 25px -5px rgba(16, 185, 129, 0.2);
+  box-shadow: var(--shadow-glow-emerald);
+}
+
+/* Badge Styles */
+.badge-amber {
+  background-color: var(--badge-amber-bg);
+  border-color: var(--badge-amber-border);
+  color: var(--badge-amber-text);
+}
+
+.badge-emerald {
+  background-color: var(--badge-emerald-bg);
+  border-color: var(--badge-emerald-border);
+  color: var(--badge-emerald-text);
+}
+
+.badge-rose {
+  background-color: var(--badge-rose-bg);
+  border-color: var(--badge-rose-border);
+  color: var(--badge-rose-text);
+}
+
+.badge-blue {
+  background-color: var(--badge-blue-bg);
+  border-color: var(--badge-blue-border);
+  color: var(--badge-blue-text);
+}
+
+.badge-purple {
+  background-color: var(--badge-purple-bg);
+  border-color: var(--badge-purple-border);
+  color: var(--badge-purple-text);
+}
+
+.badge-cyan {
+  background-color: var(--badge-cyan-bg);
+  border-color: var(--badge-cyan-border);
+  color: var(--badge-cyan-text);
+}
+
+.badge-slate {
+  background-color: var(--badge-slate-bg);
+  border-color: var(--badge-slate-border);
+  color: var(--badge-slate-text);
 }
 
 /* ========================================================================== */
-/*                NATIVE DARK THEME FOR HTML5 DATE & TIME PICKERS             */
+/*           THEME-ADAPTIVE NATIVE HTML5 DATE & TIME PICKERS                  */
 /* ========================================================================== */
 input[type="date"],
 input[type="datetime-local"],
 input[type="time"],
 input[type="month"] {
-  color-scheme: dark;
+  color-scheme: var(--color-scheme, dark);
   min-width: 0;
   max-width: 100%;
   box-sizing: border-box;
@@ -58,8 +171,10 @@ input[type="date"]::-webkit-date-and-time-value {
   min-height: 1.25rem;
 }
 
-input[type="date"]::-webkit-calendar-picker-indicator,
-input[type="datetime-local"]::-webkit-calendar-picker-indicator {
+[data-theme="dark"] input[type="date"]::-webkit-calendar-picker-indicator,
+[data-theme="dark"] input[type="datetime-local"]::-webkit-calendar-picker-indicator,
+.dark input[type="date"]::-webkit-calendar-picker-indicator,
+.dark input[type="datetime-local"]::-webkit-calendar-picker-indicator {
   cursor: pointer;
   filter: invert(0.85) sepia(100%) saturate(300%) hue-rotate(5deg);
   opacity: 0.85;
@@ -68,31 +183,40 @@ input[type="datetime-local"]::-webkit-calendar-picker-indicator {
   transition: opacity 0.2s ease, filter 0.2s ease, transform 0.15s ease;
 }
 
+[data-theme="light"] input[type="date"]::-webkit-calendar-picker-indicator,
+[data-theme="light"] input[type="datetime-local"]::-webkit-calendar-picker-indicator,
+.light input[type="date"]::-webkit-calendar-picker-indicator,
+.light input[type="datetime-local"]::-webkit-calendar-picker-indicator {
+  cursor: pointer;
+  opacity: 0.75;
+  padding: 4px;
+  border-radius: 6px;
+  transition: opacity 0.2s ease, transform 0.15s ease;
+}
+
 input[type="date"]::-webkit-calendar-picker-indicator:hover,
 input[type="datetime-local"]::-webkit-calendar-picker-indicator:hover {
   opacity: 1;
-  filter: invert(0.95) sepia(100%) saturate(600%) hue-rotate(5deg);
   transform: scale(1.08);
 }
 
-
-/* Custom Scrollbar for Sleek Dark Theme */
+/* Custom Scrollbar for Theme */
 ::-webkit-scrollbar {
   width: 6px;
   height: 6px;
 }
 
 ::-webkit-scrollbar-track {
-  background: rgba(15, 23, 42, 0.6);
+  background: var(--bg-app);
 }
 
 ::-webkit-scrollbar-thumb {
-  background: rgba(51, 65, 85, 0.8);
+  background: var(--border-highlight);
   border-radius: 9999px;
 }
 
 ::-webkit-scrollbar-thumb:hover {
-  background: rgba(100, 116, 139, 1);
+  background: var(--text-muted);
 }
 
 /* Skeleton Loading Shimmer */
@@ -108,25 +232,15 @@ input[type="datetime-local"]::-webkit-calendar-picker-indicator:hover {
 .skeleton-shimmer {
   background: linear-gradient(
     90deg,
-    rgba(30, 41, 59, 0.6) 25%,
-    rgba(51, 65, 85, 0.4) 37%,
-    rgba(30, 41, 59, 0.6) 63%
+    var(--border-subtle) 25%,
+    var(--border-highlight) 37%,
+    var(--border-subtle) 63%
   );
   background-size: 200% 100%;
   animation: shimmer 1.5s infinite;
 }
 
-/* ========================================================================== */
-/*                       SUPER-OPTIMIZED RENDER PERFORMANCE                   */
-/* ========================================================================== */
-
-/* Virtual-like CSS rendering containment for large data tables and lists */
-.content-visibility-auto {
-  content-visibility: auto;
-  contain-intrinsic-size: auto 68px;
-}
-
-/* Eliminate 300ms tap delay on mobile touch devices */
+/* Touch and Performance */
 button,
 [role="button"],
 input,
@@ -135,41 +249,8 @@ a {
   touch-action: manipulation;
 }
 
-/* Hardware accelerated layer promotion for fluid 60fps animations */
 .gpu-layer {
   transform: translateZ(0);
   backface-visibility: hidden;
   perspective: 1000px;
 }
-
-/* ========================================================================== */
-/*                       DESIGN SYSTEM HELPER UTILITIES                       */
-/* ========================================================================== */
-
-.input-dark {
-  background-color: rgba(2, 6, 23, 0.85);
-  border: 1px solid rgba(30, 41, 59, 0.8);
-  color: #f8fafc;
-  border-radius: 1rem;
-  font-size: 0.875rem;
-  font-weight: 600;
-  padding: 0.625rem 0.875rem;
-  min-height: 44px;
-  outline: none;
-  transition: all 0.15s ease;
-}
-
-.input-dark:focus {
-  border-color: #f59e0b;
-  box-shadow: 0 0 0 1px rgba(245, 158, 11, 0.5);
-}
-
-.table-row-hover {
-  transition: background-color 0.15s ease, transform 0.15s ease;
-}
-
-.table-row-hover:hover {
-  background-color: rgba(30, 41, 59, 0.4);
-}
-
-

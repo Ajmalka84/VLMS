@@ -42,15 +42,15 @@ export const Button = React.memo<ButtonProps>(({
     primary:
       'bg-amber-500 hover:bg-amber-400 text-slate-950 font-black shadow-md shadow-amber-500/20 border border-amber-400/30',
     secondary:
-      'bg-slate-900/90 hover:bg-slate-800 text-slate-200 border border-slate-800 hover:border-slate-700 shadow-sm',
+      'bg-surface hover:bg-surface-elevated text-primary border border-subtle shadow-sm',
     danger:
-      'bg-rose-950/70 hover:bg-rose-900/80 border border-rose-800/80 text-rose-300 hover:text-rose-200 shadow-sm',
+      'bg-rose-500/15 hover:bg-rose-500/25 border border-rose-500/30 text-rose-500 hover:text-rose-400 shadow-sm',
     success:
-      'bg-emerald-950/70 hover:bg-emerald-900/80 border border-emerald-800/80 text-emerald-300 hover:text-emerald-200 shadow-sm',
+      'bg-emerald-500/15 hover:bg-emerald-500/25 border border-emerald-500/30 text-emerald-500 hover:text-emerald-400 shadow-sm',
     ghost:
-      'bg-transparent hover:bg-slate-900/80 text-slate-400 hover:text-white',
+      'bg-transparent hover:bg-surface-elevated text-secondary hover:text-primary',
     outline:
-      'bg-transparent border border-slate-800 hover:border-slate-700 text-slate-300 hover:text-white',
+      'bg-transparent border border-subtle hover:bg-surface text-secondary hover:text-primary',
   };
 
   const sizeStyles: Record<ButtonSize, string> = {

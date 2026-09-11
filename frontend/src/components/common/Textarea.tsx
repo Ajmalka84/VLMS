@@ -39,13 +39,13 @@ export const Textarea = React.memo(
             <div className="flex items-center justify-between">
               <label
                 htmlFor={textareaId}
-                className="text-xs font-semibold text-slate-300 block select-none"
+                className="text-xs font-semibold text-secondary block select-none"
               >
                 {label}
               </label>
 
               {showCount && maxLength && (
-                <span className="text-[10px] text-slate-500 font-mono">
+                <span className="text-[10px] text-muted font-mono">
                   {currentLength}/{maxLength}
                 </span>
               )}
@@ -59,10 +59,10 @@ export const Textarea = React.memo(
             maxLength={maxLength}
             value={value}
             disabled={disabled}
-            className={`w-full bg-slate-950/80 border rounded-2xl p-3 text-xs sm:text-sm font-semibold text-white placeholder:text-slate-600 transition-all duration-150 outline-none select-none disabled:opacity-50 disabled:cursor-not-allowed resize-y ${
+            className={`w-full bg-surface-solid border rounded-2xl p-3 text-xs sm:text-sm font-semibold text-primary placeholder:text-muted transition-all duration-150 outline-none select-none disabled:opacity-50 disabled:cursor-not-allowed resize-y ${
               error
                 ? 'border-rose-500/80 focus:border-rose-500 focus:ring-1 focus:ring-rose-500/50 shadow-sm shadow-rose-950/50'
-                : 'border-slate-800 focus:border-amber-500 focus:ring-1 focus:ring-amber-500/50'
+                : 'border-subtle focus:border-amber-500 focus:ring-1 focus:ring-amber-500/50'
             } ${className}`}
             {...props}
           />
@@ -70,7 +70,7 @@ export const Textarea = React.memo(
           {error ? (
             <p className="text-[11px] font-bold text-rose-400 animate-fade-in">{error}</p>
           ) : helperText ? (
-            <p className="text-[11px] text-slate-500">{helperText}</p>
+            <p className="text-[11px] text-muted">{helperText}</p>
           ) : null}
         </div>
       );

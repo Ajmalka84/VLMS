@@ -51,6 +51,15 @@ export class ShiftsController {
     return this.shiftsService.approveShift(user, id, dto);
   }
 
+  @Patch(':id/reopen')
+  @Roles('OWNER', 'SUPER_ADMIN')
+  async reopenShift(
+    @CurrentUser() user: AuthUser,
+    @Param('id') id: string,
+  ) {
+    return this.shiftsService.reopenShift(user, id);
+  }
+
   @Get('history')
   @Roles('OWNER', 'CO_PARTNER', 'SITE_BOY', 'SUPER_ADMIN')
   async listShifts(

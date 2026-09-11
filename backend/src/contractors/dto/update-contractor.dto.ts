@@ -1,4 +1,4 @@
-import { IsOptional, IsString, MinLength, MaxLength, Matches } from 'class-validator';
+import { IsOptional, IsString, MinLength, MaxLength, Matches, ValidateIf } from 'class-validator';
 
 export class UpdateContractorDto {
   @IsString()
@@ -9,6 +9,7 @@ export class UpdateContractorDto {
 
   @IsString()
   @IsOptional()
+  @ValidateIf((o) => !!o.mobile)
   @Matches(/^[0-9]{10}$/, {
     message: 'Mobile number must be a valid 10-digit mobile number',
   })

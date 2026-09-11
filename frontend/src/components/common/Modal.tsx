@@ -75,30 +75,30 @@ export const Modal = React.memo<ModalProps>(({
     >
       {/* Backdrop */}
       <div
-        className="fixed inset-0 bg-slate-950/80 backdrop-blur-md transition-opacity"
+        className="fixed inset-0 bg-modal-backdrop backdrop-blur-md transition-opacity"
         onClick={closeOnOverlayClick ? onClose : undefined}
       />
 
       {/* Dialog Container */}
       <Card
-        variant="highlight"
-        className={`w-full ${maxWidthStyles[maxWidth]} relative z-10 p-5 sm:p-6 space-y-4 shadow-2xl border border-slate-800 bg-slate-900/95 max-h-[90vh] flex flex-col ${className}`}
+        variant="default"
+        className={`w-full ${maxWidthStyles[maxWidth]} relative z-10 p-5 sm:p-6 space-y-4 shadow-2xl bg-surface-solid border border-subtle max-h-[90vh] flex flex-col ${className}`}
       >
         {/* Header */}
         {(title || icon) && (
-          <div className="flex items-start justify-between gap-3 pb-3 border-b border-slate-800/80 shrink-0">
+          <div className="flex items-start justify-between gap-3 pb-3 border-b border-subtle shrink-0">
             <div className="flex items-center gap-3 min-w-0">
-              {icon && <div className="shrink-0 text-amber-400">{icon}</div>}
+              {icon && <div className="shrink-0 text-amber-500">{icon}</div>}
               <div className="min-w-0">
                 {typeof title === 'string' ? (
-                  <h3 className="text-base sm:text-lg font-black text-white truncate tracking-tight">
+                  <h3 className="text-base sm:text-lg font-black text-primary truncate tracking-tight">
                     {title}
                   </h3>
                 ) : (
                   title
                 )}
                 {description && (
-                  <p className="text-xs text-slate-400 font-medium truncate mt-0.5">
+                  <p className="text-xs text-secondary font-medium truncate mt-0.5">
                     {description}
                   </p>
                 )}
@@ -109,7 +109,7 @@ export const Modal = React.memo<ModalProps>(({
               type="button"
               onClick={onClose}
               aria-label="Close dialog"
-              className="p-1.5 rounded-xl bg-slate-950/80 border border-slate-800 text-slate-400 hover:text-white hover:bg-slate-800 transition-all cursor-pointer active:scale-95 touch-manipulation shrink-0"
+              className="p-1.5 rounded-xl bg-surface border border-subtle text-secondary hover:text-primary hover:bg-surface-elevated transition-all cursor-pointer active:scale-95 touch-manipulation shrink-0"
             >
               <X className="w-4 h-4" />
             </button>
@@ -117,13 +117,13 @@ export const Modal = React.memo<ModalProps>(({
         )}
 
         {/* Modal Body */}
-        <div className="flex-1 overflow-y-auto pr-1 space-y-4 scrollbar-thin scrollbar-thumb-slate-800">
+        <div className="flex-1 overflow-y-auto p-1.5 space-y-4 scrollbar-thin">
           {children}
         </div>
 
         {/* Footer */}
         {footer && (
-          <div className="pt-3 border-t border-slate-800/80 flex items-center justify-end gap-2.5 shrink-0">
+          <div className="pt-3 border-t border-subtle flex items-center justify-end gap-2.5 shrink-0">
             {footer}
           </div>
         )}

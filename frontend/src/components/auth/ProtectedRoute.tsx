@@ -19,10 +19,10 @@ export const ProtectedRoute: React.FC<ProtectedRouteProps> = ({
 
   if (isLoading) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-slate-950 text-slate-100">
+      <div className="min-h-screen flex items-center justify-center bg-app text-primary">
         <div className="flex flex-col items-center gap-3">
           <RefreshCw className="w-8 h-8 animate-spin text-amber-500" />
-          <p className="text-sm font-medium text-slate-400">Verifying session...</p>
+          <p className="text-sm font-medium text-muted">Verifying session...</p>
         </div>
       </div>
     );

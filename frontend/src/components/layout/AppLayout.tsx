@@ -19,10 +19,13 @@ import {
   Building2,
   ChevronLeft,
   ChevronRight,
+  Sun,
+  Moon,
 } from 'lucide-react';
 import { fetchHealth, HealthData } from '../../api/health';
 import { useAuth } from '../../context/AuthContext';
 import { useLanguage } from '../../context/LanguageContext';
+import { useTheme } from '../../context/ThemeContext';
 import { Badge, Button } from '../common';
 
 const SIDEBAR_STORAGE_KEY = 'vlms_sidebar_collapsed';
@@ -30,6 +33,7 @@ const SIDEBAR_STORAGE_KEY = 'vlms_sidebar_collapsed';
 export const AppLayout: React.FC = () => {
   const { user, logout } = useAuth();
   const { language, setLanguage, t } = useLanguage();
+  const { resolvedTheme, toggleTheme } = useTheme();
   const location = useLocation();
 
   const [health, setHealth] = useState<HealthData | null>(null);
@@ -240,11 +244,11 @@ export const AppLayout: React.FC = () => {
     : '/dashboard';
 
   return (
-    <div className="min-h-screen flex flex-col bg-slate-950 text-slate-100 selection:bg-amber-500 selection:text-slate-950 antialiased">
+    <div className="min-h-screen flex flex-col bg-app text-primary selection:bg-amber-500 selection:text-slate-950 antialiased">
       {/* ========================================================================= */}
       {/*                              TOP NAVBAR                                   */}
       {/* ========================================================================= */}
-      <header className="sticky top-0 z-40 h-16 glass-panel border-b border-slate-800/80 px-3 sm:px-5 flex items-center justify-between gap-3">
+      <header className="sticky top-0 z-40 h-16 glass-panel border-b border-subtle px-3 sm:px-5 flex items-center justify-between gap-3">
         {/* Left: Hamburger Toggle & Brand */}
         <div className="flex items-center gap-3 shrink-0 min-w-0">
           {/* Hamburger Menu Toggle Button (Desktop toggles Mini/Expanded, Mobile toggles Drawer) */}
@@ -258,7 +262,7 @@ export const AppLayout: React.FC = () => {
               }
             }}
             aria-label="Toggle Navigation Sidebar"
-            className="p-2.5 rounded-2xl bg-slate-900/90 hover:bg-slate-800 border border-slate-800 text-slate-300 hover:text-white transition-all cursor-pointer active:scale-95 touch-manipulation"
+            className="p-2.5 rounded-2xl bg-surface hover:bg-surface-elevated border border-subtle text-secondary hover:text-primary transition-all cursor-pointer active:scale-95 touch-manipulation"
           >
             <Menu className="w-5 h-5" />
           </button>
@@ -272,17 +276,17 @@ export const AppLayout: React.FC = () => {
               V
             </div>
             <div className="flex flex-col items-start min-w-0">
-              <span className="font-black text-base sm:text-lg tracking-tight text-white leading-none">
+              <span className="font-black text-base sm:text-lg tracking-tight text-primary leading-none">
                 VLMS<span className="text-amber-400">.</span>
               </span>
-              <span className="text-[10px] sm:text-[11px] text-slate-400 font-medium truncate max-w-[120px] sm:max-w-[220px] leading-tight mt-0.5 group-hover:text-slate-300 transition-colors">
+              <span className="text-[10px] sm:text-[11px] text-muted font-medium truncate max-w-[120px] sm:max-w-[220px] leading-tight mt-0.5 group-hover:text-secondary transition-colors">
                 {user?.businessName || 'Quarry Management'}
               </span>
             </div>
           </NavLink>
         </div>
 
-        {/* Center/Right: Badges, Language & User Controls */}
+        {/* Center/Right: Badges, Theme, Language & User Controls */}
         <div className="flex items-center gap-2 sm:gap-3 shrink-0">
           {/* Status & Subscription Pills (Hidden on very small screens) */}
           <div className="hidden sm:flex items-center gap-2">
@@ -290,15 +294,37 @@ export const AppLayout: React.FC = () => {
             {renderSubscriptionHeaderPill()}
           </div>
 
+          {/* Theme Switcher Button */}
+          <button
+            type="button"
+            id="theme-toggle-btn"
+            onClick={toggleTheme}
+            aria-label="Toggle light or dark theme"
+            title={resolvedTheme === 'dark' ? 'Switch to Sunlight / Light Mode' : 'Switch to Dark Mode'}
+            className="p-2 sm:px-2.5 sm:py-1.5 rounded-2xl bg-surface hover:bg-surface-elevated border border-subtle text-secondary hover:text-primary transition-all cursor-pointer select-none active:scale-95 touch-manipulation flex items-center gap-1.5"
+          >
+            {resolvedTheme === 'dark' ? (
+              <>
+                <Sun className="w-4 h-4 text-amber-400 shrink-0" />
+                <span className="hidden lg:inline text-xs font-semibold text-secondary">Light</span>
+              </>
+            ) : (
+              <>
+                <Moon className="w-4 h-4 text-indigo-500 shrink-0" />
+                <span className="hidden lg:inline text-xs font-semibold text-secondary">Dark</span>
+              </>
+            )}
+          </button>
+
           {/* Language Switcher Pill */}
-          <div className="flex items-center p-0.5 rounded-2xl bg-slate-900 border border-slate-800 text-[11px] sm:text-xs font-bold shadow-inner">
+          <div className="flex items-center p-0.5 rounded-2xl bg-surface border border-subtle text-[11px] sm:text-xs font-bold shadow-inner">
             <button
               type="button"
               onClick={() => setLanguage('en')}
               className={`px-2.5 py-1.5 rounded-xl transition-all cursor-pointer select-none touch-manipulation ${
                 language === 'en'
                   ? 'bg-amber-500 text-slate-950 font-extrabold shadow-sm'
-                  : 'text-slate-400 hover:text-white'
+                  : 'text-muted hover:text-primary'
               }`}
               title="Switch to English"
             >
@@ -310,7 +336,7 @@ export const AppLayout: React.FC = () => {
               className={`px-2.5 py-1.5 rounded-xl transition-all cursor-pointer select-none touch-manipulation ${
                 language === 'ml'
                   ? 'bg-amber-500 text-slate-950 font-extrabold shadow-sm'
-                  : 'text-slate-400 hover:text-white'
+                  : 'text-muted hover:text-primary'
               }`}
               title="മലയാളത്തിലേക്ക് മാറ്റുക"
             >
@@ -326,7 +352,7 @@ export const AppLayout: React.FC = () => {
             onClick={logout}
             title="Sign Out"
             leftIcon={<LogOut className="w-4 h-4 shrink-0 pointer-events-none" />}
-            className="hover:border-rose-900 hover:bg-rose-950/40 text-slate-300 hover:text-rose-400 font-bold border border-slate-800 bg-slate-900"
+            className="hover:border-rose-500/50 hover:bg-rose-500/10 text-secondary hover:text-rose-500 font-bold border border-subtle bg-surface"
           >
             <span className="hidden md:inline pointer-events-none">Sign Out</span>
           </Button>
@@ -339,15 +365,15 @@ export const AppLayout: React.FC = () => {
       <div className="flex-1 flex relative">
 
         {/* ======================================================================= */}
-        {/*        YOUTUBE-STYLE COLLAPSIBLE SIDEBAR (DESKTOP / TABLET)             */}
+        {/*        COLLAPSIBLE SIDEBAR (DESKTOP / TABLET)                           */}
         {/* ======================================================================= */}
         <aside
-          className={`hidden md:flex flex-col fixed top-16 bottom-0 left-0 z-30 bg-slate-950/95 backdrop-blur-xl border-r border-slate-800/80 transition-all duration-300 ease-in-out select-none ${
+          className={`hidden md:flex flex-col fixed top-16 bottom-0 left-0 z-30 bg-surface-solid/95 backdrop-blur-xl border-r border-subtle transition-all duration-300 ease-in-out select-none ${
             isCollapsed ? 'w-[76px]' : 'w-60'
           }`}
         >
           {/* Nav Items Container */}
-          <div className="flex-1 py-4 px-2.5 space-y-1.5 overflow-y-auto scrollbar-thin scrollbar-thumb-slate-800">
+          <div className="flex-1 py-4 px-2.5 space-y-1.5 overflow-y-auto scrollbar-thin">
             {navItems.map((item) => {
               const Icon = item.icon;
               return (
@@ -367,7 +393,7 @@ export const AppLayout: React.FC = () => {
                         ? isSuperAdmin
                           ? 'bg-purple-500 text-white shadow-lg shadow-purple-500/20 font-black'
                           : 'bg-amber-500 text-slate-950 shadow-lg shadow-amber-500/20 font-black'
-                        : 'text-slate-400 hover:text-white hover:bg-slate-900/80'
+                        : 'text-secondary hover:text-primary hover:bg-surface-elevated'
                     }`
                   }
                 >
@@ -381,7 +407,7 @@ export const AppLayout: React.FC = () => {
                             ? isSuperAdmin
                               ? 'text-white'
                               : 'text-slate-950'
-                            : 'text-slate-400 group-hover:text-amber-400'
+                            : 'text-muted group-hover:text-amber-400'
                         }`}
                       />
                       <span
@@ -406,20 +432,20 @@ export const AppLayout: React.FC = () => {
           </div>
 
           {/* Sidebar Bottom Footer: Collapse Toggle Button & User Profile Chip */}
-          <div className="p-3 border-t border-slate-800/80 bg-slate-950/50 space-y-2">
+          <div className="p-3 border-t border-subtle bg-surface/50 space-y-2">
             {!isCollapsed ? (
-              <div className="p-3 rounded-2xl bg-slate-900/80 border border-slate-800 text-xs space-y-1.5">
+              <div className="p-3 rounded-2xl bg-surface border border-subtle text-xs space-y-1.5">
                 <div className="flex items-center justify-between">
-                  <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Account</span>
+                  <span className="text-[10px] font-bold text-muted uppercase tracking-wider">Account</span>
                   {renderRoleBadge()}
                 </div>
-                <div className="font-extrabold text-white text-xs truncate">
+                <div className="font-extrabold text-primary text-xs truncate">
                   {user?.businessName || user?.mobile}
                 </div>
                 <button
                   type="button"
                   onClick={toggleSidebar}
-                  className="w-full mt-2 py-1.5 px-2 rounded-xl bg-slate-950 border border-slate-800 hover:border-slate-700 text-[11px] font-semibold text-slate-400 hover:text-white flex items-center justify-center gap-1.5 transition cursor-pointer"
+                  className="w-full mt-2 py-1.5 px-2 rounded-xl bg-surface-solid border border-subtle hover:border-slate-600 text-[11px] font-semibold text-secondary hover:text-primary flex items-center justify-center gap-1.5 transition cursor-pointer"
                 >
                   <ChevronLeft className="w-3.5 h-3.5" />
                   <span>Collapse Menu</span>
@@ -429,7 +455,7 @@ export const AppLayout: React.FC = () => {
               <button
                 type="button"
                 onClick={toggleSidebar}
-                className="w-full p-2.5 rounded-2xl bg-slate-900/90 border border-slate-800 hover:border-slate-700 text-slate-400 hover:text-amber-400 flex items-center justify-center transition cursor-pointer"
+                className="w-full p-2.5 rounded-2xl bg-surface border border-subtle hover:border-slate-600 text-secondary hover:text-amber-400 flex items-center justify-center transition cursor-pointer"
                 title="Expand Menu"
               >
                 <ChevronRight className="w-4 h-4" />
@@ -446,26 +472,26 @@ export const AppLayout: React.FC = () => {
             {/* Backdrop Blur Overlay */}
             <div
               onClick={() => setIsMobileDrawerOpen(false)}
-              className="fixed inset-0 bg-slate-950/80 backdrop-blur-sm animate-fade-in"
+              className="fixed inset-0 bg-modal-backdrop backdrop-blur-sm animate-fade-in"
             />
 
             {/* Slide-out Sidebar Menu */}
-            <div className="relative w-72 max-w-[85vw] bg-slate-900 border-r border-slate-800 h-full p-5 flex flex-col justify-between shadow-2xl z-10 animate-slide-right">
+            <div className="relative w-72 max-w-[85vw] bg-surface-solid border-r border-subtle h-full p-5 flex flex-col justify-between shadow-2xl z-10 animate-slide-right">
               <div className="space-y-6">
                 {/* Header in Drawer */}
-                <div className="flex items-center justify-between pb-4 border-b border-slate-800">
+                <div className="flex items-center justify-between pb-4 border-b border-subtle">
                   <div className="flex items-center gap-2.5">
                     <div className="w-9 h-9 rounded-2xl bg-amber-500 flex items-center justify-center font-black text-slate-950 text-base shadow-md shadow-amber-500/20">
                       V
                     </div>
                     <div>
-                      <span className="font-black text-lg text-white">VLMS</span>
-                      <p className="text-[11px] text-slate-400">{user?.businessName}</p>
+                      <span className="font-black text-lg text-primary">VLMS</span>
+                      <p className="text-[11px] text-muted">{user?.businessName}</p>
                     </div>
                   </div>
                   <button
                     onClick={() => setIsMobileDrawerOpen(false)}
-                    className="p-2 rounded-xl text-slate-400 hover:text-white bg-slate-950 border border-slate-800"
+                    className="p-2 rounded-xl text-muted hover:text-primary bg-surface border border-subtle"
                   >
                     <X className="w-4 h-4" />
                   </button>
@@ -487,7 +513,7 @@ export const AppLayout: React.FC = () => {
                               ? isSuperAdmin
                                 ? 'bg-purple-500 text-white shadow-md shadow-purple-500/20 font-extrabold'
                                 : 'bg-amber-500 text-slate-950 shadow-md shadow-amber-500/20 font-extrabold'
-                              : 'text-slate-300 hover:text-white hover:bg-slate-800'
+                              : 'text-secondary hover:text-primary hover:bg-surface-elevated'
                           }`
                         }
                       >
@@ -500,8 +526,8 @@ export const AppLayout: React.FC = () => {
               </div>
 
               {/* Drawer Bottom Details & Sign Out */}
-              <div className="space-y-3 pt-4 border-t border-slate-800">
-                <div className="flex items-center justify-between text-xs text-slate-400">
+              <div className="space-y-3 pt-4 border-t border-subtle">
+                <div className="flex items-center justify-between text-xs text-muted">
                   <span>Role:</span>
                   {renderRoleBadge()}
                 </div>
@@ -534,7 +560,7 @@ export const AppLayout: React.FC = () => {
       {/* ========================================================================= */}
       {/*        MOBILE BOTTOM NAVIGATION BAR (FOR 1-TAP PHONE ACCESSIBILITY)       */}
       {/* ========================================================================= */}
-      <nav className="md:hidden fixed bottom-0 left-0 right-0 z-40 glass-panel border-t border-slate-800/90 px-2 py-1.5 shadow-2xl">
+      <nav className="md:hidden fixed bottom-0 left-0 right-0 z-40 glass-panel border-t border-subtle px-2 py-1.5 shadow-2xl">
         <div
           className="grid gap-1 max-w-md mx-auto"
           style={{ gridTemplateColumns: `repeat(${navItems.length}, minmax(0, 1fr))` }}
@@ -553,7 +579,7 @@ export const AppLayout: React.FC = () => {
                       ? isSuperAdmin
                         ? 'text-purple-400 bg-purple-500/15 font-extrabold shadow-sm'
                         : 'text-amber-400 bg-amber-500/15 font-extrabold shadow-sm'
-                      : 'text-slate-400 hover:text-slate-200'
+                      : 'text-muted hover:text-primary'
                   }`
                 }
               >

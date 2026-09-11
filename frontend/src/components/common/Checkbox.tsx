@@ -41,7 +41,7 @@ export const Checkbox = React.memo<CheckboxProps>(({
           className={`w-5 h-5 mt-0.5 rounded-lg border flex items-center justify-center shrink-0 transition-all duration-150 focus:outline-none focus-visible:ring-2 focus-visible:ring-amber-500/50 ${
             checked
               ? 'bg-amber-500 border-amber-400 text-slate-950 shadow-sm shadow-amber-500/20'
-              : 'bg-slate-950 border-slate-750 text-transparent hover:border-slate-600'
+              : 'bg-surface-solid border-subtle text-transparent hover:border-slate-400 dark:hover:border-slate-600'
           } ${error ? 'border-rose-500' : ''}`}
         >
           {checked && <Check className="w-3.5 h-3.5 stroke-[3] text-slate-950 pointer-events-none" />}
@@ -52,13 +52,13 @@ export const Checkbox = React.memo<CheckboxProps>(({
             {label && (
               <label
                 htmlFor={checkboxId}
-                className="text-xs font-bold text-slate-200 block cursor-pointer"
+                className="text-xs font-bold text-primary block cursor-pointer"
               >
                 {label}
               </label>
             )}
             {description && (
-              <p className="text-[11px] text-slate-400 leading-tight">{description}</p>
+              <p className="text-[11px] text-secondary leading-tight">{description}</p>
             )}
           </div>
         )}

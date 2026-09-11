@@ -280,7 +280,10 @@ export interface PartnerSettlementResponse {
     totalExpenses: number;
     totalNetMargin: number;
     grossDividendPayable: number;
+    directExpensesFunded: number;
+    contractorPaymentsCollected: number;
     advancesDeducted: number;
+    netCashRetained: number;
     netDividendPayable: number;
   };
   slices: PartnerSliceItem[];
@@ -308,6 +311,90 @@ export async function getPartnerSettlementReportApi(
   const qs = query.toString();
   return apiClient<PartnerSettlementResponse>(
     `/reports/partner-settlement${qs ? `?${qs}` : ''}`,
+    { signal: options?.signal }
+  );
+}
+
+// -------------------------------------------------------------
+// MULTI-PARTNER REBALANCE & INTER-ACCOUNT EQUALISATION
+// -------------------------------------------------------------
+
+export interface PartnerRebalanceMetric {
+  partner: {
+    id: string;
+    name: string;
+    mobile: string;
+    role: string;
+  };
+  sharePercentage: number;
+  equityDividend: number;
+  directExpensesFunded: number;
+  contractorPaymentsCollected: number;
+  drawingsDrawn: number;
+  netCashHeld: number;
+  closingBalance: number;
+  status: 'CREDITOR' | 'DEBTOR' | 'SETTLED';
+}
+
+export interface RebalanceTransfer {
+  fromPartner: {
+    id: string;
+    name: string;
+    mobile: string;
+    role: string;
+  };
+  toPartner: {
+    id: string;
+    name: string;
+    mobile: string;
+    role: string;
+  };
+  amount: number;
+  reason: string;
+}
+
+export interface PartnerRebalanceResponse {
+  business: {
+    id: string;
+    name: string;
+    businessName: string;
+    mobile: string;
+    gstin: string | null;
+  };
+  site: {
+    id: string;
+    siteName: string;
+    location: string;
+  } | null;
+  period: {
+    startDate: string | null;
+    endDate: string | null;
+  };
+  siteSummary: {
+    totalRevenue: number;
+    totalExpenses: number;
+    netProfit: number;
+    spotCashRevenue: number;
+    cashDrawerExpenses: number;
+    cashDrawerBalance: number;
+  };
+  partners: PartnerRebalanceMetric[];
+  rebalanceTransfers: RebalanceTransfer[];
+}
+
+export async function getPartnerRebalanceReportApi(
+  params: QueryPartnerSettlementParams = {},
+  options?: { signal?: AbortSignal }
+): Promise<PartnerRebalanceResponse> {
+  const query = new URLSearchParams();
+  if (params.siteId) query.append('siteId', params.siteId);
+  if (params.startDate) query.append('startDate', params.startDate);
+  if (params.endDate) query.append('endDate', params.endDate);
+  if (params.customerId) query.append('customerId', params.customerId);
+
+  const qs = query.toString();
+  return apiClient<PartnerRebalanceResponse>(
+    `/reports/partner-rebalance${qs ? `?${qs}` : ''}`,
     { signal: options?.signal }
   );
 }
@@ -402,4 +489,103 @@ export async function getMachinerySettlementReportApi(
     { signal: options?.signal }
   );
 }
+
+// -------------------------------------------------------------
+// SITE BALANCE SHEET & FINANCIAL HEALTH
+// -------------------------------------------------------------
+
+export interface BalanceSheetAssets {
+  currentAssets: {
+    cashInHand: number;
+    accountsReceivable: number;
+    total: number;
+  };
+  fixedAssets: {
+    equipmentAndMachinery: number;
+    total: number;
+  };
+  totalAssets: number;
+}
+
+export interface BalanceSheetLiabilities {
+  currentLiabilities: {
+    vendorMachineryPayables: number;
+    accruedOverheads: number;
+    total: number;
+  };
+  totalLiabilities: number;
+}
+
+export interface BalanceSheetEquity {
+  cumulativeNetProfit: number;
+  totalDirectExpensesFunded: number;
+  totalDirectCollectionsRetained: number;
+  totalDrawingsDrawn: number;
+  retainedEarnings: number;
+  totalPartnerEquity: number;
+}
+
+export interface FinancialHealthRatios {
+  netWorkingCapital: number;
+  currentRatio: number;
+  quickRatio: number;
+  receivablesExposurePct: number;
+  revenueMix: {
+    totalRevenue: number;
+    spotCashRevenue: number;
+    creditRevenue: number;
+    cashLoadsCount: number;
+    creditLoadsCount: number;
+    totalLoadsCount: number;
+  };
+  activeContractorsCount: number;
+  activeMachineryCount: number;
+}
+
+export interface BalanceSheetResponse {
+  business: {
+    id: string;
+    name: string;
+    businessName: string;
+    mobile: string;
+    gstin: string | null;
+  };
+  site: {
+    id: string;
+    siteName: string;
+    location: string;
+  } | null;
+  asOfDate: string;
+  period: {
+    startDate: string | null;
+    endDate: string | null;
+  };
+  balanceSheet: {
+    assets: BalanceSheetAssets;
+    liabilities: BalanceSheetLiabilities;
+    equity: BalanceSheetEquity;
+    totalLiabilitiesAndEquity: number;
+    balanceVariance: number;
+    isBalanced: boolean;
+  };
+  financialHealth: FinancialHealthRatios;
+}
+
+export async function getBalanceSheetReportApi(
+  params: QueryCashflowParams = {},
+  options?: { signal?: AbortSignal }
+): Promise<BalanceSheetResponse> {
+  const query = new URLSearchParams();
+  if (params.siteId) query.append('siteId', params.siteId);
+  if (params.startDate) query.append('startDate', params.startDate);
+  if (params.endDate) query.append('endDate', params.endDate);
+  if (params.customerId) query.append('customerId', params.customerId);
+
+  const qs = query.toString();
+  return apiClient<BalanceSheetResponse>(
+    `/reports/balance-sheet${qs ? `?${qs}` : ''}`,
+    { signal: options?.signal }
+  );
+}
+
 

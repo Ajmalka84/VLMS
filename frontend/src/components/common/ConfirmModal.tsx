@@ -60,8 +60,8 @@ export const ConfirmModal: React.FC<ConfirmModalProps> = React.memo(({
         <div
           className={`p-3 rounded-2xl shrink-0 ${
             variant === 'danger'
-              ? 'bg-rose-500/10 text-rose-400 border border-rose-500/20'
-              : 'bg-amber-500/10 text-amber-400 border border-amber-500/20'
+              ? 'bg-rose-500/10 text-rose-500 border border-rose-500/20'
+              : 'bg-amber-500/10 text-amber-500 border border-amber-500/20'
           }`}
         >
           {variant === 'danger' ? (
@@ -71,10 +71,10 @@ export const ConfirmModal: React.FC<ConfirmModalProps> = React.memo(({
           )}
         </div>
         <div className="space-y-1">
-          <h3 className="text-base sm:text-lg font-bold text-white tracking-tight">
+          <h3 className="text-base sm:text-lg font-bold text-primary tracking-tight">
             {title}
           </h3>
-          <p className="text-xs sm:text-sm text-slate-300 leading-relaxed">
+          <p className="text-xs sm:text-sm text-secondary leading-relaxed">
             {message}
           </p>
         </div>

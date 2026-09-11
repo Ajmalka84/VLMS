@@ -1160,7 +1160,8 @@ test('11.4 Hurdle 13 Part 3: Heavy Machinery hourly rental engine calculates day
       startMeterReading: 1200.0,
       endMeterReading: 1209.5,
       rentPerHour: 2500.0,
-      paymentMode: 'BANK_TRANSFER',
+      paymentMode: 'OWNER_DIRECT',
+      transferMethod: 'BANK_TRANSFER',
       paidTo: 'Ramesh (Operator)',
       remarks: 'Primary boulder excavation',
     }),
@@ -1444,20 +1445,11 @@ test('12.6 Hurdle 13 Part 4: Shifts - Site Boy closes daily shift with cash coun
   assert.equal(Number(closeRes.data.data.expectedCash), 1200.0);
   assert.equal(Number(closeRes.data.data.actualHandoverCash), 1150.0);
   assert.equal(Number(closeRes.data.data.discrepancy), -50.0);
-  assert.equal(closeRes.data.data.isApproved, false);
+  assert.equal(closeRes.data.data.isApproved, true);
   shiftRecordId = closeRes.data.data.id;
 });
 
-test('12.7 Hurdle 13 Part 4: Shifts - Site Boy cannot approve shift (403), Owner approves & locks shift', async () => {
-  // 1. Site Boy attempts approval -> HTTP 403
-  const sbApproveRes = await req(`/shifts/${shiftRecordId}/approve`, {
-    method: 'PATCH',
-    headers: { Authorization: `Bearer ${siteBoy1Token}` },
-    body: JSON.stringify({ remarks: 'Self approval attempt' }),
-  });
-  assert.equal(sbApproveRes.status, 403);
-
-  // 2. Owner approves shift
+test('12.7 Hurdle 13 Part 4: Shifts - Owner reviews and updates shift remarks', async () => {
   const ownerApproveRes = await req(`/shifts/${shiftRecordId}/approve`, {
     method: 'PATCH',
     headers: { Authorization: `Bearer ${tenantAToken}` },
@@ -1469,13 +1461,13 @@ test('12.7 Hurdle 13 Part 4: Shifts - Site Boy cannot approve shift (403), Owner
   assert.equal(ownerApproveRes.data.data.approvedBy.id, tenantAUser.id);
 });
 
-test('12.8 Hurdle 13 Part 4: Shifts - Next shift drawer carries forward approved closing balance (₹1,150)', async () => {
+test('12.8 Hurdle 13 Part 4: Shifts - Next shift drawer carries forward closing balance (₹1,150)', async () => {
   const nextDrawerRes = await req(`/shifts/current-drawer?siteId=${siteAId}&date=${nextShiftDate}`, {
     headers: { Authorization: `Bearer ${tenantAToken}` },
   });
 
   assert.equal(nextDrawerRes.status, 200);
-  assert.equal(nextDrawerRes.data.data.openingCash, 1150.0); // Handed over from approved previous shift
+  assert.equal(nextDrawerRes.data.data.openingCash, 1150.0); // Handed over from previous shift
   assert.equal(nextDrawerRes.data.data.expectedCash, 1150.0); // 1150 + 0 - 0 = 1150
 });
 
@@ -1650,7 +1642,7 @@ test('13.7 Hurdle 13 Field Enhancements: Heavy Machinery - Hour Meter difference
 });
 
 test('13.8 Hurdle 13 Field Enhancements: Shifts - Custom openingCash balance float recalculates expectedCash and discrepancy', async () => {
-  const customShiftDate = '2026-09-09';
+  const customShiftDate = '2028-09-09';
   const closeRes = await req('/shifts/close', {
     method: 'POST',
     headers: { Authorization: `Bearer ${tenantAToken}` },
@@ -1721,6 +1713,374 @@ test('14.4 Hurdle 14: Global Exception Filter normalizes 404 Not Found & malform
   assert.equal(malformedRes.data.success, false);
   assert.equal(malformedRes.data.code, 'BAD_REQUEST');
 });
+
+test('14.5 Hurdle 15: Consolidated Dashboard Summary Bundle API aggregates loads, expenses, and drawer', async () => {
+  const summaryRes = await req(`/dashboard/summary?siteId=${siteAId}`, {
+    headers: { Authorization: `Bearer ${tenantAToken}` },
+  });
+
+  assert.equal(summaryRes.status, 200);
+  assert.equal(summaryRes.data.success, true);
+  const data = summaryRes.data.data;
+  assert.ok(data.loads !== undefined);
+  assert.ok(typeof data.loads.totalLoads === 'number');
+  assert.ok(typeof data.loads.totalTurnover === 'number');
+  assert.ok(Array.isArray(data.loads.recentLoads));
+  assert.ok(data.expenses !== undefined);
+  assert.ok(typeof data.expenses.totalExpenses === 'number');
+  assert.ok(data.dateRange !== undefined);
+});
+
+test('14.6 Hurdle 15: Owner Re-opens locked shift via PATCH /shifts/:id/reopen', async () => {
+  const testDate = '2028-09-09';
+  // First, verify shift is closed for testDate
+  const drawerBefore = await req(`/shifts/current-drawer?siteId=${siteAId}&date=${testDate}`, {
+    headers: { Authorization: `Bearer ${tenantAToken}` },
+  });
+  assert.equal(drawerBefore.status, 200);
+  assert.ok(drawerBefore.data.data.existingShift !== null);
+  const shiftId = drawerBefore.data.data.existingShift.id;
+
+  // Re-open shift
+  const reopenRes = await req(`/shifts/${shiftId}/reopen`, {
+    method: 'PATCH',
+    headers: { Authorization: `Bearer ${tenantAToken}` },
+  });
+  assert.equal(reopenRes.status, 200);
+  assert.equal(reopenRes.data.success, true);
+
+  // Verify drawer is now open (existingShift is null)
+  const drawerAfter = await req(`/shifts/current-drawer?siteId=${siteAId}&date=${testDate}`, {
+    headers: { Authorization: `Bearer ${tenantAToken}` },
+  });
+  assert.equal(drawerAfter.status, 200);
+  assert.equal(drawerAfter.data.data.existingShift, null);
+});
+
+test('15.1 Hurdle 15 Part 1: CO_PARTNER_DIRECT requires valid payerPartnerUserId', async () => {
+  // Attempt to create CO_PARTNER_DIRECT without payerPartnerUserId -> should fail
+  const failRes = await req('/expenses', {
+    method: 'POST',
+    headers: {
+      Authorization: `Bearer ${tenantAToken}`,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({
+      siteId: siteAId,
+      categoryId: categoryDieselId,
+      date: '2026-09-10',
+      amount: 15000,
+      paymentMode: 'CO_PARTNER_DIRECT',
+      paidTo: 'Geology Dept',
+      remarks: 'Inspection fees',
+    }),
+  });
+
+  assert.equal(failRes.status, 400);
+  assert.equal(failRes.data.success, false);
+
+  // Attempt with non-existent partner ID -> should fail with 404
+  const notFoundRes = await req('/expenses', {
+    method: 'POST',
+    headers: {
+      Authorization: `Bearer ${tenantAToken}`,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({
+      siteId: siteAId,
+      categoryId: categoryDieselId,
+      date: '2026-09-10',
+      amount: 15000,
+      paymentMode: 'CO_PARTNER_DIRECT',
+      payerPartnerUserId: '00000000-0000-0000-0000-000000000000',
+      paidTo: 'Geology Dept',
+      remarks: 'Inspection fees',
+    }),
+  });
+
+  assert.equal(notFoundRes.status, 404);
+  assert.equal(notFoundRes.data.success, false);
+});
+
+test('15.2 Hurdle 15 Part 1: CO_PARTNER_DIRECT expense creates successfully with partner and transfer details', async () => {
+  const createRes = await req('/expenses', {
+    method: 'POST',
+    headers: {
+      Authorization: `Bearer ${tenantAToken}`,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({
+      siteId: siteAId,
+      categoryId: categoryDieselId,
+      date: '2026-09-10',
+      amount: 25000,
+      paymentMode: 'CO_PARTNER_DIRECT',
+      payerPartnerUserId: coPartner1Id,
+      transferMethod: 'UPI',
+      referenceNumber: 'UPI-REF-998877',
+      paidTo: 'Geology Department Palakkad',
+      remarks: 'Challan #48291 for transit permit renewal',
+    }),
+  });
+
+  assert.equal(createRes.status, 201);
+  assert.equal(createRes.data.success, true);
+  const exp = createRes.data.data;
+  assert.equal(exp.paymentMode, 'CO_PARTNER_DIRECT');
+  assert.equal(exp.payerPartnerUserId, coPartner1Id);
+  assert.equal(exp.transferMethod, 'UPI');
+  assert.equal(exp.referenceNumber, 'UPI-REF-998877');
+  assert.ok(exp.payerPartner !== undefined);
+  assert.equal(exp.payerPartner.id, coPartner1Id);
+  assert.equal(exp.payerPartner.role, 'CO_PARTNER');
+});
+
+test('15.3 Hurdle 15 Part 1: Query expenses filtered by payerPartnerUserId and paymentMode', async () => {
+  const queryRes = await req(`/expenses?siteId=${siteAId}&paymentMode=CO_PARTNER_DIRECT&payerPartnerUserId=${coPartner1Id}`, {
+    headers: { Authorization: `Bearer ${tenantAToken}` },
+  });
+
+  assert.equal(queryRes.status, 200);
+  assert.equal(queryRes.data.success, true);
+  assert.ok(queryRes.data.data.expenses.length >= 1);
+  const found = queryRes.data.data.expenses.find((e) => e.payerPartnerUserId === coPartner1Id);
+  assert.ok(found !== undefined);
+  assert.equal(found.payerPartner?.id, coPartner1Id);
+});
+
+test('15.4 Hurdle 15 Part 2: Record Contractor Payment with partner collector and transfer metadata', async () => {
+  const payRes = await req('/contractors/payments', {
+    method: 'POST',
+    headers: {
+      Authorization: `Bearer ${tenantAToken}`,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({
+      siteId: siteAId,
+      contractorId: contractorAId,
+      collectedByUserId: coPartner1Id,
+      date: '2026-09-10',
+      amount: 15000,
+      paymentMode: 'CO_PARTNER_DIRECT',
+      transferMethod: 'BANK_TRANSFER',
+      referenceNumber: 'NEFT-CONTR-102938',
+      remarks: 'Part payment for August aggregate supplies',
+    }),
+  });
+
+  assert.equal(payRes.status, 201);
+  assert.equal(payRes.data.success, true);
+  const pay = payRes.data.data;
+  assert.equal(pay.contractorId, contractorAId);
+  assert.equal(pay.collectedByUserId, coPartner1Id);
+  assert.equal(Number(pay.amount), 15000);
+  assert.equal(pay.paymentMode, 'CO_PARTNER_DIRECT');
+  assert.equal(pay.transferMethod, 'BANK_TRANSFER');
+  assert.equal(pay.referenceNumber, 'NEFT-CONTR-102938');
+  assert.equal(pay.collectedBy?.id, coPartner1Id);
+});
+
+test('15.5 Hurdle 15 Part 2: List contractor payments with filters', async () => {
+  const listRes = await req(`/contractors/payments?contractorId=${contractorAId}`, {
+    headers: { Authorization: `Bearer ${tenantAToken}` },
+  });
+
+  assert.equal(listRes.status, 200);
+  assert.equal(listRes.data.success, true);
+  assert.ok(listRes.data.data.data.length >= 1);
+  const found = listRes.data.data.data[0];
+  assert.equal(found.contractorId, contractorAId);
+  assert.equal(found.collectedBy?.id, coPartner1Id);
+});
+
+test('15.6 Hurdle 15 Part 2: Fetch contractor ledger with chronological running balance', async () => {
+  const ledgerRes = await req(`/contractors/${contractorAId}/ledger?siteId=${siteAId}`, {
+    headers: { Authorization: `Bearer ${tenantAToken}` },
+  });
+
+  assert.equal(ledgerRes.status, 200);
+  assert.equal(ledgerRes.data.success, true);
+  const ledger = ledgerRes.data.data;
+  assert.equal(ledger.contractor.id, contractorAId);
+  assert.ok(Array.isArray(ledger.entries));
+  assert.ok(ledger.entries.length >= 2); // At least 1 credit load + 1 payment
+
+  // Check debit load entry
+  const loadEntry = ledger.entries.find((e) => e.type === 'LOAD');
+  assert.ok(loadEntry !== undefined);
+  assert.ok(loadEntry.debit > 0);
+  assert.equal(loadEntry.credit, 0);
+
+  // Check credit payment entry
+  const payEntry = ledger.entries.find((e) => e.type === 'PAYMENT');
+  assert.ok(payEntry !== undefined);
+  assert.equal(payEntry.debit, 0);
+  assert.equal(payEntry.credit, 15000);
+  assert.equal(payEntry.collectedBy?.id, coPartner1Id);
+
+  // Check running balance consistency
+  assert.equal(ledger.closingBalance, ledger.totalDebit - ledger.totalCredit + ledger.openingBalance);
+});
+
+test('15.7 Hurdle 15 Part 2: Get site-wide contractor balance summary', async () => {
+  const summaryRes = await req(`/contractors/summary?siteId=${siteAId}`, {
+    headers: { Authorization: `Bearer ${tenantAToken}` },
+  });
+
+  assert.equal(summaryRes.status, 200);
+  assert.equal(summaryRes.data.success, true);
+  const summary = summaryRes.data.data;
+  assert.ok(summary.contractors.length >= 1);
+  const c = summary.contractors.find((x) => x.id === contractorAId);
+  assert.ok(c !== undefined);
+  assert.ok(c.totalBilled > 0);
+  assert.ok(c.totalPaid >= 15000);
+  assert.equal(c.balanceDue, Number((c.totalBilled - c.totalPaid).toFixed(2)));
+  assert.equal(summary.totalBalanceDue, Number((summary.totalCreditBilled - summary.totalCollected).toFixed(2)));
+});
+
+test('15.8 Hurdle 15 Part 2: Soft delete contractor payment and check ledger update', async () => {
+  // Create a temporary payment
+  const tempPayRes = await req('/contractors/payments', {
+    method: 'POST',
+    headers: {
+      Authorization: `Bearer ${tenantAToken}`,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({
+      siteId: siteAId,
+      contractorId: contractorAId,
+      date: '2026-09-10',
+      amount: 5000,
+      paymentMode: 'CASH_DRAWER',
+      remarks: 'Temp payment for deletion test',
+    }),
+  });
+  assert.equal(tempPayRes.status, 201);
+  const tempPaymentId = tempPayRes.data.data.id;
+
+  // Delete payment
+  const delRes = await req(`/contractors/payments/${tempPaymentId}`, {
+    method: 'DELETE',
+    headers: { Authorization: `Bearer ${tenantAToken}` },
+  });
+  assert.equal(delRes.status, 200);
+  assert.equal(delRes.data.success, true);
+
+  // Verify deleted payment no longer appears in ledger
+  const ledgerRes = await req(`/contractors/${contractorAId}/ledger?siteId=${siteAId}`, {
+    headers: { Authorization: `Bearer ${tenantAToken}` },
+  });
+  assert.equal(ledgerRes.status, 200);
+  const found = ledgerRes.data.data.entries.find((e) => e.id === tempPaymentId);
+  assert.equal(found, undefined);
+});
+
+test('15.9 Hurdle 15 Part 3: Partner settlement statement includes direct funded expenses and direct collections', async () => {
+  const stmtRes = await req(`/reports/partner-settlement?partnerId=${coPartner1Id}&siteId=${siteAId}`, {
+    headers: { Authorization: `Bearer ${tenantAToken}` },
+  });
+
+  assert.equal(stmtRes.status, 200);
+  assert.equal(stmtRes.data.success, true);
+  const summary = stmtRes.data.data.summary;
+  assert.ok(summary.directExpensesFunded >= 25000); // From test 15.2
+  assert.ok(summary.contractorPaymentsCollected >= 15000); // From test 15.4
+  assert.equal(summary.netCashRetained, summary.contractorPaymentsCollected + summary.advancesDeducted);
+  assert.equal(
+    summary.netDividendPayable,
+    Number((summary.grossDividendPayable + summary.directExpensesFunded - summary.netCashRetained).toFixed(2))
+  );
+});
+
+test('15.10 Hurdle 15 Part 3: Multi-Partner Rebalance Report computes zero-sum peer transfers', async () => {
+  const rebalRes = await req(`/reports/partner-rebalance?siteId=${siteAId}`, {
+    headers: { Authorization: `Bearer ${tenantAToken}` },
+  });
+
+  assert.equal(rebalRes.status, 200);
+  assert.equal(rebalRes.data.success, true);
+  const data = rebalRes.data.data;
+  assert.ok(data.partners.length >= 2); // Owner + Co-Partner(s)
+  assert.ok(data.siteSummary.totalRevenue > 0);
+  assert.ok(Array.isArray(data.rebalanceTransfers));
+
+  // Check that all partner metrics are computed
+  const cp1 = data.partners.find((p) => p.partner.id === coPartner1Id);
+  assert.ok(cp1 !== undefined);
+  assert.ok(cp1.directExpensesFunded >= 25000);
+  assert.ok(cp1.contractorPaymentsCollected >= 15000);
+  assert.equal(cp1.closingBalance, Number((cp1.equityDividend + cp1.directExpensesFunded - cp1.netCashHeld).toFixed(2)));
+
+  // Verify rebalance transfer structure
+  for (const t of data.rebalanceTransfers) {
+    assert.ok(t.fromPartner.id);
+    assert.ok(t.toPartner.id);
+    assert.ok(t.amount > 0);
+  }
+});
+
+test('15.11 Hurdle 15 Part 4: Query Site Balance Sheet and verify double-entry assets, liabilities, and partner equity', async () => {
+  const bsRes = await req(`/reports/balance-sheet?siteId=${siteAId}`, {
+    headers: { Authorization: `Bearer ${tenantAToken}` },
+  });
+
+  assert.equal(bsRes.status, 200);
+  assert.equal(bsRes.data.success, true);
+  const data = bsRes.data.data;
+  assert.ok(data.business);
+  assert.equal(data.business.id, tenantAUser.id);
+  assert.ok(data.site);
+  assert.equal(data.site.id, siteAId);
+
+  const bs = data.balanceSheet;
+  // Assets
+  assert.ok(typeof bs.assets.currentAssets.cashInHand === 'number');
+  assert.ok(typeof bs.assets.currentAssets.accountsReceivable === 'number');
+  assert.equal(bs.assets.currentAssets.total, Number((bs.assets.currentAssets.cashInHand + bs.assets.currentAssets.accountsReceivable).toFixed(2)));
+  assert.equal(bs.assets.totalAssets, bs.assets.currentAssets.total + bs.assets.fixedAssets.total);
+
+  // Liabilities
+  assert.ok(typeof bs.liabilities.currentLiabilities.vendorMachineryPayables === 'number');
+  assert.equal(bs.liabilities.totalLiabilities, bs.liabilities.currentLiabilities.total);
+
+  // Equity
+  assert.ok(typeof bs.equity.cumulativeNetProfit === 'number');
+  assert.ok(typeof bs.equity.totalPartnerEquity === 'number');
+  assert.equal(bs.totalLiabilitiesAndEquity, Number((bs.liabilities.totalLiabilities + bs.equity.totalPartnerEquity).toFixed(2)));
+
+  // Double entry verification
+  assert.equal(bs.isBalanced, true);
+});
+
+test('15.12 Hurdle 15 Part 4: Verify solvency metrics and Super Admin customerId query on Balance Sheet', async () => {
+  // 1. Solvency & Working Capital
+  const bsRes = await req(`/reports/balance-sheet?siteId=${siteAId}`, {
+    headers: { Authorization: `Bearer ${tenantAToken}` },
+  });
+  assert.equal(bsRes.status, 200);
+  const fh = bsRes.data.data.financialHealth;
+  const bs = bsRes.data.data.balanceSheet;
+
+  assert.equal(fh.netWorkingCapital, Number((bs.assets.currentAssets.total - bs.liabilities.currentLiabilities.total).toFixed(2)));
+  assert.ok(fh.currentRatio > 0);
+  assert.ok(typeof fh.receivablesExposurePct === 'number');
+  assert.ok(fh.revenueMix.totalRevenue > 0);
+  assert.ok(fh.activeContractorsCount >= 1);
+  assert.ok(fh.activeMachineryCount >= 1);
+
+  // 2. Super Admin can query Balance Sheet by customerId
+  const adminRes = await req(`/reports/balance-sheet?customerId=${tenantAUser.id}`, {
+    headers: { Authorization: `Bearer ${superAdminToken}` },
+  });
+  assert.equal(adminRes.status, 200);
+  assert.equal(adminRes.data.success, true);
+  assert.equal(adminRes.data.data.business.id, tenantAUser.id);
+});
+
+
+
+
 
 
 

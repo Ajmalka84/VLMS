@@ -7,29 +7,32 @@ import {
   FileSpreadsheet,
   Users,
   CheckCircle2,
-  MapPin,
   Clock,
   DollarSign,
   Wallet,
+  TrendingUp,
   Coins,
-  RefreshCw,
+  Building2,
+  Calendar,
 } from 'lucide-react';
 import {
   Card,
   PageHeader,
   MetricCard,
   EmptyState,
-  Button,
   Badge,
+  CustomSelect,
+  CustomSelectOption,
 } from '../components/common';
 import { HealthData } from '../api/health';
 import { useAuth } from '../context/AuthContext';
 import { useMasterCache } from '../context/MasterCacheContext';
-import { getLoadsApi, Load } from '../api/loads';
-import { getCurrentDrawerApi, CurrentDrawerResponse } from '../api/shifts';
-import { fetchExpensesApi, ExpenseSummary } from '../api/expenses';
+import { Load } from '../api/loads';
+import { CurrentDrawerResponse } from '../api/shifts';
+import { ExpenseSummary } from '../api/expenses';
+import { PartnerSettlementResponse } from '../api/reports';
+import { fetchDashboardSummaryApi, DashboardSummaryResponse } from '../api/dashboard';
 import { formatINR } from '../utils/formatters';
-
 import { queryCache } from '../utils/queryCache';
 
 interface LayoutContext {
@@ -38,16 +41,22 @@ interface LayoutContext {
   refreshHealth: () => Promise<void>;
 }
 
+type DatePreset = 'today' | 'yesterday' | 'last7days' | 'thismonth';
+
 export const DashboardPage: React.FC = () => {
   const { health } = useOutletContext<LayoutContext>();
   const { user } = useAuth();
   const { sites } = useMasterCache();
 
   const isSuperAdmin = user?.role === 'SUPER_ADMIN';
+  const isCoPartner = user?.role === 'CO_PARTNER';
+  const isSiteBoy = user?.role === 'SITE_BOY';
   const isDbUp = health?.database?.status === 'up';
 
-  const [todayDate] = useState(() => new Date().toISOString().split('T')[0]);
+  const [selectedSiteId, setSelectedSiteId] = useState<string>('all');
+  const [datePreset, setDatePreset] = useState<DatePreset>('today');
   const [loadingStats, setLoadingStats] = useState(false);
+
   const [todayLoads, setTodayLoads] = useState<Load[]>([]);
   const [loadsSummary, setLoadsSummary] = useState({
     totalLoads: 0,
@@ -64,103 +73,138 @@ export const DashboardPage: React.FC = () => {
     totalMachineHours: 0,
     count: 0,
   });
+  const [partnerReport, setPartnerReport] = useState<PartnerSettlementResponse | null>(null);
 
-  const activeSite = useMemo(() => {
-    if (user?.role === 'SITE_BOY' && user?.assignedSiteId) {
-      return sites.find((s) => s.id === user.assignedSiteId) || sites[0];
+  // Available sites for this user
+  const visibleSites = useMemo(() => {
+    if (isSiteBoy && user?.assignedSiteId) {
+      return sites.filter((s) => s.id === user.assignedSiteId);
     }
-    return sites.find((s) => s.isActive !== false) || sites[0];
-  }, [sites, user]);
+    if (user?.assignedSiteIds && user.assignedSiteIds.length > 0) {
+      return sites.filter((s) => user.assignedSiteIds!.includes(s.id));
+    }
+    return sites;
+  }, [sites, user, isSiteBoy]);
 
+  // Set initial site selection
+  useEffect(() => {
+    if (isSiteBoy && user?.assignedSiteId) {
+      setSelectedSiteId(user.assignedSiteId);
+    }
+  }, [isSiteBoy, user]);
+
+  const siteOptions = useMemo<CustomSelectOption[]>(() => {
+    const opts: CustomSelectOption[] = [
+      {
+        value: 'all',
+        label: 'All Sites (Consolidated)',
+        subLabel: `${visibleSites.length} quarries active`,
+        icon: <Building2 className="w-4 h-4 text-amber-500" />,
+      },
+    ];
+    visibleSites.forEach((s) => {
+      opts.push({
+        value: s.id,
+        label: s.siteName,
+        subLabel: s.location || 'Quarry site',
+        icon: <Building2 className="w-4 h-4 text-muted" />,
+      });
+    });
+    return opts;
+  }, [visibleSites]);
+
+  const effectiveSiteId = selectedSiteId === 'all' ? undefined : selectedSiteId;
+
+  // Calculate current date bounds based on preset
+  const dateRange = useMemo(() => {
+    const now = new Date();
+    const todayStr = now.toISOString().split('T')[0];
+
+    if (datePreset === 'yesterday') {
+      const yest = new Date(now);
+      yest.setDate(yest.getDate() - 1);
+      const yestStr = yest.toISOString().split('T')[0];
+      return { startDate: yestStr, endDate: yestStr, label: 'Yesterday' };
+    }
+    if (datePreset === 'last7days') {
+      const past7 = new Date(now);
+      past7.setDate(past7.getDate() - 6);
+      const past7Str = past7.toISOString().split('T')[0];
+      return { startDate: past7Str, endDate: todayStr, label: 'Last 7 Days' };
+    }
+    if (datePreset === 'thismonth') {
+      const monthStart = new Date(now.getFullYear(), now.getMonth(), 1);
+      const monthStartStr = monthStart.toISOString().split('T')[0];
+      return { startDate: monthStartStr, endDate: todayStr, label: 'This Month' };
+    }
+    return { startDate: todayStr, endDate: todayStr, label: 'Today' };
+  }, [datePreset]);
+
+  // Single Consolidated High-Speed Dashboard Bundle Fetch
   const loadDashboardData = useCallback(async () => {
     if (isSuperAdmin) return;
-    const siteId = activeSite?.id;
-    const loadsKey = `dashboard_loads_${siteId || 'all'}_${todayDate}`;
-    const drawerKey = `dashboard_drawer_${siteId || 'all'}_${todayDate}`;
-    const expKey = `dashboard_exp_${siteId || 'all'}_${todayDate}`;
+    const siteKey = effectiveSiteId || 'all';
+    const bundleKey = `dashboard_bundle_${siteKey}_${datePreset}_${dateRange.startDate}_${dateRange.endDate}`;
 
     // 0ms Cache First (SWR)
-    const cachedLoads = queryCache.get<{ loads: Load[]; summary: typeof loadsSummary }>(loadsKey);
-    const cachedDrawer = queryCache.get<CurrentDrawerResponse>(drawerKey);
-    const cachedExp = queryCache.get<ExpenseSummary>(expKey);
+    const cachedData = queryCache.get<DashboardSummaryResponse>(bundleKey);
 
-    let hasCached = false;
-    if (cachedLoads) {
-      setTodayLoads(cachedLoads.loads);
-      setLoadsSummary(cachedLoads.summary);
-      hasCached = true;
-    }
-    if (cachedDrawer) {
-      setDrawerData(cachedDrawer);
-      hasCached = true;
-    }
-    if (cachedExp) {
-      setExpenseSummary(cachedExp);
-      hasCached = true;
-    }
-
-    if (!hasCached) {
+    if (cachedData) {
+      setTodayLoads(cachedData.loads.recentLoads || []);
+      setLoadsSummary({
+        totalLoads: cachedData.loads.totalLoads || 0,
+        totalTurnover: cachedData.loads.totalTurnover || 0,
+        cashAmount: cachedData.loads.cashAmount || 0,
+        creditAmount: cachedData.loads.creditAmount || 0,
+      });
+      setDrawerData(cachedData.drawer);
+      setExpenseSummary(cachedData.expenses);
+      setPartnerReport(cachedData.partnerReport);
+    } else {
       setLoadingStats(true);
     }
 
     try {
-      // Parallel Concurrent Fetching (Loads + Live Drawer + Site Expenses)
-      const [loadsResult, drawerResult, expResult] = await Promise.allSettled([
-        getLoadsApi({
-          siteId: siteId || undefined,
-          startDate: todayDate,
-          endDate: todayDate,
-          limit: 5,
-        }),
-        siteId ? getCurrentDrawerApi(siteId, todayDate) : Promise.resolve(null),
-        fetchExpensesApi({
-          siteId: siteId || undefined,
-          startDate: todayDate,
-          endDate: todayDate,
-        }),
-      ]);
+      const data = await fetchDashboardSummaryApi({
+        siteId: effectiveSiteId,
+        startDate: dateRange.startDate,
+        endDate: dateRange.endDate,
+      });
 
-      if (loadsResult.status === 'fulfilled' && loadsResult.value) {
-        const loadsRes = loadsResult.value;
-        const newLoads = loadsRes.loads || [];
-        const newSummary = {
-          totalLoads: loadsRes.summary?.totalLoads || 0,
-          totalTurnover: loadsRes.summary?.totalAmount || 0,
-          cashAmount: loadsRes.summary?.totalCashAmount || 0,
-          creditAmount: loadsRes.summary?.totalCreditAmount || 0,
-        };
-        setTodayLoads(newLoads);
-        setLoadsSummary(newSummary);
-        queryCache.set(loadsKey, { loads: newLoads, summary: newSummary });
-      }
+      setTodayLoads(data.loads.recentLoads || []);
+      setLoadsSummary({
+        totalLoads: data.loads.totalLoads || 0,
+        totalTurnover: data.loads.totalTurnover || 0,
+        cashAmount: data.loads.cashAmount || 0,
+        creditAmount: data.loads.creditAmount || 0,
+      });
+      setDrawerData(data.drawer);
+      setExpenseSummary(data.expenses);
+      setPartnerReport(data.partnerReport);
 
-      if (drawerResult.status === 'fulfilled' && drawerResult.value) {
-        setDrawerData(drawerResult.value);
-        queryCache.set(drawerKey, drawerResult.value);
-      }
-
-      if (expResult.status === 'fulfilled' && expResult.value) {
-        const newSummary = expResult.value.summary || {
-          totalExpenses: 0,
-          totalCashDrawerExpenses: 0,
-          totalMachineRent: 0,
-          totalAdvancesPaid: 0,
-          totalMachineHours: 0,
-          count: 0,
-        };
-        setExpenseSummary(newSummary);
-        queryCache.set(expKey, newSummary);
-      }
+      queryCache.set(bundleKey, data);
     } catch (err) {
-      console.error('Failed to load dashboard statistics', err);
+      console.error('Failed to load dashboard statistics bundle', err);
     } finally {
       setLoadingStats(false);
     }
-  }, [activeSite, isSuperAdmin, todayDate]);
+  }, [effectiveSiteId, isSuperAdmin, datePreset, dateRange]);
 
   useEffect(() => {
     loadDashboardData();
   }, [loadDashboardData]);
+
+  // Financial aggregates
+  const totalRevenue = loadsSummary.totalTurnover;
+  const totalExpenses = expenseSummary.totalExpenses;
+  const netOperatingProfit = totalRevenue - totalExpenses;
+  const profitMargin = totalRevenue > 0 ? Math.round((netOperatingProfit / totalRevenue) * 100) : 0;
+
+  // Co-Partner personal calculations
+  const partnerSharePct = partnerReport?.slices?.[0]?.sharePercentage ?? 0;
+  const partnerDividend =
+    partnerReport?.summary?.netDividendPayable ??
+    (netOperatingProfit > 0 && partnerSharePct > 0 ? (netOperatingProfit * partnerSharePct) / 100 : 0);
 
   // Material distribution for today's loads
   const materialStats = useMemo(() => {
@@ -178,86 +222,169 @@ export const DashboardPage: React.FC = () => {
   }, [todayLoads]);
 
   return (
-    <div className="space-y-6 max-w-7xl mx-auto animate-fade-in pb-12">
-      {/* Top Header & Refresh */}
-      <PageHeader
-        title={
-          isSuperAdmin
-            ? 'Super Admin Platform Overview'
-            : user?.businessName || 'Quarry Operations Dashboard'
-        }
-        subtitle={
-          isSuperAdmin
-            ? 'Multi-tenant quarry SaaS metrics, customer billing, and active licenses.'
-            : `Gate dispatch pulse, live cash drawer balance, and machine working hours for ${new Date(todayDate).toLocaleDateString('en-IN', { weekday: 'short', day: 'numeric', month: 'short' })}.`
-        }
-        badge={activeSite && !isSuperAdmin ? activeSite.siteName : undefined}
-        actions={
-          !isSuperAdmin ? (
-            <div className="flex items-center gap-2">
-              <button
-                onClick={loadDashboardData}
-                disabled={loadingStats}
-                className="p-2.5 rounded-xl bg-slate-900 border border-slate-800 text-slate-300 hover:text-white hover:bg-slate-800 transition cursor-pointer min-h-[42px] touch-manipulation"
-                title="Refresh Dashboard"
-              >
-                <RefreshCw className={`w-4 h-4 ${loadingStats ? 'animate-spin text-amber-400' : ''}`} />
-              </button>
-              <Link
-                to="/loads"
-                className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl bg-amber-500 hover:bg-amber-400 text-slate-950 font-black text-xs sm:text-sm shadow-lg shadow-amber-500/20 transition cursor-pointer min-h-[42px] touch-manipulation"
-              >
-                <Truck className="w-4 h-4" />
-                <span>Record Load</span>
-              </Link>
-            </div>
-          ) : undefined
-        }
-      />
+    <div className="space-y-5 max-w-7xl mx-auto animate-fade-in pb-12">
+      {/* Super Admin Top Header */}
+      {isSuperAdmin && (
+        <PageHeader
+          title="Super Admin Platform Overview"
+          subtitle="Multi-tenant quarry SaaS metrics, customer billing, and active licenses."
+        />
+      )}
 
       {/* Subscription Alert Pill for Trial or Expiring */}
       {!isSuperAdmin && user && (user.subscriptionStatus === 'TRIAL_ACTIVE' || user.subscriptionStatus === 'EXPIRING_SOON') && (
-        <div className="p-3.5 rounded-2xl bg-amber-500/10 border border-amber-500/30 text-amber-300 text-xs flex items-center justify-between gap-3 shadow-sm">
+        <div className="p-3.5 rounded-2xl bg-amber-500/10 border border-amber-500/30 text-amber-500 text-xs flex items-center justify-between gap-3 shadow-sm">
           <div className="flex items-center gap-2.5">
-            <Clock className="w-4 h-4 text-amber-400 shrink-0" />
+            <Clock className="w-4 h-4 text-amber-500 shrink-0" />
             <span>
               <strong>{user.subscriptionPlan === 'TRIAL' ? '7-Day Free Pilot Active' : 'Annual Package Active'}</strong> • {user.daysRemaining ?? 0} days remaining
             </span>
           </div>
-          <span className="text-[11px] font-mono text-amber-400/80">Support: +91 96561 74088</span>
+          <span className="text-[11px] font-mono text-amber-500/80">Support: +91 96561 74088</span>
         </div>
       )}
 
-      {/* 4 Core Operational KPI Cards */}
+      {/* Control Bar: Multi-Site Selector + Date Range Presets */}
+      {!isSuperAdmin && (
+        <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-3 bg-surface p-3 sm:p-4 rounded-2xl border border-subtle shadow-lg">
+          {/* Left: Site Selector */}
+          <div className="flex items-center gap-2.5 flex-1 min-w-0">
+            {visibleSites.length > 1 ? (
+              <div className="w-full sm:w-64">
+                <CustomSelect
+                  options={siteOptions}
+                  value={selectedSiteId}
+                  onChange={setSelectedSiteId}
+                  placeholder="Choose Quarry Site"
+                  searchable={false}
+                  fullWidth={true}
+                />
+              </div>
+            ) : (
+              <span className="text-xs font-semibold text-secondary truncate">
+                {visibleSites[0]?.siteName || 'All Sites'} • {visibleSites[0]?.location || 'Active Quarry'}
+              </span>
+            )}
+          </div>
+
+          {/* Right: Date Range Presets */}
+          <div className="flex items-center gap-1.5 bg-surface-solid p-1 rounded-xl border border-subtle shrink-0 self-start lg:self-auto overflow-x-auto max-w-full">
+            <span className="text-[11px] font-bold text-muted px-2 flex items-center gap-1">
+              <Calendar className="w-3.5 h-3.5 text-amber-500" /> Period:
+            </span>
+            {(
+              [
+                { id: 'today', label: 'Today' },
+                { id: 'yesterday', label: 'Yesterday' },
+                { id: 'last7days', label: 'Last 7 Days' },
+                { id: 'thismonth', label: 'This Month' },
+              ] as const
+            ).map((preset) => {
+              const active = datePreset === preset.id;
+              return (
+                <button
+                  key={preset.id}
+                  onClick={() => setDatePreset(preset.id)}
+                  type="button"
+                  className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all whitespace-nowrap cursor-pointer touch-manipulation min-h-[34px] ${
+                    active
+                      ? 'bg-amber-500 text-slate-950 shadow-md shadow-amber-500/20 font-black'
+                      : 'text-secondary hover:text-primary hover:bg-surface-elevated'
+                  }`}
+                >
+                  {preset.label}
+                </button>
+              );
+            })}
+          </div>
+        </div>
+      )}
+
+      {/* 4 Role-Adaptive Operational & Financial KPI Cards */}
       {!isSuperAdmin && (
         <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
+          {/* CARD 1: REVENUE / LOADS */}
           <MetricCard
-            label="Today's Loads"
-            value={`${loadsSummary.totalLoads} trips`}
-            subtext={`${formatINR(loadsSummary.totalTurnover)} dispatched`}
-            icon={<Truck className="w-5 h-5 text-amber-400" />}
-            variant="amber"
-          />
-          <MetricCard
-            label="Today's Revenue"
-            value={formatINR(loadsSummary.totalTurnover)}
-            subtext={`${formatINR(loadsSummary.cashAmount)} Cash • ${formatINR(loadsSummary.creditAmount)} Credit`}
-            icon={<DollarSign className="w-5 h-5 text-emerald-400" />}
+            label={
+              isCoPartner
+                ? `${dateRange.label} Gross Turnover`
+                : isSiteBoy
+                ? `${dateRange.label}'s Loads`
+                : `${dateRange.label}'s Turnover`
+            }
+            value={isSiteBoy ? `${loadsSummary.totalLoads} trips` : formatINR(totalRevenue)}
+            subtext={
+              isSiteBoy
+                ? `${formatINR(totalRevenue)} dispatched`
+                : `${loadsSummary.totalLoads} trips • ${formatINR(loadsSummary.cashAmount)} Cash`
+            }
+            icon={<DollarSign className="w-5 h-5 text-emerald-500" />}
             variant="emerald"
           />
+
+          {/* CARD 2: SITE EXPENSES / CASH COLLECTED */}
           <MetricCard
-            label="Live Cash Drawer"
-            value={drawerData ? formatINR(drawerData.expectedCash) : formatINR(loadsSummary.cashAmount)}
-            subtext={drawerData?.existingShift ? 'Shift recorded & pending handover' : 'Shift active & open'}
-            icon={<Wallet className="w-5 h-5 text-blue-400" />}
-            variant="blue"
+            label={isSiteBoy ? 'Cash Collected' : 'Operating Expenses'}
+            value={isSiteBoy ? formatINR(loadsSummary.cashAmount) : formatINR(totalExpenses)}
+            subtext={
+              isSiteBoy
+                ? `${formatINR(loadsSummary.creditAmount)} on Credit`
+                : `${expenseSummary.count} entries • ${formatINR(expenseSummary.totalCashDrawerExpenses)} from drawer`
+            }
+            icon={isSiteBoy ? <Coins className="w-5 h-5 text-amber-500" /> : <Layers className="w-5 h-5 text-purple-500" />}
+            variant={isSiteBoy ? 'amber' : 'default'}
           />
+
+          {/* CARD 3: NET OPERATING PROFIT / LIVE CASH DRAWER */}
           <MetricCard
-            label="Machinery Hours"
-            value={`${expenseSummary.totalMachineHours} hrs`}
-            subtext={`${formatINR(expenseSummary.totalMachineRent)} machine rental`}
-            icon={<Clock className="w-5 h-5 text-purple-400" />}
-            variant="default"
+            label={isSiteBoy ? 'Live Cash Drawer' : isCoPartner ? 'Joint Net Profit' : 'Net Operating Profit'}
+            value={
+              isSiteBoy
+                ? drawerData
+                  ? formatINR(drawerData.expectedCash)
+                  : formatINR(loadsSummary.cashAmount)
+                : formatINR(netOperatingProfit)
+            }
+            subtext={
+              isSiteBoy
+                ? drawerData?.existingShift
+                  ? 'Shift closed & recorded'
+                  : 'Active shift drawer in hand'
+                : `${profitMargin}% margin (Turnover − Expenses)`
+            }
+            icon={isSiteBoy ? <Wallet className="w-5 h-5 text-blue-500" /> : <TrendingUp className={`w-5 h-5 ${netOperatingProfit >= 0 ? 'text-emerald-500' : 'text-rose-500'}`} />}
+            variant={isSiteBoy ? 'blue' : netOperatingProfit >= 0 ? 'emerald' : 'rose'}
+          />
+
+          {/* CARD 4: CO-PARTNER EQUITY DIVIDEND / LIVE CASH DRAWER / MACHINE HOURS */}
+          <MetricCard
+            label={
+              isCoPartner
+                ? `Your Profit Share (${partnerSharePct}%)`
+                : isSiteBoy
+                ? 'Machinery Working Hours'
+                : 'Live Cash in Hand'
+            }
+            value={
+              isCoPartner
+                ? formatINR(partnerDividend)
+                : isSiteBoy
+                ? `${expenseSummary.totalMachineHours} hrs`
+                : drawerData
+                ? formatINR(drawerData.expectedCash)
+                : formatINR(loadsSummary.cashAmount)
+            }
+            subtext={
+              isCoPartner
+                ? `Your estimated personal dividend (${dateRange.label.toLowerCase()})`
+                : isSiteBoy
+                ? `${formatINR(expenseSummary.totalMachineRent)} machine rental`
+                : selectedSiteId === 'all'
+                ? `Physical cash across all quarry drawers`
+                : `Physical cash in active site drawer`
+            }
+            icon={isCoPartner ? <Wallet className="w-5 h-5 text-amber-500" /> : isSiteBoy ? <Clock className="w-5 h-5 text-purple-500" /> : <Wallet className="w-5 h-5 text-amber-500" />}
+            variant="amber"
           />
         </div>
       )}
@@ -265,32 +392,32 @@ export const DashboardPage: React.FC = () => {
       {/* Super Admin Module Overview Cards */}
       {isSuperAdmin && (
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-          <Card variant="glass" className="p-6 space-y-4 border border-slate-800">
+          <Card variant="glass" className="p-6 space-y-4 border border-subtle">
             <div className="flex items-center gap-3">
-              <div className="w-12 h-12 rounded-2xl bg-purple-500/10 text-purple-400 flex items-center justify-center border border-purple-500/20">
+              <div className="w-12 h-12 rounded-2xl bg-purple-500/10 text-purple-500 flex items-center justify-center border border-purple-500/20">
                 <Users className="w-6 h-6" />
               </div>
               <div>
-                <h3 className="text-base font-bold text-white">Customer Accounts Management</h3>
-                <p className="text-xs text-slate-400">Onboard customer quarries, manage 7-day trials, and renew annual packages.</p>
+                <h3 className="text-base font-bold text-primary">Customer Accounts Management</h3>
+                <p className="text-xs text-secondary">Onboard customer quarries, manage 7-day trials, and renew annual packages.</p>
               </div>
             </div>
             <Link
               to="/admin/users"
-              className="inline-flex items-center justify-center gap-2 w-full py-2.5 rounded-xl bg-purple-500 hover:bg-purple-400 text-white font-bold text-xs shadow-lg shadow-purple-500/20 transition cursor-pointer min-h-[42px] touch-manipulation"
+              className="inline-flex items-center justify-center gap-2 w-full py-2.5 rounded-xl bg-purple-600 hover:bg-purple-500 text-white font-bold text-xs shadow-lg shadow-purple-500/20 transition cursor-pointer min-h-[42px] touch-manipulation"
             >
               Open Customers Console <ArrowRight className="w-3.5 h-3.5" />
             </Link>
           </Card>
 
-          <Card variant="glass" className="p-6 space-y-4 border border-slate-800">
+          <Card variant="glass" className="p-6 space-y-4 border border-subtle">
             <div className="flex items-center gap-3">
-              <div className="w-12 h-12 rounded-2xl bg-emerald-500/10 text-emerald-400 flex items-center justify-center border border-emerald-500/20">
+              <div className="w-12 h-12 rounded-2xl bg-emerald-500/10 text-emerald-500 flex items-center justify-center border border-emerald-500/20">
                 <FileSpreadsheet className="w-6 h-6" />
               </div>
               <div>
-                <h3 className="text-base font-bold text-white">Tenant Financial Reports</h3>
-                <p className="text-xs text-slate-400">Query site cashflows, contractor settlements, and machine logbooks across all tenants.</p>
+                <h3 className="text-base font-bold text-primary">Tenant Financial Reports</h3>
+                <p className="text-xs text-secondary">Query site cashflows, contractor settlements, and machine logbooks across all tenants.</p>
               </div>
             </div>
             <Link
@@ -309,33 +436,33 @@ export const DashboardPage: React.FC = () => {
           {/* Left 2 Cols: Recent 5 Dispatches Stream */}
           <div className="lg:col-span-2 space-y-3">
             <div className="flex items-center justify-between">
-              <h2 className="text-sm font-bold text-slate-200 uppercase tracking-wider flex items-center gap-2">
-                <Truck className="w-4 h-4 text-amber-400" />
-                Latest Gate Dispatches (Today)
+              <h2 className="text-sm font-bold text-primary uppercase tracking-wider flex items-center gap-2">
+                <Truck className="w-4 h-4 text-amber-500" />
+                Latest Gate Dispatches ({dateRange.label})
               </h2>
               <Link
-                to="/loads"
-                className="text-xs text-amber-400 hover:text-amber-300 font-bold transition flex items-center gap-1"
+                to="/loads?tab=history"
+                className="text-xs text-amber-500 hover:text-amber-400 font-bold transition flex items-center gap-1"
               >
                 View All Loads ({loadsSummary.totalLoads}) <ArrowRight className="w-3 h-3" />
               </Link>
             </div>
 
-            <div className="rounded-2xl border border-slate-800 bg-slate-900/60 overflow-hidden shadow-xl">
+            <div className="rounded-2xl border border-subtle bg-surface-solid overflow-hidden shadow-xl">
               {todayLoads.length === 0 ? (
                 <div className="p-6">
                   <EmptyState
-                    icon={<Truck className="w-8 h-8 text-amber-400" />}
-                    title="No loads dispatched yet today"
+                    icon={<Truck className="w-8 h-8 text-amber-500" />}
+                    title={`No loads dispatched in ${dateRange.label.toLowerCase()}`}
                     description="Register gate exits for dumpers and lorries to track daily site turnover."
                     actionText="Record First Load"
-                    onAction={() => window.location.href = '/loads'}
+                    onAction={() => (window.location.href = '/loads')}
                   />
                 </div>
               ) : (
                 <div className="overflow-x-auto">
-                  <table className="w-full text-left text-xs text-slate-300">
-                    <thead className="bg-slate-950/80 text-[10px] uppercase font-bold text-slate-400 border-b border-slate-800">
+                  <table className="w-full text-left text-xs text-secondary">
+                    <thead className="bg-surface-elevated text-[10px] uppercase font-bold text-secondary border-b border-subtle">
                       <tr>
                         <th className="px-4 py-3">Vehicle</th>
                         <th className="px-4 py-3">Material</th>
@@ -344,16 +471,16 @@ export const DashboardPage: React.FC = () => {
                         <th className="px-4 py-3 text-right">Amount</th>
                       </tr>
                     </thead>
-                    <tbody className="divide-y divide-slate-800/60">
+                    <tbody className="divide-y divide-subtle">
                       {todayLoads.map((load) => (
-                        <tr key={load.id} className="hover:bg-slate-800/40 transition">
-                          <td className="px-4 py-3 font-mono font-bold text-white whitespace-nowrap">
+                        <tr key={load.id} className="hover:bg-surface-elevated transition">
+                          <td className="px-4 py-3 font-mono font-bold text-primary whitespace-nowrap">
                             {load.vehicle?.vehicleNumber}
                           </td>
-                          <td className="px-4 py-3 font-medium text-slate-200">
+                          <td className="px-4 py-3 font-medium text-primary">
                             {load.materialType?.name}
                           </td>
-                          <td className="px-4 py-3 text-slate-400 truncate max-w-[140px]">
+                          <td className="px-4 py-3 text-secondary truncate max-w-[140px]">
                             {load.contractor?.name || 'Direct / Spot Cash'}
                           </td>
                           <td className="px-4 py-3 whitespace-nowrap">
@@ -364,7 +491,7 @@ export const DashboardPage: React.FC = () => {
                               {load.paymentType}
                             </Badge>
                           </td>
-                          <td className="px-4 py-3 font-mono font-bold text-white text-right whitespace-nowrap">
+                          <td className="px-4 py-3 font-mono font-bold text-primary text-right whitespace-nowrap">
                             {formatINR(load.amount)}
                           </td>
                         </tr>
@@ -378,29 +505,32 @@ export const DashboardPage: React.FC = () => {
 
           {/* Right Col: Today's Material Distribution Summary */}
           <div className="space-y-3">
-            <h2 className="text-sm font-bold text-slate-200 uppercase tracking-wider flex items-center gap-2">
-              <Layers className="w-4 h-4 text-amber-400" />
+            <h2 className="text-sm font-bold text-primary uppercase tracking-wider flex items-center gap-2">
+              <Layers className="w-4 h-4 text-amber-500" />
               Materials Dispatched
             </h2>
 
-            <Card variant="glass" className="p-4 border border-slate-800 bg-slate-900/60 space-y-3">
+            <Card variant="glass" className="p-4 border border-subtle bg-surface-solid space-y-3">
               {materialStats.length === 0 ? (
-                <p className="text-xs text-slate-500 text-center py-4">No materials logged yet today</p>
+                <p className="text-xs text-muted text-center py-4">No materials logged in this period</p>
               ) : (
                 <div className="space-y-2.5">
                   {materialStats.map((item) => {
-                    const pct = loadsSummary.totalLoads > 0 ? Math.round((item.count / loadsSummary.totalLoads) * 100) : 0;
+                    const pct =
+                      loadsSummary.totalLoads > 0
+                        ? Math.round((item.count / loadsSummary.totalLoads) * 100)
+                        : 0;
                     return (
                       <div key={item.name} className="space-y-1">
                         <div className="flex justify-between text-xs font-semibold">
-                          <span className="text-slate-200">{item.name}</span>
-                          <span className="text-slate-400 font-mono">
+                          <span className="text-primary">{item.name}</span>
+                          <span className="text-muted font-mono">
                             {item.count} loads ({pct}%)
                           </span>
                         </div>
-                        <div className="w-full bg-slate-950 rounded-full h-2 overflow-hidden border border-slate-800">
+                        <div className="w-full bg-surface-elevated rounded-full h-2 overflow-hidden border border-subtle">
                           <div
-                            className="bg-amber-400 h-full rounded-full transition-all"
+                            className="bg-amber-500 h-full rounded-full transition-all"
                             style={{ width: `${pct}%` }}
                           />
                         </div>
@@ -412,32 +542,32 @@ export const DashboardPage: React.FC = () => {
             </Card>
 
             {/* Quick Links Card */}
-            <Card variant="glass" className="p-4 border border-slate-800 bg-slate-900/60 space-y-2 text-xs">
-              <span className="font-bold text-slate-400 uppercase tracking-wider block">Operational Shortcuts</span>
+            <Card variant="glass" className="p-4 border border-subtle bg-surface-solid space-y-2 text-xs">
+              <span className="font-bold text-muted uppercase tracking-wider block">Operational Shortcuts</span>
               <div className="grid grid-cols-2 gap-2 pt-1">
                 <Link
                   to="/shift-drawer"
-                  className="p-2.5 rounded-xl bg-slate-950 border border-slate-800 hover:border-slate-700 text-slate-300 hover:text-white font-medium flex items-center gap-1.5 transition touch-manipulation min-h-[40px]"
+                  className="p-2.5 rounded-xl bg-surface border border-subtle hover:border-slate-400 dark:hover:border-slate-700 text-secondary hover:text-primary font-medium flex items-center gap-1.5 transition touch-manipulation min-h-[40px]"
                 >
-                  <Wallet className="w-3.5 h-3.5 text-cyan-400" /> Cash Drawer
+                  <Wallet className="w-3.5 h-3.5 text-cyan-500" /> Cash Drawer
                 </Link>
                 <Link
                   to="/expenses"
-                  className="p-2.5 rounded-xl bg-slate-950 border border-slate-800 hover:border-slate-700 text-slate-300 hover:text-white font-medium flex items-center gap-1.5 transition touch-manipulation min-h-[40px]"
+                  className="p-2.5 rounded-xl bg-surface border border-subtle hover:border-slate-400 dark:hover:border-slate-700 text-secondary hover:text-primary font-medium flex items-center gap-1.5 transition touch-manipulation min-h-[40px]"
                 >
-                  <DollarSign className="w-3.5 h-3.5 text-purple-400" /> Site Expenses
+                  <DollarSign className="w-3.5 h-3.5 text-purple-500" /> Site Expenses
                 </Link>
                 <Link
                   to="/reports"
-                  className="p-2.5 rounded-xl bg-slate-950 border border-slate-800 hover:border-slate-700 text-slate-300 hover:text-white font-medium flex items-center gap-1.5 transition touch-manipulation min-h-[40px]"
+                  className="p-2.5 rounded-xl bg-surface border border-subtle hover:border-slate-400 dark:hover:border-slate-700 text-secondary hover:text-primary font-medium flex items-center gap-1.5 transition touch-manipulation min-h-[40px]"
                 >
-                  <FileSpreadsheet className="w-3.5 h-3.5 text-emerald-400" /> Statements
+                  <FileSpreadsheet className="w-3.5 h-3.5 text-emerald-500" /> Statements
                 </Link>
                 <Link
                   to="/settings"
-                  className="p-2.5 rounded-xl bg-slate-950 border border-slate-800 hover:border-slate-700 text-slate-300 hover:text-white font-medium flex items-center gap-1.5 transition touch-manipulation min-h-[40px]"
+                  className="p-2.5 rounded-xl bg-surface border border-subtle hover:border-slate-400 dark:hover:border-slate-700 text-secondary hover:text-primary font-medium flex items-center gap-1.5 transition touch-manipulation min-h-[40px]"
                 >
-                  <Layers className="w-3.5 h-3.5 text-amber-400" /> Master Data
+                  <Layers className="w-3.5 h-3.5 text-amber-500" /> Master Data
                 </Link>
               </div>
             </Card>
@@ -446,9 +576,9 @@ export const DashboardPage: React.FC = () => {
       )}
 
       {/* System Status Footer */}
-      <div className="p-3.5 rounded-2xl bg-slate-900/40 border border-slate-800/60 flex items-center justify-between text-xs text-slate-500">
+      <div className="p-3.5 rounded-2xl bg-surface border border-subtle flex items-center justify-between text-xs text-muted">
         <div className="flex items-center gap-2">
-          <CheckCircle2 className={`w-3.5 h-3.5 ${isDbUp ? 'text-emerald-400' : 'text-amber-400'}`} />
+          <CheckCircle2 className={`w-3.5 h-3.5 ${isDbUp ? 'text-emerald-500' : 'text-amber-500'}`} />
           <span>{isDbUp ? 'System Operational' : 'Connecting to Server...'}</span>
         </div>
         <span className="font-mono text-[10px]">VLMS v1.0 • Quarry Management</span>

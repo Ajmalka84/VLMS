@@ -53,13 +53,13 @@ export const ToggleSwitch = React.memo<ToggleSwitchProps>(({
           {label && (
             <label
               htmlFor={switchId}
-              className="text-xs font-bold text-slate-200 block cursor-pointer"
+              className="text-xs font-bold text-primary block cursor-pointer"
             >
               {label}
             </label>
           )}
           {description && (
-            <p className="text-[11px] text-slate-400 leading-tight">{description}</p>
+            <p className="text-[11px] text-secondary leading-tight">{description}</p>
           )}
         </div>
       )}
@@ -72,10 +72,10 @@ export const ToggleSwitch = React.memo<ToggleSwitchProps>(({
         disabled={disabled}
         className={`relative inline-flex shrink-0 items-center rounded-full transition-colors duration-200 ease-in-out cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-amber-500/50 ${
           sizeTrack[size]
-        } ${checked ? 'bg-amber-500 shadow-md shadow-amber-500/20' : 'bg-slate-800'}`}
+        } ${checked ? 'bg-amber-500 shadow-md shadow-amber-500/20' : 'bg-surface-elevated border border-subtle'}`}
       >
         <span
-          className={`inline-block rounded-full bg-slate-950 shadow-md transform transition-transform duration-200 ease-in-out pointer-events-none ${
+          className={`inline-block rounded-full bg-surface-solid shadow-md transform transition-transform duration-200 ease-in-out pointer-events-none ${
             sizeThumb[size]
           } ${checked ? activeThumbTranslate[size] : 'translate-x-0.5'}`}
         />

@@ -2,32 +2,175 @@
 /*                      VLMS GLOBAL THEME & DESIGN TOKENS                     */
 /* ========================================================================== */
 
+/* 🌙 DARK THEME (Default) */
 :root,
-[data-theme="dark"] {
-  --bg-app: #020617;
-  --bg-surface: rgba(15, 23, 42, 0.85);
+[data-theme="dark"],
+.dark {
+  --color-scheme: dark;
+  
+  /* Canvas & Backgrounds */
+  --bg-app: #030712;
+  --bg-surface: #0f172a;
   --bg-surface-solid: #0f172a;
   --bg-surface-elevated: #1e293b;
-  --bg-surface-input: #020617;
+  --bg-surface-input: #090d16;
+  --bg-glass: rgba(15, 23, 42, 0.8);
+  --bg-modal-backdrop: rgba(3, 7, 18, 0.85);
   
-  --border-subtle: rgba(30, 41, 59, 0.8);
-  --border-highlight: rgba(51, 65, 85, 0.6);
+  /* Borders */
+  --border-subtle: #1e293b;
+  --border-highlight: #334155;
+  --border-divider: #1e293b;
   --border-focus: #f59e0b;
   
+  /* Typography */
   --text-primary: #f8fafc;
   --text-secondary: #94a3b8;
   --text-muted: #64748b;
+  --text-inverse: #030712;
   
+  /* Brand & Status Accents */
   --accent-amber: #f59e0b;
   --accent-amber-light: #fbbf24;
+  --accent-amber-subtle: rgba(245, 158, 11, 0.15);
   --accent-emerald: #10b981;
   --accent-emerald-light: #34d399;
+  --accent-emerald-subtle: rgba(16, 185, 129, 0.15);
   --accent-rose: #f43f5e;
+  --accent-rose-subtle: rgba(244, 63, 94, 0.15);
   --accent-blue: #3b82f6;
+  --accent-blue-subtle: rgba(59, 130, 246, 0.15);
+  --accent-purple: #a855f7;
+  --accent-purple-subtle: rgba(168, 85, 247, 0.15);
+  --accent-cyan: #06b6d4;
+  --accent-cyan-subtle: rgba(6, 182, 212, 0.15);
   
-  --shadow-card: 0 10px 25px -5px rgba(0, 0, 0, 0.5), 0 8px 10px -6px rgba(0, 0, 0, 0.5);
+  /* Badge Variables */
+  --badge-amber-bg: rgba(245, 158, 11, 0.15);
+  --badge-amber-border: rgba(245, 158, 11, 0.35);
+  --badge-amber-text: #fbbf24;
+  --badge-amber-dot: #f59e0b;
+
+  --badge-emerald-bg: rgba(16, 185, 129, 0.15);
+  --badge-emerald-border: rgba(16, 185, 129, 0.35);
+  --badge-emerald-text: #34d399;
+  --badge-emerald-dot: #10b981;
+
+  --badge-rose-bg: rgba(244, 63, 94, 0.15);
+  --badge-rose-border: rgba(244, 63, 94, 0.35);
+  --badge-rose-text: #fb7185;
+  --badge-rose-dot: #f43f5e;
+
+  --badge-blue-bg: rgba(59, 130, 246, 0.15);
+  --badge-blue-border: rgba(59, 130, 246, 0.35);
+  --badge-blue-text: #60a5fa;
+  --badge-blue-dot: #3b82f6;
+
+  --badge-purple-bg: rgba(168, 85, 247, 0.15);
+  --badge-purple-border: rgba(168, 85, 247, 0.35);
+  --badge-purple-text: #c084fc;
+  --badge-purple-dot: #a855f7;
+
+  --badge-cyan-bg: rgba(6, 182, 212, 0.15);
+  --badge-cyan-border: rgba(6, 182, 212, 0.35);
+  --badge-cyan-text: #22d3ee;
+  --badge-cyan-dot: #06b6d4;
+
+  --badge-slate-bg: #1e293b;
+  --badge-slate-border: #334155;
+  --badge-slate-text: #cbd5e1;
+  --badge-slate-dot: #64748b;
+
+  /* Shadows & Glows */
+  --shadow-card: 0 10px 25px -5px rgba(0, 0, 0, 0.6), 0 8px 10px -6px rgba(0, 0, 0, 0.6);
+  --shadow-modal: 0 25px 50px -12px rgba(0, 0, 0, 0.85);
+  --shadow-dropdown: 0 20px 25px -5px rgba(0, 0, 0, 0.7), 0 8px 10px -6px rgba(0, 0, 0, 0.7);
   --shadow-glow-amber: 0 0 25px -5px rgba(245, 158, 11, 0.25);
   --shadow-glow-emerald: 0 0 25px -5px rgba(16, 185, 129, 0.25);
 }
 
+/* ☀️ LIGHT THEME (High-Contrast Sunlight & Office View) */
+[data-theme="light"],
+.light {
+  --color-scheme: light;
+  
+  /* Canvas & Backgrounds */
+  --bg-app: #f8fafc;
+  --bg-surface: #ffffff;
+  --bg-surface-solid: #ffffff;
+  --bg-surface-elevated: #f1f5f9;
+  --bg-surface-input: #ffffff;
+  --bg-glass: rgba(255, 255, 255, 0.9);
+  --bg-modal-backdrop: rgba(15, 23, 42, 0.6);
+  
+  /* Borders */
+  --border-subtle: #e2e8f0;
+  --border-highlight: #cbd5e1;
+  --border-divider: #e2e8f0;
+  --border-focus: #f59e0b;
+  
+  /* Typography */
+  --text-primary: #0f172a;
+  --text-secondary: #334155;
+  --text-muted: #64748b;
+  --text-inverse: #ffffff;
+  
+  /* Brand & Status Accents */
+  --accent-amber: #d97706;
+  --accent-amber-light: #f59e0b;
+  --accent-amber-subtle: rgba(217, 119, 6, 0.12);
+  --accent-emerald: #059669;
+  --accent-emerald-light: #10b981;
+  --accent-emerald-subtle: rgba(5, 150, 105, 0.12);
+  --accent-rose: #e11d48;
+  --accent-rose-subtle: rgba(225, 29, 72, 0.12);
+  --accent-blue: #2563eb;
+  --accent-blue-subtle: rgba(37, 99, 235, 0.12);
+  --accent-purple: #7e22ce;
+  --accent-purple-subtle: rgba(126, 34, 206, 0.12);
+  --accent-cyan: #0e7490;
+  --accent-cyan-subtle: rgba(14, 116, 144, 0.12);
 
+  /* Badge Variables */
+  --badge-amber-bg: #fef3c7;
+  --badge-amber-border: #fde68a;
+  --badge-amber-text: #92400e;
+  --badge-amber-dot: #d97706;
+
+  --badge-emerald-bg: #d1fae5;
+  --badge-emerald-border: #a7f3d0;
+  --badge-emerald-text: #065f46;
+  --badge-emerald-dot: #059669;
+
+  --badge-rose-bg: #ffe4e6;
+  --badge-rose-border: #fecdd3;
+  --badge-rose-text: #9f1239;
+  --badge-rose-dot: #e11d48;
+
+  --badge-blue-bg: #dbeafe;
+  --badge-blue-border: #bfdbfe;
+  --badge-blue-text: #1e40af;
+  --badge-blue-dot: #2563eb;
+
+  --badge-purple-bg: #f3e8ff;
+  --badge-purple-border: #e9d5ff;
+  --badge-purple-text: #581c87;
+  --badge-purple-dot: #7e22ce;
+
+  --badge-cyan-bg: #cffafe;
+  --badge-cyan-border: #a5f3fc;
+  --badge-cyan-text: #155e75;
+  --badge-cyan-dot: #0e7490;
+
+  --badge-slate-bg: #f1f5f9;
+  --badge-slate-border: #cbd5e1;
+  --badge-slate-text: #334155;
+  --badge-slate-dot: #64748b;
+  
+  /* Shadows & Glows */
+  --shadow-card: 0 4px 6px -1px rgba(15, 23, 42, 0.07), 0 2px 4px -2px rgba(15, 23, 42, 0.05);
+  --shadow-modal: 0 20px 25px -5px rgba(15, 23, 42, 0.2), 0 8px 10px -6px rgba(15, 23, 42, 0.15);
+  --shadow-dropdown: 0 10px 15px -3px rgba(15, 23, 42, 0.1), 0 4px 6px -4px rgba(15, 23, 42, 0.08);
+  --shadow-glow-amber: 0 0 20px -5px rgba(217, 119, 6, 0.15);
+  --shadow-glow-emerald: 0 0 20px -5px rgba(5, 150, 105, 0.15);
+}

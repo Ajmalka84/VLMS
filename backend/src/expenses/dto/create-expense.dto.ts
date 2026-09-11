@@ -12,10 +12,9 @@ import {
 
 export enum PaymentModeDto {
   CASH_DRAWER = 'CASH_DRAWER',
-  BANK_TRANSFER = 'BANK_TRANSFER',
-  UPI_ONLINE = 'UPI_ONLINE',
   VENDOR_CREDIT = 'VENDOR_CREDIT',
   OWNER_DIRECT = 'OWNER_DIRECT',
+  CO_PARTNER_DIRECT = 'CO_PARTNER_DIRECT',
 }
 
 export class CreateExpenseDto {
@@ -39,6 +38,20 @@ export class CreateExpenseDto {
   @IsOptional()
   @IsEnum(PaymentModeDto)
   paymentMode?: PaymentModeDto;
+
+  @IsOptional()
+  @IsUUID()
+  payerPartnerUserId?: string;
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(50)
+  transferMethod?: string;
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(100)
+  referenceNumber?: string;
 
   @IsOptional()
   @IsString()

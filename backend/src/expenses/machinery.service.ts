@@ -18,15 +18,24 @@ export class MachineryService {
   ) {}
 
   async listMachinery(ownerId: string, includeInactive = false) {
+    const cacheKey = `machinery_list:${ownerId}:${includeInactive}`;
+    const cached = this.cacheService.get<any>(cacheKey);
+    if (cached) {
+      return cached;
+    }
+
     const where: any = { userId: ownerId };
     if (!includeInactive) {
       where.isActive = true;
     }
 
-    return this.prisma.machinery.findMany({
+    const list = await this.prisma.machinery.findMany({
       where,
       orderBy: { name: 'asc' },
     });
+
+    this.cacheService.set(cacheKey, list);
+    return list;
   }
 
   async getMachineryById(ownerId: string, id: string) {

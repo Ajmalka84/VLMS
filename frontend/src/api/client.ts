@@ -22,21 +22,16 @@ export class ApiError extends Error {
 
 export const AUTH_TOKEN_KEY = 'vlms_auth_token';
 
-// Base backend URL resolution:
+// Base backend URL resolution (uses same-origin proxy in browser to eliminate CORS preflights):
 const getBaseUrl = (): string => {
+  if (typeof window !== 'undefined' && window.location?.origin) {
+    return window.location.origin;
+  }
   if (import.meta.env.VITE_BACKEND_URL) {
     return import.meta.env.VITE_BACKEND_URL.replace(/\/+$/, '');
   }
   if (import.meta.env.VITE_API_URL) {
     return import.meta.env.VITE_API_URL.replace(/\/+$/, '');
-  }
-  // When served behind Nginx reverse proxy, automatically use current window origin
-  if (typeof window !== 'undefined' && window.location?.origin) {
-    // If running on Vite dev server port 5173, connect to local backend port 3000
-    if (window.location.port === '5173') {
-      return `${window.location.protocol}//${window.location.hostname}:3000`;
-    }
-    return window.location.origin;
   }
   return 'http://localhost:3000';
 };
@@ -55,6 +50,8 @@ async function executeFetch<T>(
   const defaultHeaders: Record<string, string> = {
     'Content-Type': 'application/json',
     Accept: 'application/json',
+    'Cache-Control': 'no-cache, no-store, must-revalidate',
+    Pragma: 'no-cache',
   };
 
   if (token) {
@@ -62,6 +59,7 @@ async function executeFetch<T>(
   }
 
   const response = await fetch(url, {
+    cache: 'no-store',
     ...options,
     headers: {
       ...defaultHeaders,
